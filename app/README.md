@@ -30,6 +30,12 @@ Create a `.env` file (there is a starter `.env.example`) with the following valu
 
 Restart `npm run dev` after editing environment variables.
 
+When the production server (defined in [`server.mjs`](server.mjs)) starts it exposes the resolved
+environment values through `/env.js`. This allows platforms such as Google Cloud Run or Cloud Run's
+Secret Manager integration to provide the Copilot API key at runtime without rebuilding the static
+bundle. The client automatically reads from that endpoint and falls back to the `.env` file when it
+is available.
+
 ## Features
 
 - **CEQ Project entity schema** – The schema in [`src/schema/projectSchema.ts`](src/schema/projectSchema.ts)

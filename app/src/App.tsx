@@ -18,6 +18,7 @@ import {
 } from "./schema/projectSchema"
 import { ProjectSummary } from "./components/ProjectSummary"
 import "./App.css"
+import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 
 type UpdatesPayload = Record<string, unknown>
 
@@ -270,9 +271,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   )
 }
 
-const publicApiKey = import.meta.env.VITE_COPILOTKIT_PUBLIC_API_KEY
-const runtimeUrl =
-  import.meta.env.VITE_COPILOTKIT_RUNTIME_URL || COPILOT_CLOUD_CHAT_URL
+const publicApiKey = getPublicApiKey()
+const runtimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
 
 function App() {
   return (

@@ -8,6 +8,41 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "dist");
 const port = parseInt(process.env.PORT ?? "8080", 10);
 
+function normalizeEnvValue(value) {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+app.get("/env.js", (req, res) => {
+  const config = {};
+
+  const publicApiKey =
+    normalizeEnvValue(process.env.VITE_COPILOTKIT_PUBLIC_API_KEY) ??
+    normalizeEnvValue(process.env.COPILOTKIT_PUBLIC_API_KEY);
+  if (publicApiKey) {
+    config.publicApiKey = publicApiKey;
+  }
+
+  const runtimeUrl =
+    normalizeEnvValue(process.env.VITE_COPILOTKIT_RUNTIME_URL) ??
+    normalizeEnvValue(process.env.COPILOTKIT_RUNTIME_URL);
+  if (runtimeUrl) {
+    config.runtimeUrl = runtimeUrl;
+  }
+
+  res.setHeader("Cache-Control", "no-store");
+  res.type("application/javascript");
+
+  res.send(
+    `window.__COPILOTKIT_RUNTIME_CONFIG__ = ${JSON.stringify(config)};\n` +
+      "Object.freeze(window.__COPILOTKIT_RUNTIME_CONFIG__);\n"
+  );
+});
+
 /**
  * Helper to lazily resolve the most recently built asset that matches a given
  * filename pattern. We use this as a safety net for clients that are still

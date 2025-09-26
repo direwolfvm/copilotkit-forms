@@ -72,5 +72,10 @@ gcloud run deploy copilotkit-forms \
 Cloud Run automatically provisions HTTPS for the service URL. Additional environment variables can
 be configured with repeated `--set-env-vars` flags (for example, `VITE_COPILOTKIT_RUNTIME_URL`).
 
+The production server injects these environment variables into a lightweight `/env.js` endpoint at
+startup. This means the CopilotKit public API key can be sourced from Google Secret Manager (or any
+other runtime configuration provider) without rebuilding the static assets. The frontend checks that
+endpoint at load time and falls back to `.env` values during local development.
+
 By relying on the container image, every deployment will bundle the compiled assets, avoiding the
 missing-build `404` and making rollbacks or staging deployments straightforward.
