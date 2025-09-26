@@ -1,0 +1,1 @@
+window.__COPILOTKIT_RUNTIME_CONFIG__ = {};
