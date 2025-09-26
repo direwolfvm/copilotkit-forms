@@ -1,0 +1,12 @@
+# Ignore local development artifacts when building the container
+node_modules
+app/node_modules
+app/dist
+npm-debug.log
+.DS_Store
+.env
+app/.env
+app/.env.local
+app/.env.*
+.git
+.gitignore
