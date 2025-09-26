@@ -17,7 +17,17 @@ if (!existsSync(join(distDir, "index.html"))) {
 
 app.use(express.static(distDir));
 
-app.get("*", (_req, res) => {
+app.get("*", (req, res, next) => {
+  if (req.method !== "GET") {
+    next();
+    return;
+  }
+
+  if (req.path.includes(".")) {
+    next();
+    return;
+  }
+
   res.sendFile(join(distDir, "index.html"));
 });
 
