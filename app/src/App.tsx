@@ -4,6 +4,7 @@ import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
 import { CopilotKit, useCopilotAction, useCopilotReadable } from "@copilotkit/react-core"
 import { CopilotSidebar } from "@copilotkit/react-ui"
+import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import "@copilotkit/react-ui/styles.css"
 
 import type { ProjectFormData, ProjectContact, SimpleProjectField } from "./schema/projectSchema"
@@ -270,7 +271,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
 }
 
 const publicApiKey = import.meta.env.VITE_COPILOTKIT_PUBLIC_API_KEY
-const runtimeUrl = import.meta.env.VITE_COPILOTKIT_RUNTIME_URL
+const runtimeUrl =
+  import.meta.env.VITE_COPILOTKIT_RUNTIME_URL || COPILOT_CLOUD_CHAT_URL
 
 function App() {
   return (
