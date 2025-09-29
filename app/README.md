@@ -27,20 +27,15 @@ Create a `.env` file (there is a starter `.env.example`) with the following valu
   [Copilot Cloud](https://cloud.copilotkit.ai/).
 - `VITE_COPILOTKIT_RUNTIME_URL` – optional URL for a self-hosted Copilot Runtime. Leave unset to use
   the default Copilot Cloud runtime.
-- `COPILOTKIT_AGENT_SERVICE_URL` – optional override for the production proxy in
-  [`server.mjs`](server.mjs). Requests sent to the browser's `/agent` endpoint will be forwarded to
-  this upstream runtime. Defaults to the Copilot Cloud runtime.
-- `COPILOTKIT_AGENT_PROXY_PATH` – optional path (defaults to `/agent`) that the production server
-  should expose for Copilot runtime traffic. Update this if you need to host the UI behind a path
-  prefix or reverse proxy.
+
+When deploying the production build you can edit [`public/env.js`](public/env.js) to inject runtime
+configuration for the Copilot API key or runtime URL without rebuilding the bundle. The browser
+loads that file on startup and falls back to the `.env` values when it is not present.
 
 Restart `npm run dev` after editing environment variables.
 
-When the production server (defined in [`server.mjs`](server.mjs)) starts it exposes the resolved
-environment values through `/env.js`. This allows platforms such as Google Cloud Run or Cloud Run's
-Secret Manager integration to provide the Copilot API key at runtime without rebuilding the static
-bundle. The client automatically reads from that endpoint and falls back to the `.env` file when it
-is available.
+For a local production preview run `npm run build` followed by `npm start`. The start script launches
+`vite preview` and respects the `PORT` environment variable when it is set.
 
 ## Features
 

@@ -31,21 +31,20 @@ options.
 
 ## Deploying to Google Cloud Run with Docker
 
-The static assets served by `server.mjs` must be built before the Express server starts. When the
-app is pushed to a bare Node runtime without that build step, requests return `404` because the
-`dist/` directory does not exist. Packaging the project as a container guarantees the build happens
-exactly once during the image build and results in a repeatable deployment artifact that works the
-same locally and on Google Cloud.
+The Dockerfile builds the Vite application during the image build and serves the compiled assets
+with `vite preview`. Containerizing the project guarantees the `dist/` directory exists before the
+server starts and results in a repeatable deployment artifact that behaves the same locally and on
+Google Cloud.
 
 ### 1. Build and test the container locally
 
 ```bash
 # From the repository root
 docker build -t copilotkit-forms .
-docker run --rm -p 8080:8080 --env-file app/.env copilotkit-forms
+docker run --rm -p 4173:4173 --env-file app/.env copilotkit-forms
 ```
 
-Then open http://localhost:8080 to verify the production bundle loads correctly. If you do not have
+Then open http://localhost:4173 to verify the production bundle loads correctly. If you do not have
 Copilot credentials, omit the `--env-file` flag and the UI will render with a warning banner.
 
 ### 2. Submit the image to Google Cloud Build
@@ -69,13 +68,10 @@ gcloud run deploy copilotkit-forms \
   --set-env-vars VITE_COPILOTKIT_PUBLIC_API_KEY=<YOUR_PUBLIC_KEY>
 ```
 
-Cloud Run automatically provisions HTTPS for the service URL. Additional environment variables can
-be configured with repeated `--set-env-vars` flags (for example, `VITE_COPILOTKIT_RUNTIME_URL`).
+Cloud Run automatically provisions HTTPS for the service URL. The container respects the `PORT`
+environment variable that Cloud Run sets automatically (defaults to `8080`). Supply Copilot
+configuration values before building the image (for example by editing `.env` or `public/env.js`)
+so they are bundled into the static assets served by Vite preview.
 
-The production server injects these environment variables into a lightweight `/env.js` endpoint at
-startup. This means the CopilotKit public API key can be sourced from Google Secret Manager (or any
-other runtime configuration provider) without rebuilding the static assets. The frontend checks that
-endpoint at load time and falls back to `.env` values during local development.
-
-By relying on the container image, every deployment will bundle the compiled assets, avoiding the
-missing-build `404` and making rollbacks or staging deployments straightforward.
+By relying on the container image, every deployment will bundle the compiled assets, avoiding
+missing-build `404`s and making rollbacks or staging deployments straightforward.
