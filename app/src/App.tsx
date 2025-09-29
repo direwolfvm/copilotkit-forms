@@ -4,7 +4,6 @@ import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
 import { CopilotKit, useCopilotAction, useCopilotReadable } from "@copilotkit/react-core"
 import { CopilotSidebar } from "@copilotkit/react-ui"
-import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import "@copilotkit/react-ui/styles.css"
 
 import type { ProjectFormData, ProjectContact, SimpleProjectField } from "./schema/projectSchema"
@@ -272,7 +271,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
 }
 
 const publicApiKey = getPublicApiKey()
-const runtimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
+const runtimeUrl =
+  getRuntimeUrl() || "https://permitting-adk-650621702399.us-east4.run.app/agent"
 
 function App() {
   return (
