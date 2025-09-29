@@ -10,7 +10,7 @@ const distDir = join(__dirname, "dist");
 const port = parseInt(process.env.PORT ?? "8080", 10);
 
 const defaultAgentUrl =
-  "https://permitting-adk-650621702399.us-east4.run.app/agent";
+  "https://api.cloud.copilotkit.ai/copilotkit/v1";
 
 const agentProxyPath = normalizeEnvValue(process.env.COPILOTKIT_AGENT_PROXY_PATH) ?? "/agent";
 const normalizedAgentProxyPath = agentProxyPath.startsWith("/")
