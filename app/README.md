@@ -27,12 +27,6 @@ Create a `.env` file (there is a starter `.env.example`) with the following valu
   [Copilot Cloud](https://cloud.copilotkit.ai/).
 - `VITE_COPILOTKIT_RUNTIME_URL` – optional URL for a self-hosted Copilot Runtime. Leave unset to use
   the default Copilot Cloud runtime.
-- `COPILOTKIT_AGENT_SERVICE_URL` – optional override for the production proxy in
-  [`server.mjs`](server.mjs). Requests sent to the browser's `/agent` endpoint will be forwarded to
-  this upstream runtime. Defaults to the shared permitting runtime.
-- `COPILOTKIT_AGENT_PROXY_PATH` – optional path (defaults to `/agent`) that the production server
-  should expose for Copilot runtime traffic. Update this if you need to host the UI behind a path
-  prefix or reverse proxy.
 
 Restart `npm run dev` after editing environment variables.
 
