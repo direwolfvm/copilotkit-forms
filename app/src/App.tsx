@@ -3,6 +3,7 @@ import Form from "@rjsf/core"
 import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
 import { CopilotKit, useCopilotAction, useCopilotReadable } from "@copilotkit/react-core"
+import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import { CopilotSidebar } from "@copilotkit/react-ui"
 import "@copilotkit/react-ui/styles.css"
 
@@ -271,7 +272,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
 }
 
 const publicApiKey = getPublicApiKey()
-const runtimeUrl = getRuntimeUrl() || "/agent"
+const runtimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
 
 function App() {
   return (
