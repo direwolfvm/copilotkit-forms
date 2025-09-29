@@ -1,36 +1,12 @@
 import express from "express";
 import { join, dirname } from "path";
 import { existsSync, readdirSync, statSync } from "fs";
-import { Readable } from "stream";
 import { fileURLToPath } from "url";
 
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "dist");
 const port = parseInt(process.env.PORT ?? "8080", 10);
-
-const defaultAgentUrl =
-  "https://permitting-adk-650621702399.us-east4.run.app/agent";
-
-const agentProxyPath = normalizeEnvValue(process.env.COPILOTKIT_AGENT_PROXY_PATH) ?? "/agent";
-const normalizedAgentProxyPath = agentProxyPath.startsWith("/")
-  ? agentProxyPath
-  : `/${agentProxyPath}`;
-const agentServiceUrl =
-  normalizeEnvValue(process.env.COPILOTKIT_AGENT_SERVICE_URL) ??
-  normalizeEnvValue(process.env.COPILOTKIT_RUNTIME_URL) ??
-  defaultAgentUrl;
-
-const hopByHopHeaders = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailers",
-  "transfer-encoding",
-  "upgrade",
-]);
 
 function normalizeEnvValue(value) {
   if (!value) {
@@ -39,30 +15,6 @@ function normalizeEnvValue(value) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function createAgentTargetUrl(requestUrl) {
-  const targetUrl = new URL(agentServiceUrl);
-
-  if (requestUrl && requestUrl !== "/") {
-    const queryIndex = requestUrl.indexOf("?");
-    const pathPart = queryIndex >= 0 ? requestUrl.slice(0, queryIndex) : requestUrl;
-    const searchPart = queryIndex >= 0 ? requestUrl.slice(queryIndex) : "";
-
-    if (pathPart && pathPart !== "/") {
-      const basePath = targetUrl.pathname.endsWith("/")
-        ? targetUrl.pathname.slice(0, -1)
-        : targetUrl.pathname;
-      const nextPath = pathPart.startsWith("/") ? pathPart : `/${pathPart}`;
-      targetUrl.pathname = `${basePath}${nextPath}`;
-    }
-
-    if (searchPart) {
-      targetUrl.search = searchPart;
-    }
-  }
-
-  return targetUrl;
 }
 
 app.get("/env.js", (req, res) => {
@@ -77,8 +29,7 @@ app.get("/env.js", (req, res) => {
 
   const runtimeUrl =
     normalizeEnvValue(process.env.VITE_COPILOTKIT_RUNTIME_URL) ??
-    normalizeEnvValue(process.env.COPILOTKIT_RUNTIME_URL) ??
-    normalizedAgentProxyPath;
+    normalizeEnvValue(process.env.COPILOTKIT_RUNTIME_URL);
   if (runtimeUrl) {
     config.runtimeUrl = runtimeUrl;
   }
@@ -112,95 +63,6 @@ function findLatestAsset(prefix, extension) {
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   return matchingFiles[0]?.fileName ?? null;
-}
-
-if (agentServiceUrl && normalizedAgentProxyPath) {
-  app.use(
-    normalizedAgentProxyPath,
-    express.raw({ type: "*/*", limit: "10mb" })
-  );
-
-  app.use(normalizedAgentProxyPath, async (req, res, next) => {
-    if (req.method === "OPTIONS") {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader(
-        "Access-Control-Allow-Headers",
-        req.get("Access-Control-Request-Headers") ?? "content-type"
-      );
-      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-      res.status(204).end();
-      return;
-    }
-
-    try {
-      const targetUrl = createAgentTargetUrl(req.url);
-      const headers = {};
-
-      for (const [key, value] of Object.entries(req.headers)) {
-        if (!value) {
-          continue;
-        }
-
-        const lowerKey = key.toLowerCase();
-        if (hopByHopHeaders.has(lowerKey) || lowerKey === "host") {
-          continue;
-        }
-
-        if (Array.isArray(value)) {
-          headers[key] = value.join(", ");
-        } else if (typeof value === "string") {
-          headers[key] = value;
-        }
-      }
-
-      const body =
-        req.method === "GET" || req.method === "HEAD" || req.body === undefined
-          ? undefined
-          : req.body;
-
-      const controller = new AbortController();
-      req.on("close", () => {
-        controller.abort();
-      });
-
-      const response = await fetch(targetUrl, {
-        method: req.method,
-        headers,
-        body,
-        signal: controller.signal,
-      });
-
-      res.status(response.status);
-
-      response.headers.forEach((value, key) => {
-        if (!hopByHopHeaders.has(key.toLowerCase())) {
-          res.setHeader(key, value);
-        }
-      });
-
-      if (!response.headers.has("access-control-allow-origin")) {
-        res.setHeader("Access-Control-Allow-Origin", "*");
-      }
-
-      if (!response.body) {
-        res.end();
-        return;
-      }
-
-      const readable = Readable.fromWeb(response.body);
-      readable.on("error", (error) => {
-        console.error("Error proxying agent response", error);
-        res.destroy(error);
-      });
-      readable.pipe(res);
-    } catch (error) {
-      if (error.name === "AbortError") {
-        return;
-      }
-      console.error("Failed to proxy Copilot agent request", error);
-      next(error);
-    }
-  });
 }
 
 const fallbackIndexJs = findLatestAsset("index-", ".js");

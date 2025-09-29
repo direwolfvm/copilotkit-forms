@@ -271,7 +271,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
 }
 
 const publicApiKey = getPublicApiKey()
-const runtimeUrl = getRuntimeUrl() || "/agent"
+const runtimeUrl =
+  getRuntimeUrl() || "https://permitting-adk-650621702399.us-east4.run.app/agent"
 
 function App() {
   return (
