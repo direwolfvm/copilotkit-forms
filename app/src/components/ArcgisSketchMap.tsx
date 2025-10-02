@@ -386,7 +386,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
     return createElement(
       "arcgis-map",
       { basemap: "topo-vector", center: "-98,39", zoom: "4" },
-      createElement("arcgis-search", { position: "top-left", key: "search" }),
+      createElement("arcgis-search", { slot: "widgets", position: "top-left", key: "search" }),
       createElement("arcgis-sketch", {
         key: "sketch",
         "creation-mode": "single",
