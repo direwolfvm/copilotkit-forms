@@ -17,6 +17,10 @@ import {
   projectUiSchema
 } from "./schema/projectSchema"
 import { ProjectSummary } from "./components/ProjectSummary"
+import {
+  PermittingChecklistSection,
+  type PermittingChecklistItem
+} from "./components/PermittingChecklistSection"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 import { LocationSection } from "./components/LocationSection"
@@ -29,6 +33,11 @@ import {
   summarizeNepassist,
   formatGeospatialResultsSummary
 } from "./utils/geospatial"
+import { majorPermits } from "./utils/majorPermits"
+
+const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
+  (permit) => `${permit.title}: ${permit.description}`
+)
 
 type UpdatesPayload = Record<string, unknown>
 
@@ -37,6 +46,28 @@ type NepaFieldKey =
   | "nepa_categorical_exclusion_code"
   | "nepa_conformance_conditions"
   | "nepa_extraordinary_circumstances"
+
+function generateChecklistItemId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `item-${Math.random().toString(36).slice(2, 11)}`
+}
+
+function normalizeChecklistLabel(label: string) {
+  return label.trim().replace(/\s+/g, " ")
+}
+
+function toChecklistKey(label: string) {
+  return normalizeChecklistLabel(label).toLowerCase()
+}
+
+type ChecklistUpsertInput = {
+  label: string
+  completed?: boolean
+  notes?: string
+  source?: PermittingChecklistItem["source"]
+}
 
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
@@ -142,6 +173,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     ipac: { status: "idle" },
     messages: []
   }))
+  const [permittingChecklist, setPermittingChecklist] = useState<PermittingChecklistItem[]>([])
 
   const locationFieldDetail = useMemo(
     () => projectFieldDetails.find((field) => field.key === "location_text"),
@@ -208,6 +240,132 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     },
     [geospatialResults]
   )
+
+  useCopilotReadable(
+    {
+      description: "Reference list of major federal permits and authorizations",
+      value: MAJOR_PERMIT_SUMMARIES,
+      convert: (_, value) => value.join("\n")
+    },
+    []
+  )
+
+  useCopilotReadable(
+    {
+      description: "Current permitting checklist items with completion status",
+      value: permittingChecklist,
+      convert: (_, value) =>
+        value.length
+          ? value
+              .map((item) => `- [${item.completed ? "x" : " "}] ${item.label}${item.notes ? ` — ${item.notes}` : ""}`)
+              .join("\n")
+          : "No permitting checklist items yet."
+    },
+    [permittingChecklist]
+  )
+
+  const upsertPermittingChecklistItems = useCallback((entries: ChecklistUpsertInput[]) => {
+    setPermittingChecklist((previous) => {
+      if (!entries.length) {
+        return previous
+      }
+
+      const normalized = entries
+        .map((entry) => {
+          const label = typeof entry.label === "string" ? normalizeChecklistLabel(entry.label) : ""
+          if (!label) {
+            return null
+          }
+          const notes = entry.notes?.trim()
+          return {
+            label,
+            completed: entry.completed,
+            notes: notes && notes.length ? notes : undefined,
+            source: entry.source
+          }
+        })
+        .filter((entry): entry is ChecklistUpsertInput => entry !== null)
+
+      if (!normalized.length) {
+        return previous
+      }
+
+      const next = [...previous]
+      const indexByKey = new Map(next.map((item, index) => [toChecklistKey(item.label), index]))
+      let changed = false
+
+      for (const entry of normalized) {
+        const key = toChecklistKey(entry.label)
+        const existingIndex = indexByKey.get(key)
+        if (existingIndex !== undefined) {
+          const existing = next[existingIndex]
+          let updated = false
+          const completedValue = entry.completed
+          if (typeof completedValue === "boolean" && existing.completed !== completedValue) {
+            updated = true
+          }
+          const notesValue = entry.notes
+          if (notesValue !== undefined && existing.notes !== notesValue) {
+            updated = true
+          }
+          const sourceValue = entry.source
+          if (sourceValue && existing.source !== sourceValue) {
+            updated = true
+          }
+          if (updated) {
+            next[existingIndex] = {
+              ...existing,
+              completed:
+                typeof completedValue === "boolean" ? completedValue : existing.completed,
+              notes: notesValue !== undefined ? notesValue : existing.notes,
+              source: sourceValue ?? existing.source
+            }
+            changed = true
+          }
+        } else {
+          const newItem: PermittingChecklistItem = {
+            id: generateChecklistItemId(),
+            label: entry.label,
+            completed: typeof entry.completed === "boolean" ? entry.completed : false,
+            notes: entry.notes,
+            source: entry.source ?? "manual"
+          }
+          next.push(newItem)
+          indexByKey.set(key, next.length - 1)
+          changed = true
+        }
+      }
+
+      return changed ? next : previous
+    })
+  }, [])
+
+  const handleAddChecklistItem = useCallback(
+    (label: string) => {
+      upsertPermittingChecklistItems([{ label, completed: false, source: "manual" }])
+    },
+    [upsertPermittingChecklistItems]
+  )
+
+  const handleBulkAddFromSeed = useCallback(
+    (labels: string[], source: PermittingChecklistItem["source"] = "seed") => {
+      const entries = labels.map((label) => ({ label, source, completed: false }))
+      upsertPermittingChecklistItems(entries)
+    },
+    [upsertPermittingChecklistItems]
+  )
+
+  const handleToggleChecklistItem = useCallback((id: string) => {
+    setPermittingChecklist((previous) =>
+      previous.map((item) =>
+        item.id === id ? { ...item, completed: !item.completed } : item
+      )
+    )
+  }, [])
+
+  const handleRemoveChecklistItem = useCallback((id: string) => {
+    setPermittingChecklist((previous) => previous.filter((item) => item.id !== id))
+  }, [])
 
   useCopilotAction(
     {
@@ -318,6 +476,60 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     [setFormData]
   )
 
+  useCopilotAction(
+    {
+      name: "addPermittingChecklistItems",
+      description:
+        "Add or update permitting checklist entries. Use this to track likely permits, approvals, or consultations the project will require.",
+      parameters: [
+        {
+          name: "items",
+          type: "object[]",
+          description: "Checklist items to merge into the permitting tracker.",
+          attributes: [
+            {
+              name: "label",
+              type: "string",
+              description: "Name of the permit or authorization.",
+              required: true
+            },
+            {
+              name: "status",
+              type: "string",
+              description: "Use 'pending' or 'completed' to set status.",
+              enum: ["pending", "completed"],
+              required: false
+            },
+            {
+              name: "notes",
+              type: "string",
+              description: "Optional short note or reference for the item.",
+              required: false
+            }
+          ]
+        }
+      ],
+      handler: async ({ items }) => {
+        if (!Array.isArray(items)) {
+          return
+        }
+        const entries: ChecklistUpsertInput[] = items.map((item) => {
+          const label = typeof item?.label === "string" ? item.label : ""
+          const status = typeof item?.status === "string" ? item.status.toLowerCase() : undefined
+          return {
+            label,
+            source: "copilot",
+            notes: typeof item?.notes === "string" ? item.notes : undefined,
+            completed:
+              status === "completed" ? true : status === "pending" ? false : undefined
+          }
+        })
+        upsertPermittingChecklistItems(entries)
+      }
+    },
+    [upsertPermittingChecklistItems]
+  )
+
   const instructions = useMemo(
     () =>
       [
@@ -325,6 +537,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         "Use the updateProjectForm action whenever you can fill in or revise structured fields.",
         "Important fields include:",
         ...projectFieldDetails.map((field) => `- ${field.title}: ${field.description}`),
+        "Use addPermittingChecklistItems to maintain the permitting checklist. Suggest permits from the major federal inventory when relevant.",
         "Use resetProjectForm when the user asks to start over."
       ].join("\n"),
     []
@@ -345,6 +558,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         title: "Validate location data",
         message:
           "Confirm that the location description, coordinates, and GeoJSON tell a consistent story."
+      },
+      {
+        title: "Draft permitting roadmap",
+        message:
+          "Review the project details and populate the permitting checklist with likely federal, state, and local approvals."
       }
     ],
     []
@@ -367,6 +585,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setFormData(createEmptyProjectData())
     setLastSaved(undefined)
     setGeospatialResults({ nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] })
+    setPermittingChecklist([])
   }
 
   const updateLocationFields = useCallback(
@@ -417,7 +636,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     (value: string) => {
       updateLocationFields({ location_text: value })
     },
-    [updateLocationFields, setGeospatialResults]
+    [updateLocationFields]
   )
 
   const handleLocationGeometryChange = useCallback(
@@ -662,6 +881,13 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               </button>
             </Form>
           </div>
+          <PermittingChecklistSection
+            items={permittingChecklist}
+            onAddItem={handleAddChecklistItem}
+            onToggleItem={handleToggleChecklistItem}
+            onRemoveItem={handleRemoveChecklistItem}
+            onBulkAddFromSeed={handleBulkAddFromSeed}
+          />
           <NepaReviewSection
             values={{
               nepa_categorical_exclusion_code: formData.nepa_categorical_exclusion_code,
