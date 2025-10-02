@@ -255,9 +255,12 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       description: "Current permitting checklist items with completion status",
       value: permittingChecklist,
       convert: (_, value) =>
-        value.length
-          ? value
-              .map((item) => `- [${item.completed ? "x" : " "}] ${item.label}${item.notes ? ` — ${item.notes}` : ""}`)
+          value.length
+            ? value
+                .map(
+                  (item: PermittingChecklistItem) =>
+                    `- [${item.completed ? "x" : " "}] ${item.label}${item.notes ? ` — ${item.notes}` : ""}`
+                )
               .join("\n")
           : "No permitting checklist items yet."
     },
@@ -270,20 +273,20 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         return previous
       }
 
-      const normalized = entries
-        .map((entry) => {
-          const label = typeof entry.label === "string" ? normalizeChecklistLabel(entry.label) : ""
-          if (!label) {
-            return null
-          }
-          const notes = entry.notes?.trim()
-          return {
-            label,
-            completed: entry.completed,
-            notes: notes && notes.length ? notes : undefined,
-            source: entry.source
-          }
-        })
+        const normalized = entries
+          .map((entry): ChecklistUpsertInput | null => {
+            const label = typeof entry.label === "string" ? normalizeChecklistLabel(entry.label) : ""
+            if (!label) {
+              return null
+            }
+            const notes = entry.notes?.trim()
+            return {
+              label,
+              completed: typeof entry.completed === "boolean" ? entry.completed : undefined,
+              notes: notes && notes.length ? notes : undefined,
+              source: entry.source
+            }
+          })
         .filter((entry): entry is ChecklistUpsertInput => entry !== null)
 
       if (!normalized.length) {
