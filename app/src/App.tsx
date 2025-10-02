@@ -828,7 +828,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       suggestions={sidebarSuggestions}
       clickOutsideToClose={false}
     >
-      <main className="app">
+      <main className="app usa-prose">
         <header className="app-header">
           <div>
             <h1>Project Portal</h1>
@@ -838,7 +838,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             </p>
           </div>
           <div className="actions">
-            <button type="button" className="secondary" onClick={handleReset}>
+            <button type="button" className="usa-button usa-button--outline secondary" onClick={handleReset}>
               Reset form
             </button>
             {lastSaved ? <span className="status">Last saved {lastSaved}</span> : null}
@@ -846,12 +846,14 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         </header>
 
         {showApiKeyWarning ? (
-          <div className="callout warning" role="note">
-            <strong>No Copilot Cloud key detected.</strong>
-            <p>
-              Set <code>VITE_COPILOTKIT_PUBLIC_API_KEY</code> in a <code>.env</code> file to enable live
-              Copilot responses. The form will continue to work without it.
-            </p>
+          <div className="usa-alert usa-alert--warning usa-alert--slim" role="alert">
+            <div className="usa-alert__body">
+              <h3 className="usa-alert__heading">No Copilot Cloud key detected.</h3>
+              <p className="usa-alert__text">
+                Set <code>VITE_COPILOTKIT_PUBLIC_API_KEY</code> in a <code>.env</code> file to enable live Copilot
+                responses. The form will continue to work without it.
+              </p>
+            </div>
           </div>
         ) : null}
 
@@ -879,7 +881,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               onSubmit={handleSubmit}
               liveValidate
             >
-              <button type="submit" className="primary">
+              <button type="submit" className="usa-button primary">
                 Save project snapshot
               </button>
             </Form>
