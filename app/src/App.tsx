@@ -315,6 +315,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       instructions={instructions}
       defaultOpen
       suggestions={sidebarSuggestions}
+      clickOutsideToClose={false}
     >
       <main className="app">
         <header className="app-header">
