@@ -238,7 +238,7 @@ export const projectUiSchema: UiSchema<ProjectFormData> = {
 }
 
 projectUiSchema.location_text = {
-  "ui:field": "locationCard"
+  "ui:widget": "hidden"
 }
 
 projectUiSchema.location_lat = {

@@ -1,7 +1,7 @@
 import { createElement, useEffect, useMemo, useRef, useState } from "react"
 
 const ARCGIS_JS_URL = "https://js.arcgis.com/4.33/"
-const ARCGIS_COMPONENTS_URL = "https://js.arcgis.com/4.32/map-components/"
+const ARCGIS_COMPONENTS_URL = "https://js.arcgis.com/4.33/map-components/"
 const ARCGIS_CSS_URL = "https://js.arcgis.com/4.33/esri/themes/light/main.css"
 
 type GeometryChange = {
@@ -17,7 +17,11 @@ type ArcgisSketchMapProps = {
 
 let resourcePromise: Promise<void> | undefined
 
-function loadScript(id: string, url: string) {
+function loadScript(
+  id: string,
+  url: string,
+  options: { type?: "module" | "text/javascript" } = {}
+) {
   return new Promise<void>((resolve, reject) => {
     if (document.querySelector(`script[data-arcgis-id="${id}"]`)) {
       resolve()
@@ -25,7 +29,12 @@ function loadScript(id: string, url: string) {
     }
     const script = document.createElement("script")
     script.src = url
-    script.async = true
+    if (options.type) {
+      script.type = options.type
+    }
+    if (options.type !== "module") {
+      script.async = true
+    }
     script.dataset.arcgisId = id
     script.onload = () => resolve()
     script.onerror = () => reject(new Error(`Failed to load ${url}`))
@@ -55,7 +64,7 @@ function ensureArcgisResources() {
       loadStyle("arcgis-css", ARCGIS_CSS_URL),
       loadScript("arcgis-js", ARCGIS_JS_URL)
     ])
-      .then(() => loadScript("arcgis-components", ARCGIS_COMPONENTS_URL))
+      .then(() => loadScript("arcgis-components", ARCGIS_COMPONENTS_URL, { type: "module" }))
       .then(() => undefined)
   }
   return resourcePromise
