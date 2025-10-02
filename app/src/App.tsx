@@ -609,7 +609,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       <main className="app">
         <header className="app-header">
           <div>
-            <h1>CEQ Project Entity Form</h1>
+            <h1>Project Portal</h1>
             <p>
               Start your project by filling out the forms below. The Copilot can translate unstructured notes into the schema or suggest
               corrections as you work.
