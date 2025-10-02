@@ -11,10 +11,7 @@ export interface ProjectFormData {
   id?: string
   title?: string
   description?: string
-  type?: string
   sector?: string
-  current_status?: string
-  start_date?: string
   lead_agency?: string
   fiscal_year?: string
   participating_agencies?: string
@@ -53,32 +50,11 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
     placeholder: "River Valley Transmission Line"
   },
   {
-    key: "type",
-    title: "Project Type",
-    description: "High-level classification such as transmission line, renewable energy, or broadband.",
-    jsonType: "string",
-    placeholder: "Electric transmission"
-  },
-  {
     key: "sector",
-    title: "CEQ Sector",
-    description: "Sector category from the CEQ permitting data standard.",
+    title: "Sector",
+    description: "Sector category from the permitting data standard.",
     jsonType: "string",
     placeholder: "Energy"
-  },
-  {
-    key: "current_status",
-    title: "Current Status",
-    description: "Lifecycle stage or milestone the project is currently in.",
-    jsonType: "string",
-    placeholder: "Draft EIS in progress"
-  },
-  {
-    key: "start_date",
-    title: "Record Start Date",
-    description: "Date the project record became active in the source system.",
-    jsonType: "string",
-    format: "date"
   },
   {
     key: "lead_agency",
@@ -219,16 +195,13 @@ export const projectSchema: RJSFSchema = {
     "Capture the attributes required by the Council on Environmental Quality (CEQ) project entity standard.",
   type: "object",
   properties: schemaProperties,
-  required: ["title", "lead_agency", "fiscal_year"]
+  required: ["title", "lead_agency", "fiscal_year", "description"]
 }
 
 const order: Array<SimpleProjectField | "sponsor_contact"> = [
   "id",
   "title",
-  "type",
   "sector",
-  "current_status",
-  "start_date",
   "lead_agency",
   "fiscal_year",
   "participating_agencies",
@@ -280,13 +253,15 @@ for (const field of projectFieldDetails) {
   }
 }
 
-export const defaultProjectData: ProjectFormData = {
-  sponsor_contact: {}
+function computeDefaultFiscalYear(): string {
+  const futureDate = new Date()
+  futureDate.setDate(futureDate.getDate() + 90)
+  return futureDate.getFullYear().toString()
 }
 
 export function createEmptyProjectData(): ProjectFormData {
   return {
-    ...defaultProjectData,
+    fiscal_year: computeDefaultFiscalYear(),
     sponsor_contact: {}
   }
 }
@@ -311,14 +286,8 @@ export function formatProjectSummary(data: ProjectFormData): string {
   if (data.id) {
     summaryLines.push(`Identifier: ${data.id}`)
   }
-  if (data.type) {
-    summaryLines.push(`Type: ${data.type}`)
-  }
   if (data.sector) {
     summaryLines.push(`Sector: ${data.sector}`)
-  }
-  if (data.current_status) {
-    summaryLines.push(`Status: ${data.current_status}`)
   }
   if (data.lead_agency) {
     summaryLines.push(`Lead agency: ${data.lead_agency}`)
@@ -331,9 +300,6 @@ export function formatProjectSummary(data: ProjectFormData): string {
   }
   if (data.sponsor) {
     summaryLines.push(`Sponsor: ${data.sponsor}`)
-  }
-  if (data.start_date) {
-    summaryLines.push(`Record start date: ${data.start_date}`)
   }
   if (data.location_text) {
     summaryLines.push(`Location: ${data.location_text}`)
