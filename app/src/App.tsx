@@ -22,6 +22,98 @@ import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 
 type UpdatesPayload = Record<string, unknown>
 
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+function generateRandomToken(length: number) {
+  const cryptoObject = typeof globalThis !== "undefined" ? globalThis.crypto : undefined
+  if (cryptoObject && typeof cryptoObject.getRandomValues === "function") {
+    const values = cryptoObject.getRandomValues(new Uint8Array(length))
+    return Array.from(values, (value) => BASE64_ALPHABET[value % BASE64_ALPHABET.length]).join("")
+  }
+  return Array.from({ length }, () => BASE64_ALPHABET[Math.floor(Math.random() * BASE64_ALPHABET.length)])
+    .join("")
+}
+
+function computeAgencyCode(leadAgency?: string) {
+  if (!leadAgency) {
+    return undefined
+  }
+  const trimmed = leadAgency.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const parts = trimmed.split(/[^A-Za-z0-9]+/).filter(Boolean)
+  const acronym = parts.map((part) => part[0] ?? "").join("")
+  const sanitizedSource = (acronym.length >= 2 ? acronym : trimmed.replace(/[^A-Za-z0-9]/g, "")).toUpperCase()
+  return sanitizedSource.slice(0, 6) || undefined
+}
+
+function normalizeFiscalYear(value?: string | number) {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  const digits = value.toString().match(/\d+/g)
+  if (!digits) {
+    return undefined
+  }
+  const numericString = digits.join("")
+  if (numericString.length === 2) {
+    return `20${numericString}`
+  }
+  if (numericString.length >= 4) {
+    return numericString.slice(-4)
+  }
+  return numericString.padStart(4, "0")
+}
+
+function parseProjectId(id?: string) {
+  if (!id) {
+    return undefined
+  }
+  const match = /^([A-Z0-9]+)-FY(\d{4})-([A-Za-z0-9+/]{4})$/.exec(id)
+  if (!match) {
+    return undefined
+  }
+  return {
+    agency: match[1] as string,
+    fiscalYear: match[2] as string,
+    random: match[3] as string
+  }
+}
+
+function buildProjectIdentifier(
+  leadAgency?: string,
+  fiscalYear?: string | number,
+  existingId?: string
+) {
+  const agencyCode = computeAgencyCode(leadAgency)
+  const normalizedFiscalYear = normalizeFiscalYear(fiscalYear)
+  if (!agencyCode || !normalizedFiscalYear) {
+    return undefined
+  }
+
+  const existingParts = parseProjectId(existingId)
+  const randomComponent =
+    existingParts &&
+    existingParts.agency === agencyCode &&
+    existingParts.fiscalYear === normalizedFiscalYear
+      ? existingParts.random
+      : generateRandomToken(4)
+
+  return `${agencyCode}-FY${normalizedFiscalYear}-${randomComponent}`
+}
+
+function applyGeneratedProjectId(base: ProjectFormData, previousId?: string): ProjectFormData {
+  const next: ProjectFormData = { ...base }
+  const generatedId = buildProjectIdentifier(next.lead_agency, next.fiscal_year, previousId ?? next.id)
+  if (generatedId) {
+    next.id = generatedId
+  } else {
+    delete next.id
+  }
+  return next
+}
+
 type ProjectFormWithCopilotProps = {
   showApiKeyWarning: boolean
 }
@@ -149,7 +241,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             }
           }
 
-          return next
+          return applyGeneratedProjectId(next, previous.id)
         })
       }
     },
@@ -201,11 +293,15 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   )
 
   const handleChange = (event: IChangeEvent<ProjectFormData>) => {
-    setFormData(event.formData ?? createEmptyProjectData())
+    setFormData((previous) =>
+      applyGeneratedProjectId(event.formData ?? createEmptyProjectData(), previous?.id)
+    )
   }
 
   const handleSubmit = (event: IChangeEvent<ProjectFormData>) => {
-    setFormData(event.formData ?? createEmptyProjectData())
+    setFormData((previous) =>
+      applyGeneratedProjectId(event.formData ?? createEmptyProjectData(), previous?.id)
+    )
     setLastSaved(new Date().toLocaleString())
   }
 
@@ -249,6 +345,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         ) : null}
 
         <section className="content">
+          <ProjectSummary data={formData} />
           <div className="form-panel">
             <Form<ProjectFormData>
               schema={projectSchema}
@@ -264,7 +361,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               </button>
             </Form>
           </div>
-          <ProjectSummary data={formData} />
         </section>
       </main>
     </CopilotSidebar>
