@@ -4,7 +4,6 @@ import { formatProjectSummary } from "../schema/projectSchema"
 const overviewFields: Array<{ key: SimpleProjectField; label: string }> = [
   { key: "title", label: "Title" },
   { key: "id", label: "Identifier" },
-  { key: "type", label: "Type" },
   { key: "sector", label: "Sector" },
   { key: "fiscal_year", label: "Fiscal year" }
 ]
