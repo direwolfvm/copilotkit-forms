@@ -1,5 +1,7 @@
 import type {
+  GeospatialResultsState,
   GeospatialServiceState,
+  GeospatialStatus,
   IpacSummary,
   IpacWetlandSummary,
   NepassistSummaryItem,
@@ -361,6 +363,129 @@ export function summarizeIpac(data: unknown): IpacSummary {
   }
 
   return summary
+}
+
+function formatDateTime(timestamp?: string): string | undefined {
+  if (!timestamp) {
+    return undefined
+  }
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) {
+    return undefined
+  }
+  return date.toLocaleString()
+}
+
+function describeServiceStatus(status: GeospatialStatus): string {
+  switch (status) {
+    case 'idle':
+      return 'not started'
+    case 'loading':
+      return 'in progress'
+    case 'error':
+      return 'error'
+    case 'success':
+      return 'success'
+    default:
+      return status
+  }
+}
+
+function formatNepassistSummary(items: NepassistSummaryItem[] | undefined): string[] {
+  if (!items || items.length === 0) {
+    return ['No findings were returned.']
+  }
+
+  const highlights: string[] = []
+  const secondary: string[] = []
+
+  for (const item of items) {
+    const line = `${item.displayAnswer}: ${item.question}`
+    if (item.severity === 'yes' || item.severity === 'ondemand') {
+      highlights.push(line)
+    } else {
+      secondary.push(line)
+    }
+  }
+
+  const ordered = [...highlights, ...secondary]
+  const MAX_ITEMS = 8
+  if (ordered.length > MAX_ITEMS) {
+    return [...ordered.slice(0, MAX_ITEMS), `…and ${ordered.length - MAX_ITEMS} additional findings.`]
+  }
+
+  return ordered
+}
+
+function formatIpacSummary(summary: IpacSummary | undefined): string[] {
+  if (!summary) {
+    return ['No summary details were returned.']
+  }
+
+  const lines: string[] = []
+  if (summary.locationDescription) {
+    lines.push(`Location: ${summary.locationDescription}`)
+  }
+  if (summary.listedSpecies.length > 0) {
+    lines.push(`Listed species: ${summary.listedSpecies.join('; ')}`)
+  }
+  if (summary.criticalHabitats.length > 0) {
+    lines.push(`Critical habitats: ${summary.criticalHabitats.join('; ')}`)
+  }
+  if (summary.migratoryBirds.length > 0) {
+    lines.push(`Migratory birds: ${summary.migratoryBirds.join('; ')}`)
+  }
+  if (summary.wetlands.length > 0) {
+    const wetlands = summary.wetlands.map((wetland) =>
+      wetland.acres ? `${wetland.name} (${wetland.acres} acres)` : wetland.name
+    )
+    lines.push(`Wetlands: ${wetlands.join('; ')}`)
+  }
+
+  if (lines.length === 0) {
+    lines.push('No notable findings were returned.')
+  }
+
+  return lines
+}
+
+export function formatGeospatialResultsSummary(results: GeospatialResultsState): string {
+  const lines: string[] = []
+  lines.push('Geospatial screening results:')
+
+  const lastRun = formatDateTime(results.lastRunAt)
+  lines.push(`Last run: ${lastRun ?? 'not yet run'}`)
+
+  if (results.messages && results.messages.length > 0) {
+    lines.push('System messages:')
+    for (const message of results.messages) {
+      lines.push(`- ${message}`)
+    }
+  }
+
+  const nepaStatus = describeServiceStatus(results.nepassist.status)
+  lines.push(`NEPA Assist status: ${nepaStatus}`)
+  if (results.nepassist.status === 'error' && results.nepassist.error) {
+    lines.push(`- Error: ${results.nepassist.error}`)
+  } else if (results.nepassist.status === 'success') {
+    lines.push('- Findings:')
+    for (const finding of formatNepassistSummary(results.nepassist.summary)) {
+      lines.push(`  - ${finding}`)
+    }
+  }
+
+  const ipacStatus = describeServiceStatus(results.ipac.status)
+  lines.push(`IPaC status: ${ipacStatus}`)
+  if (results.ipac.status === 'error' && results.ipac.error) {
+    lines.push(`- Error: ${results.ipac.error}`)
+  } else if (results.ipac.status === 'success') {
+    lines.push('- Summary:')
+    for (const entry of formatIpacSummary(results.ipac.summary)) {
+      lines.push(`  - ${entry}`)
+    }
+  }
+
+  return lines.join('\n')
 }
 
 export function isServiceLoading<T>(service: GeospatialServiceState<T>): boolean {
