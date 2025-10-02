@@ -104,6 +104,37 @@
   gap: 1.5rem;
 }
 
+.form-panel__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.form-panel__header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--color-heading);
+}
+
+.form-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.form-panel__footer {
+  margin-top: 1.25rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .location-card {
   border: 1px solid var(--border);
   border-radius: 16px;

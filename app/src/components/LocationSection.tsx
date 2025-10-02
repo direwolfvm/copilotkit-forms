@@ -76,6 +76,7 @@ export function LocationSection({
             project footprint.
           </p>
           <ArcgisSketchMap geometry={geometry} onGeometryChange={handleGeometryChange} />
+          <input type="hidden" name="location_object" value={geometry ?? ""} readOnly aria-hidden="true" />
         </div>
       </div>
     </section>
