@@ -26,7 +26,8 @@ import {
   DEFAULT_BUFFER_MILES,
   prepareGeospatialPayload,
   summarizeIpac,
-  summarizeNepassist
+  summarizeNepassist,
+  formatGeospatialResultsSummary
 } from "./utils/geospatial"
 
 type UpdatesPayload = Record<string, unknown>
@@ -197,6 +198,15 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       value: formatProjectSummary(formData)
     },
     [formData]
+  )
+
+  useCopilotReadable(
+    {
+      description: "Latest geospatial screening results including NEPA Assist and IPaC findings",
+      value: geospatialResults,
+      convert: (_, value) => formatGeospatialResultsSummary(value)
+    },
+    [geospatialResults]
   )
 
   useCopilotAction(
