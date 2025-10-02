@@ -20,10 +20,15 @@ import { ProjectSummary } from "./components/ProjectSummary"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 import { LocationSection } from "./components/LocationSection"
+import { NepaReviewSection } from "./components/NepaReviewSection"
 
 type UpdatesPayload = Record<string, unknown>
 
 type LocationFieldKey = "location_text" | "location_lat" | "location_lon" | "location_object"
+type NepaFieldKey =
+  | "nepa_categorical_exclusion_code"
+  | "nepa_conformance_conditions"
+  | "nepa_extraordinary_circumstances"
 
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
@@ -129,6 +134,29 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     () => projectFieldDetails.find((field) => field.key === "location_text"),
     []
   )
+
+  const nepaFieldConfigs = useMemo(() => {
+    const keys: NepaFieldKey[] = [
+      "nepa_categorical_exclusion_code",
+      "nepa_conformance_conditions",
+      "nepa_extraordinary_circumstances"
+    ]
+    return keys.reduce(
+      (accumulator, key) => {
+        const detail = projectFieldDetails.find((field) => field.key === key)
+        if (detail) {
+          accumulator[key] = {
+            title: detail.title,
+            description: detail.description,
+            placeholder: detail.placeholder,
+            rows: detail.rows
+          }
+        }
+        return accumulator
+      },
+      {} as Partial<Record<NepaFieldKey, { title?: string; description?: string; placeholder?: string; rows?: number }>>
+    )
+  }, [])
 
   const assignProjectField = (
     target: ProjectFormData,
@@ -378,6 +406,33 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     [updateLocationFields]
   )
 
+  const handleNepaFieldChange = useCallback(
+    (key: NepaFieldKey, value: string | undefined) => {
+      setFormData((previous) => {
+        const base = previous ?? createEmptyProjectData()
+        const next: ProjectFormData = { ...base }
+        const mutableNext = next as Record<NepaFieldKey, ProjectFormData[NepaFieldKey]>
+        const hasExistingValue = Object.prototype.hasOwnProperty.call(next, key)
+
+        if (!value) {
+          if (hasExistingValue) {
+            delete mutableNext[key]
+            return applyGeneratedProjectId(next, base.id)
+          }
+          return base
+        }
+
+        if (!hasExistingValue || mutableNext[key] !== value) {
+          mutableNext[key] = value
+          return applyGeneratedProjectId(next, base.id)
+        }
+
+        return base
+      })
+    },
+    [setFormData]
+  )
+
   return (
     <CopilotSidebar
       instructions={instructions}
@@ -442,6 +497,15 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               </button>
             </Form>
           </div>
+          <NepaReviewSection
+            values={{
+              nepa_categorical_exclusion_code: formData.nepa_categorical_exclusion_code,
+              nepa_conformance_conditions: formData.nepa_conformance_conditions,
+              nepa_extraordinary_circumstances: formData.nepa_extraordinary_circumstances
+            }}
+            fieldConfigs={nepaFieldConfigs}
+            onFieldChange={handleNepaFieldChange}
+          />
         </section>
       </main>
     </CopilotSidebar>

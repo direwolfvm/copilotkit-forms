@@ -22,6 +22,9 @@ export interface ProjectFormData {
   location_lat?: number
   location_lon?: number
   location_object?: string
+  nepa_categorical_exclusion_code?: string
+  nepa_conformance_conditions?: string
+  nepa_extraordinary_circumstances?: string
   other?: string
 }
 
@@ -38,6 +41,7 @@ interface FieldDetail {
   placeholder?: string
   widget?: "textarea"
   rows?: number
+  includeInForm?: boolean
 }
 
 export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
@@ -109,21 +113,24 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
     jsonType: "string",
     widget: "textarea",
     rows: 3,
-    placeholder: "Spans Lincoln and Dawson counties in Nebraska"
+    placeholder: "Spans Lincoln and Dawson counties in Nebraska",
+    includeInForm: false
   },
   {
     key: "location_lat",
     title: "Representative Latitude",
     description: "Latitude in decimal degrees for a representative project location.",
     jsonType: "number",
-    placeholder: "41.2405"
+    placeholder: "41.2405",
+    includeInForm: false
   },
   {
     key: "location_lon",
     title: "Representative Longitude",
     description: "Longitude in decimal degrees for a representative project location.",
     jsonType: "number",
-    placeholder: "-101.0169"
+    placeholder: "-101.0169",
+    includeInForm: false
   },
   {
     key: "location_object",
@@ -132,7 +139,36 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
     jsonType: "string",
     widget: "textarea",
     rows: 4,
-    placeholder: '{"type":"Point","coordinates":[-101.0169,41.2405]}'
+    placeholder: '{"type":"Point","coordinates":[-101.0169,41.2405]}',
+    includeInForm: false
+  },
+  {
+    key: "nepa_categorical_exclusion_code",
+    title: "Categorical Exclusion Code",
+    description: "Reference code for the categorical exclusion applied to this project.",
+    jsonType: "string",
+    placeholder: "516 DM 14.5(B)(1)",
+    includeInForm: false
+  },
+  {
+    key: "nepa_conformance_conditions",
+    title: "Conditions for Conformance",
+    description:
+      "Document any conditions that must be met for the project to conform with the categorical exclusion.",
+    jsonType: "string",
+    widget: "textarea",
+    rows: 4,
+    includeInForm: false
+  },
+  {
+    key: "nepa_extraordinary_circumstances",
+    title: "Extraordinary Circumstances Narrative",
+    description:
+      "Summarize analysis of any extraordinary circumstances that could preclude using the categorical exclusion.",
+    jsonType: "string",
+    widget: "textarea",
+    rows: 5,
+    includeInForm: false
   },
   {
     key: "other",
@@ -146,6 +182,9 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
 
 const schemaProperties: RJSFSchema["properties"] = projectFieldDetails.reduce(
   (accumulator, field) => {
+    if (field.includeInForm === false) {
+      return accumulator
+    }
     accumulator[field.key] = {
       type: field.jsonType,
       title: field.title,
@@ -209,11 +248,7 @@ const order: Array<SimpleProjectField | "sponsor_contact"> = [
   "sponsor_contact",
   "description",
   "funding",
-  "other",
-  "location_text",
-  "location_lat",
-  "location_lon",
-  "location_object"
+  "other"
 ]
 
 export const projectUiSchema: UiSchema<ProjectFormData> = {
@@ -237,23 +272,10 @@ export const projectUiSchema: UiSchema<ProjectFormData> = {
   }
 }
 
-projectUiSchema.location_text = {
-  "ui:widget": "hidden"
-}
-
-projectUiSchema.location_lat = {
-  "ui:widget": "hidden"
-}
-
-projectUiSchema.location_lon = {
-  "ui:widget": "hidden"
-}
-
-projectUiSchema.location_object = {
-  "ui:widget": "hidden"
-}
-
 for (const field of projectFieldDetails) {
+  if (field.includeInForm === false) {
+    continue
+  }
   const uiConfig: Record<string, unknown> = {
     ...(projectUiSchema[field.key] as Record<string, unknown> | undefined)
   }
