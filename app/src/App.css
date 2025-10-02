@@ -135,6 +135,125 @@
   justify-content: flex-end;
 }
 
+.geospatial-results {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.geospatial-results__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.geospatial-results__header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--color-heading);
+}
+
+.geospatial-results__timestamp {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.geospatial-results__cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.geospatial-results__card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.geospatial-results__card h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-heading);
+}
+
+.geospatial-results__status {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--color-text);
+}
+
+.geospatial-results__status.muted {
+  color: var(--color-text-muted);
+}
+
+.geospatial-results__status.error {
+  color: var(--color-danger, #b91c1c);
+}
+
+.geospatial-results__messages {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--color-heading);
+  list-style: disc;
+  padding-left: 2rem;
+}
+
+.geospatial-results__messages li + li {
+  margin-top: 0.35rem;
+}
+
+.geospatial-results__table-wrapper {
+  overflow-x: auto;
+}
+
+.geospatial-results__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.geospatial-results__table th,
+.geospatial-results__table td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.geospatial-results__table th {
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--color-heading);
+}
+
+.geospatial-results__ipac ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.geospatial-footer {
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.geospatial-footer__hint {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
 .location-card {
   border: 1px solid var(--border);
   border-radius: 16px;
