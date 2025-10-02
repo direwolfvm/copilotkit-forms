@@ -21,6 +21,13 @@ import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 import { LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
+import type { GeospatialResultsState } from "./types/geospatial"
+import {
+  DEFAULT_BUFFER_MILES,
+  prepareGeospatialPayload,
+  summarizeIpac,
+  summarizeNepassist
+} from "./utils/geospatial"
 
 type UpdatesPayload = Record<string, unknown>
 
@@ -129,6 +136,11 @@ type ProjectFormWithCopilotProps = {
 function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotProps) {
   const [formData, setFormData] = useState<ProjectFormData>(() => createEmptyProjectData())
   const [lastSaved, setLastSaved] = useState<string>()
+  const [geospatialResults, setGeospatialResults] = useState<GeospatialResultsState>(() => ({
+    nepassist: { status: "idle" },
+    ipac: { status: "idle" },
+    messages: []
+  }))
 
   const locationFieldDetail = useMemo(
     () => projectFieldDetails.find((field) => field.key === "location_text"),
@@ -344,6 +356,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const handleReset = () => {
     setFormData(createEmptyProjectData())
     setLastSaved(undefined)
+    setGeospatialResults({ nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] })
   }
 
   const updateLocationFields = useCallback(
@@ -394,13 +407,16 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     (value: string) => {
       updateLocationFields({ location_text: value })
     },
-    [updateLocationFields]
+    [updateLocationFields, setGeospatialResults]
   )
 
   const handleLocationGeometryChange = useCallback(
     (
       updates: Partial<Pick<ProjectFormData, "location_lat" | "location_lon" | "location_object">>
     ) => {
+      if (Object.prototype.hasOwnProperty.call(updates, "location_object") && !updates.location_object) {
+        setGeospatialResults({ nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] })
+      }
       updateLocationFields(updates)
     },
     [updateLocationFields]
@@ -432,6 +448,146 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     },
     [setFormData]
   )
+
+  const handleRunGeospatialScreen = useCallback(async () => {
+    const prepared = prepareGeospatialPayload(formData.location_object ?? null)
+    const messages = prepared.errors
+    const ipacNotice = messages.find((message) => message.toLowerCase().includes("ipac"))
+    const generalMessages = ipacNotice ? messages.filter((message) => message !== ipacNotice) : messages
+
+    setGeospatialResults({
+      nepassist: prepared.nepassist
+        ? { status: "loading" }
+        : { status: "error", error: generalMessages[0] ?? "Unable to prepare NEPA Assist request." },
+      ipac: prepared.ipac
+        ? { status: "loading" }
+        : {
+            status: "error",
+            error: ipacNotice ?? generalMessages[0] ?? "IPaC is not available for this geometry."
+          },
+      lastRunAt: new Date().toISOString(),
+      messages: generalMessages.length ? generalMessages : undefined
+    })
+
+    const tasks: Promise<void>[] = []
+
+    if (prepared.nepassist) {
+      const nepaBody = {
+        coords: prepared.nepassist.coords,
+        type: prepared.nepassist.type,
+        bufferMiles: DEFAULT_BUFFER_MILES
+      }
+
+      tasks.push(
+        (async () => {
+          try {
+            const response = await fetch("/api/geospatial/nepassist", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(nepaBody)
+            })
+            const text = await response.text()
+            let payload: any = null
+            if (text) {
+              try {
+                payload = JSON.parse(text)
+              } catch (error) {
+                payload = { data: text }
+              }
+            }
+            if (!response.ok) {
+              const errorMessage =
+                (payload && typeof payload === "object" && typeof payload.error === "string"
+                  ? payload.error
+                  : text) || `NEPA Assist request failed (${response.status})`
+              throw new Error(errorMessage)
+            }
+            const data = payload && typeof payload === "object" && "data" in payload ? payload.data : payload
+            setGeospatialResults((previous) => ({
+              ...previous,
+              nepassist: {
+                status: "success",
+                summary: summarizeNepassist(data),
+                raw: data,
+                meta: payload?.meta
+              }
+            }))
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "NEPA Assist request failed."
+            setGeospatialResults((previous) => ({
+              ...previous,
+              nepassist: { status: "error", error: message }
+            }))
+          }
+        })()
+      )
+    }
+
+    if (prepared.ipac) {
+      const ipacBody = {
+        projectLocationWKT: prepared.ipac.wkt,
+        includeOtherFwsResources: true,
+        includeCrithabGeometry: false,
+        saveLocationForProjectCreation: false,
+        timeout: 5
+      }
+
+      tasks.push(
+        (async () => {
+          try {
+            const response = await fetch("/api/geospatial/ipac", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(ipacBody)
+            })
+            const text = await response.text()
+            let payload: any = null
+            if (text) {
+              try {
+                payload = JSON.parse(text)
+              } catch (error) {
+                payload = { data: text }
+              }
+            }
+            if (!response.ok) {
+              const errorMessage =
+                (payload && typeof payload === "object" && typeof payload.error === "string"
+                  ? payload.error
+                  : text) || `IPaC request failed (${response.status})`
+              throw new Error(errorMessage)
+            }
+            const data = payload && typeof payload === "object" && "data" in payload ? payload.data : payload
+            setGeospatialResults((previous) => ({
+              ...previous,
+              ipac: {
+                status: "success",
+                summary: summarizeIpac(data),
+                raw: data,
+                meta: payload?.meta
+              }
+            }))
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "IPaC request failed."
+            setGeospatialResults((previous) => ({
+              ...previous,
+              ipac: { status: "error", error: message }
+            }))
+          }
+        })()
+      )
+    }
+
+    if (tasks.length === 0) {
+      return
+    }
+
+    await Promise.allSettled(tasks)
+  }, [formData.location_object])
+
+  const isGeospatialRunning =
+    geospatialResults.nepassist.status === "loading" || geospatialResults.ipac.status === "loading"
+
+  const hasGeometry = Boolean(formData.location_object)
 
   return (
     <CopilotSidebar
@@ -505,6 +661,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             }}
             fieldConfigs={nepaFieldConfigs}
             onFieldChange={handleNepaFieldChange}
+            geospatialResults={geospatialResults}
+            onRunGeospatialScreen={handleRunGeospatialScreen}
+            isRunningGeospatial={isGeospatialRunning}
+            hasGeometry={hasGeometry}
+            bufferMiles={DEFAULT_BUFFER_MILES}
           />
         </section>
       </main>

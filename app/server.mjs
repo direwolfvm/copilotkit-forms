@@ -3,10 +3,14 @@ import { join, dirname } from "path";
 import { existsSync, readdirSync, statSync } from "fs";
 import { fileURLToPath } from "url";
 
+import { callIpacProxy, callNepassistProxy, ProxyError } from "./server/geospatialProxy.js";
+
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "dist");
 const port = parseInt(process.env.PORT ?? "8080", 10);
+
+app.use(express.json({ limit: "1mb" }));
 
 function normalizeEnvValue(value) {
   if (!value) {
@@ -41,6 +45,42 @@ app.get("/env.js", (req, res) => {
     `window.__COPILOTKIT_RUNTIME_CONFIG__ = ${JSON.stringify(config)};\n` +
       "Object.freeze(window.__COPILOTKIT_RUNTIME_CONFIG__);\n"
   );
+});
+
+function handleProxyResponse(res, result) {
+  res.setHeader("Cache-Control", "no-store");
+  res.json(result);
+}
+
+function handleProxyError(res, error) {
+  if (error instanceof ProxyError) {
+    res.status(error.status ?? 500).json({
+      error: error.message,
+      details: error.details ?? null
+    });
+    return;
+  }
+
+  console.error("Unexpected proxy error", error);
+  res.status(500).json({ error: "Unexpected server error" });
+}
+
+app.post("/api/geospatial/nepassist", async (req, res) => {
+  try {
+    const result = await callNepassistProxy(req.body ?? {});
+    handleProxyResponse(res, result);
+  } catch (error) {
+    handleProxyError(res, error);
+  }
+});
+
+app.post("/api/geospatial/ipac", async (req, res) => {
+  try {
+    const result = await callIpacProxy(req.body ?? {});
+    handleProxyResponse(res, result);
+  } catch (error) {
+    handleProxyError(res, error);
+  }
 });
 
 /**
