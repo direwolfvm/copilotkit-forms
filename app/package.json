@@ -8,9 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-
     "start": "node server.mjs"
-
   },
   "dependencies": {
     "@copilotkit/react-core": "^1.10.4",
@@ -19,6 +17,7 @@
     "@rjsf/core": "^5.24.13",
     "@rjsf/utils": "^5.24.13",
     "@rjsf/validator-ajv8": "^5.24.13",
+    "@uswds/uswds": "^3.13.0",
     "express": "^4.21.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
