@@ -223,6 +223,7 @@ export const projectSchema: RJSFSchema = {
 }
 
 const order: Array<SimpleProjectField | "sponsor_contact"> = [
+  "id",
   "title",
   "type",
   "sector",
