@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import Form from "@rjsf/core"
 import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
@@ -19,9 +19,11 @@ import {
 import { ProjectSummary } from "./components/ProjectSummary"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
-import { LocationField } from "./components/LocationField"
+import { LocationSection } from "./components/LocationSection"
 
 type UpdatesPayload = Record<string, unknown>
+
+type LocationFieldKey = "location_text" | "location_lat" | "location_lon" | "location_object"
 
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
@@ -122,6 +124,11 @@ type ProjectFormWithCopilotProps = {
 function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotProps) {
   const [formData, setFormData] = useState<ProjectFormData>(() => createEmptyProjectData())
   const [lastSaved, setLastSaved] = useState<string>()
+
+  const locationFieldDetail = useMemo(
+    () => projectFieldDetails.find((field) => field.key === "location_text"),
+    []
+  )
 
   const assignProjectField = (
     target: ProjectFormData,
@@ -311,63 +318,64 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setLastSaved(undefined)
   }
 
-  const formContextValue = useMemo(
-    () => ({
-      updateLocationGeometry: (
-        updates: Partial<Pick<ProjectFormData, "location_lat" | "location_lon" | "location_object">>
-      ) => {
-        setFormData((previous) => {
-          const base = previous ?? createEmptyProjectData()
-          const next: ProjectFormData = { ...base }
-          let changed = false
-          if (Object.prototype.hasOwnProperty.call(updates, "location_lat")) {
-            if (updates.location_lat === undefined) {
-              if ("location_lat" in next) {
-                delete next.location_lat
-                changed = true
-              }
-            } else {
-              if (next.location_lat !== updates.location_lat) {
-                next.location_lat = updates.location_lat
-                changed = true
-              }
+  const updateLocationFields = useCallback(
+    (
+      updates: Partial<Pick<ProjectFormData, "location_text" | "location_lat" | "location_lon" | "location_object">>
+    ) => {
+      setFormData((previous) => {
+        const base = previous ?? createEmptyProjectData()
+        const next: ProjectFormData = { ...base }
+        const mutableNext = next as Record<LocationFieldKey, ProjectFormData[LocationFieldKey]>
+        let changed = false
+
+        const applyUpdate = <K extends LocationFieldKey>(
+          key: K,
+          value: ProjectFormData[K] | undefined
+        ) => {
+          if (!Object.prototype.hasOwnProperty.call(updates, key)) {
+            return
+          }
+          if (value === undefined) {
+            if (key in next) {
+              delete mutableNext[key]
+              changed = true
             }
+            return
           }
-          if (Object.prototype.hasOwnProperty.call(updates, "location_lon")) {
-            if (updates.location_lon === undefined) {
-              if ("location_lon" in next) {
-                delete next.location_lon
-                changed = true
-              }
-            } else {
-              if (next.location_lon !== updates.location_lon) {
-                next.location_lon = updates.location_lon
-                changed = true
-              }
-            }
+          if (mutableNext[key] !== value) {
+            mutableNext[key] = value as ProjectFormData[LocationFieldKey]
+            changed = true
           }
-          if (Object.prototype.hasOwnProperty.call(updates, "location_object")) {
-            if (!updates.location_object) {
-              if ("location_object" in next) {
-                delete next.location_object
-                changed = true
-              }
-            } else {
-              if (next.location_object !== updates.location_object) {
-                next.location_object = updates.location_object
-                changed = true
-              }
-            }
-          }
-          if (!changed) {
-            return base
-          }
-          return applyGeneratedProjectId(next, base.id)
-        })
-      },
-      location_object: formData.location_object
-    }),
-    [formData.location_object]
+        }
+
+        applyUpdate("location_text", updates.location_text)
+        applyUpdate("location_lat", updates.location_lat)
+        applyUpdate("location_lon", updates.location_lon)
+        applyUpdate("location_object", updates.location_object)
+
+        if (!changed) {
+          return base
+        }
+        return applyGeneratedProjectId(next, base.id)
+      })
+    },
+    [setFormData]
+  )
+
+  const handleLocationTextChange = useCallback(
+    (value: string) => {
+      updateLocationFields({ location_text: value })
+    },
+    [updateLocationFields]
+  )
+
+  const handleLocationGeometryChange = useCallback(
+    (
+      updates: Partial<Pick<ProjectFormData, "location_lat" | "location_lon" | "location_object">>
+    ) => {
+      updateLocationFields(updates)
+    },
+    [updateLocationFields]
   )
 
   return (
@@ -407,6 +415,18 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
 
         <section className="content">
           <ProjectSummary data={formData} />
+          {locationFieldDetail ? (
+            <LocationSection
+              title={locationFieldDetail.title}
+              description={locationFieldDetail.description}
+              placeholder={locationFieldDetail.placeholder}
+              rows={locationFieldDetail.rows}
+              locationText={formData.location_text}
+              geometry={formData.location_object}
+              onLocationTextChange={handleLocationTextChange}
+              onLocationGeometryChange={handleLocationGeometryChange}
+            />
+          ) : null}
           <div className="form-panel">
             <Form<ProjectFormData>
               schema={projectSchema}
@@ -416,8 +436,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               onChange={handleChange}
               onSubmit={handleSubmit}
               liveValidate
-              fields={{ locationCard: LocationField as any }}
-              formContext={formContextValue}
             >
               <button type="submit" className="primary">
                 Save project snapshot
