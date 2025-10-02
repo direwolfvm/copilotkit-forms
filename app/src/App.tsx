@@ -19,6 +19,7 @@ import {
 import { ProjectSummary } from "./components/ProjectSummary"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
+import { LocationField } from "./components/LocationField"
 
 type UpdatesPayload = Record<string, unknown>
 
@@ -310,6 +311,65 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setLastSaved(undefined)
   }
 
+  const formContextValue = useMemo(
+    () => ({
+      updateLocationGeometry: (
+        updates: Partial<Pick<ProjectFormData, "location_lat" | "location_lon" | "location_object">>
+      ) => {
+        setFormData((previous) => {
+          const base = previous ?? createEmptyProjectData()
+          const next: ProjectFormData = { ...base }
+          let changed = false
+          if (Object.prototype.hasOwnProperty.call(updates, "location_lat")) {
+            if (updates.location_lat === undefined) {
+              if ("location_lat" in next) {
+                delete next.location_lat
+                changed = true
+              }
+            } else {
+              if (next.location_lat !== updates.location_lat) {
+                next.location_lat = updates.location_lat
+                changed = true
+              }
+            }
+          }
+          if (Object.prototype.hasOwnProperty.call(updates, "location_lon")) {
+            if (updates.location_lon === undefined) {
+              if ("location_lon" in next) {
+                delete next.location_lon
+                changed = true
+              }
+            } else {
+              if (next.location_lon !== updates.location_lon) {
+                next.location_lon = updates.location_lon
+                changed = true
+              }
+            }
+          }
+          if (Object.prototype.hasOwnProperty.call(updates, "location_object")) {
+            if (!updates.location_object) {
+              if ("location_object" in next) {
+                delete next.location_object
+                changed = true
+              }
+            } else {
+              if (next.location_object !== updates.location_object) {
+                next.location_object = updates.location_object
+                changed = true
+              }
+            }
+          }
+          if (!changed) {
+            return base
+          }
+          return applyGeneratedProjectId(next, base.id)
+        })
+      },
+      location_object: formData.location_object
+    }),
+    [formData.location_object]
+  )
+
   return (
     <CopilotSidebar
       instructions={instructions}
@@ -356,6 +416,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               onChange={handleChange}
               onSubmit={handleSubmit}
               liveValidate
+              fields={{ locationCard: LocationField as any }}
+              formContext={formContextValue}
             >
               <button type="submit" className="primary">
                 Save project snapshot

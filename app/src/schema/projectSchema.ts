@@ -209,11 +209,11 @@ const order: Array<SimpleProjectField | "sponsor_contact"> = [
   "sponsor_contact",
   "description",
   "funding",
+  "other",
   "location_text",
   "location_lat",
   "location_lon",
-  "location_object",
-  "other"
+  "location_object"
 ]
 
 export const projectUiSchema: UiSchema<ProjectFormData> = {
@@ -237,8 +237,26 @@ export const projectUiSchema: UiSchema<ProjectFormData> = {
   }
 }
 
+projectUiSchema.location_text = {
+  "ui:field": "locationCard"
+}
+
+projectUiSchema.location_lat = {
+  "ui:widget": "hidden"
+}
+
+projectUiSchema.location_lon = {
+  "ui:widget": "hidden"
+}
+
+projectUiSchema.location_object = {
+  "ui:widget": "hidden"
+}
+
 for (const field of projectFieldDetails) {
-  const uiConfig: Record<string, unknown> = {}
+  const uiConfig: Record<string, unknown> = {
+    ...(projectUiSchema[field.key] as Record<string, unknown> | undefined)
+  }
   if (field.widget) {
     uiConfig["ui:widget"] = field.widget
   }
