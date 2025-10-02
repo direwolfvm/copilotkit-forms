@@ -21,8 +21,9 @@ ENV NODE_ENV=production
 COPY app/package*.json ./
 RUN npm ci --omit=dev
 
-# Copy the compiled assets and the Express server entry point
+# Copy the compiled assets, server code, and the Express server entry point
 COPY --from=build /usr/src/app/dist ./dist
+COPY app/server ./server
 COPY app/server.mjs ./server.mjs
 
 EXPOSE 8080
