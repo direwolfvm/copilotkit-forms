@@ -16,6 +16,7 @@ export interface ProjectFormData {
   current_status?: string
   start_date?: string
   lead_agency?: string
+  fiscal_year?: string
   participating_agencies?: string
   sponsor?: string
   sponsor_contact?: ProjectContact
@@ -24,14 +25,6 @@ export interface ProjectFormData {
   location_lat?: number
   location_lon?: number
   location_object?: string
-  parent_project_id?: string
-  data_source_agency?: string
-  data_source_system?: string
-  record_owner_agency?: string
-  data_record_version?: string
-  retrieved_timestamp?: string
-  created_at?: string
-  last_updated?: string
   other?: string
 }
 
@@ -58,13 +51,6 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
       "Plain-language name that agencies and the public use to refer to the project.",
     jsonType: "string",
     placeholder: "River Valley Transmission Line"
-  },
-  {
-    key: "id",
-    title: "Project Identifier",
-    description: "Unique identifier used to track this project across systems.",
-    jsonType: "string",
-    placeholder: "RVTL-2025-001"
   },
   {
     key: "type",
@@ -100,6 +86,13 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
     description: "Agency responsible for leading the environmental review.",
     jsonType: "string",
     placeholder: "Department of Energy"
+  },
+  {
+    key: "fiscal_year",
+    title: "Fiscal Year",
+    description: "Fiscal year associated with this project record (e.g., 2025).",
+    jsonType: "string",
+    placeholder: "2025"
   },
   {
     key: "participating_agencies",
@@ -166,62 +159,6 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
     placeholder: '{"type":"Point","coordinates":[-101.0169,41.2405]}'
   },
   {
-    key: "parent_project_id",
-    title: "Parent Project Identifier",
-    description: "Identifier of a related or overarching project, when applicable.",
-    jsonType: "string",
-    placeholder: "NE-TRANSMISSION-ROOT"
-  },
-  {
-    key: "data_source_agency",
-    title: "Data Source Agency",
-    description: "Agency providing this record if different from the record owner.",
-    jsonType: "string",
-    placeholder: "Department of Energy"
-  },
-  {
-    key: "data_source_system",
-    title: "Data Source System",
-    description: "System of record or application where the data originated.",
-    jsonType: "string",
-    placeholder: "eNEPA"
-  },
-  {
-    key: "record_owner_agency",
-    title: "Record Owner Agency",
-    description: "Agency responsible for maintaining the authoritative record.",
-    jsonType: "string",
-    placeholder: "Federal Permitting Dashboard"
-  },
-  {
-    key: "data_record_version",
-    title: "Record Version",
-    description: "Version identifier or revision number for this project record.",
-    jsonType: "string",
-    placeholder: "v2025.02"
-  },
-  {
-    key: "retrieved_timestamp",
-    title: "Retrieved Timestamp",
-    description: "Timestamp when the data was retrieved from the source system.",
-    jsonType: "string",
-    format: "date-time"
-  },
-  {
-    key: "created_at",
-    title: "Record Created",
-    description: "Timestamp when this project record was created.",
-    jsonType: "string",
-    format: "date-time"
-  },
-  {
-    key: "last_updated",
-    title: "Last Updated",
-    description: "Timestamp of the most recent update to this project record.",
-    jsonType: "string",
-    format: "date-time"
-  },
-  {
     key: "other",
     title: "Other Notes",
     description: "Additional context or data points that do not fit other fields.",
@@ -243,6 +180,13 @@ const schemaProperties: RJSFSchema["properties"] = projectFieldDetails.reduce(
   },
   {} as NonNullable<RJSFSchema["properties"]>
 )
+
+schemaProperties.id = {
+  type: "string",
+  title: "Project Identifier",
+  description: "Auto-generated identifier used to track this project across systems.",
+  readOnly: true
+}
 
 schemaProperties.sponsor_contact = {
   type: "object",
@@ -275,17 +219,17 @@ export const projectSchema: RJSFSchema = {
     "Capture the attributes required by the Council on Environmental Quality (CEQ) project entity standard.",
   type: "object",
   properties: schemaProperties,
-  required: ["id", "title", "lead_agency"]
+  required: ["title", "lead_agency", "fiscal_year"]
 }
 
 const order: Array<SimpleProjectField | "sponsor_contact"> = [
   "title",
-  "id",
   "type",
   "sector",
   "current_status",
   "start_date",
   "lead_agency",
+  "fiscal_year",
   "participating_agencies",
   "sponsor",
   "sponsor_contact",
@@ -295,19 +239,14 @@ const order: Array<SimpleProjectField | "sponsor_contact"> = [
   "location_lat",
   "location_lon",
   "location_object",
-  "parent_project_id",
-  "data_source_agency",
-  "data_source_system",
-  "record_owner_agency",
-  "data_record_version",
-  "created_at",
-  "last_updated",
-  "retrieved_timestamp",
   "other"
 ]
 
 export const projectUiSchema: UiSchema<ProjectFormData> = {
   "ui:order": order,
+  id: {
+    "ui:widget": "hidden"
+  },
   sponsor_contact: {
     name: {
       "ui:placeholder": "Full name"
@@ -382,6 +321,9 @@ export function formatProjectSummary(data: ProjectFormData): string {
   }
   if (data.lead_agency) {
     summaryLines.push(`Lead agency: ${data.lead_agency}`)
+  }
+  if (data.fiscal_year) {
+    summaryLines.push(`Fiscal year: ${data.fiscal_year}`)
   }
   if (data.participating_agencies) {
     summaryLines.push(`Participating agencies: ${data.participating_agencies}`)
