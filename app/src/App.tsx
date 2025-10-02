@@ -611,8 +611,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           <div>
             <h1>CEQ Project Entity Form</h1>
             <p>
-              Capture the fields defined in the Council on Environmental Quality project entity data
-              standard. The Copilot can translate unstructured notes into the schema or suggest
+              Start your project by filling out the forms below. The Copilot can translate unstructured notes into the schema or suggest
               corrections as you work.
             </p>
           </div>
