@@ -237,6 +237,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
   const searchWidgetRef = useRef<any>(null)
+  const defaultSymbolsRef = useRef<Record<string, any>>({})
 
   const updateGeometryFromEsri = useCallback(
     (incomingGeometry: any | undefined) => {
@@ -411,6 +412,64 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
   }, [isReady, updateGeometryFromEsri])
 
   useEffect(() => {
+    if (!isReady || !containerRef.current) {
+      return undefined
+    }
+
+    const sketchElement = containerRef.current.querySelector("arcgis-sketch") as any
+    if (!sketchElement) {
+      return undefined
+    }
+
+    const updateDefaultSymbols = () => {
+      const viewModel = sketchElement?.viewModel
+      if (!viewModel) {
+        return
+      }
+
+      const symbols: Record<string, any> = {}
+
+      const maybeClone = (symbol: any) => {
+        if (!symbol) {
+          return undefined
+        }
+        if (typeof symbol.clone === "function") {
+          try {
+            return symbol.clone()
+          } catch {
+            return symbol
+          }
+        }
+        return symbol
+      }
+
+      symbols.point = maybeClone(viewModel.pointSymbol)
+      symbols.multipoint = maybeClone(viewModel.multipointSymbol)
+      symbols.polyline = maybeClone(viewModel.polylineSymbol)
+      symbols.polygon = maybeClone(viewModel.polygonSymbol)
+
+      defaultSymbolsRef.current = {
+        ...defaultSymbolsRef.current,
+        ...Object.fromEntries(
+          Object.entries(symbols).filter(([, value]) => value !== undefined)
+        )
+      }
+    }
+
+    updateDefaultSymbols()
+
+    const handleReady = () => {
+      updateDefaultSymbols()
+    }
+
+    sketchElement.addEventListener("arcgisReady", handleReady as EventListener)
+
+    return () => {
+      sketchElement.removeEventListener("arcgisReady", handleReady as EventListener)
+    }
+  }, [isReady])
+
+  useEffect(() => {
     if (!isReady || !mapView || !containerRef.current) {
       return undefined
     }
@@ -444,7 +503,43 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
           if (!esriGeometry) {
             return
           }
-          const graphic = new (Graphic as any)({ geometry: esriGeometry })
+          const geometryType = esriGeometry?.type
+          let symbol = geometryType ? defaultSymbolsRef.current?.[geometryType] : undefined
+
+          if (!symbol && sketchElement?.viewModel) {
+            const viewModel = sketchElement.viewModel
+            const candidate =
+              geometryType === "point"
+                ? viewModel.pointSymbol
+                : geometryType === "multipoint"
+                ? viewModel.multipointSymbol
+                : geometryType === "polyline"
+                ? viewModel.polylineSymbol
+                : geometryType === "polygon"
+                ? viewModel.polygonSymbol
+                : undefined
+
+            if (candidate) {
+              if (typeof candidate.clone === "function") {
+                try {
+                  symbol = candidate.clone()
+                } catch {
+                  symbol = candidate
+                }
+              } else {
+                symbol = candidate
+              }
+              defaultSymbolsRef.current = {
+                ...defaultSymbolsRef.current,
+                [geometryType]: symbol
+              }
+            }
+          }
+
+          const graphic = new (Graphic as any)({
+            geometry: esriGeometry,
+            ...(symbol ? { symbol } : {})
+          })
           layer.graphics.add(graphic)
           mapView.goTo(esriGeometry).catch(() => {})
         } catch {
