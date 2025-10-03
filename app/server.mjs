@@ -2,6 +2,7 @@ import express from "express";
 import { join, dirname } from "path";
 import { existsSync, readdirSync, statSync } from "fs";
 import { Readable } from "node:stream";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "url";
 
 import { callIpacProxy, callNepassistProxy, ProxyError } from "./server/geospatialProxy.js";
@@ -26,6 +27,11 @@ function normalizeEnvValue(value) {
 }
 
 async function proxyCustomAdkRequest(req, res) {
+  if (shouldHandleGraphqlCustomAdk(req)) {
+    await handleGraphqlCustomAdkRequest(req, res);
+    return;
+  }
+
   const requestedPath = req.url ?? "/";
   let proxyPath;
 
@@ -98,6 +104,435 @@ async function proxyCustomAdkRequest(req, res) {
     console.error("Custom ADK proxy error", error);
     res.status(502).json({ error: "Failed to reach custom ADK runtime" });
   }
+}
+
+function shouldHandleGraphqlCustomAdk(req) {
+  if (req.method?.toUpperCase() !== "POST") {
+    return false;
+  }
+
+  const contentType = req.headers["content-type"] || req.headers["Content-Type"];
+  if (typeof contentType === "string" && !contentType.includes("application/json")) {
+    return false;
+  }
+
+  if (!req.body || typeof req.body !== "object") {
+    return false;
+  }
+
+  const { query, operationName } = req.body;
+  if (typeof query !== "string") {
+    return false;
+  }
+
+  if (operationName === "availableAgents" || query.includes("availableAgents")) {
+    return true;
+  }
+
+  if (operationName === "loadAgentState" || query.includes("loadAgentState")) {
+    return true;
+  }
+
+  if (operationName === "generateCopilotResponse" || query.includes("generateCopilotResponse")) {
+    return true;
+  }
+
+  return false;
+}
+
+async function handleGraphqlCustomAdkRequest(req, res) {
+  const { operationName, query, variables } = req.body ?? {};
+
+  if (operationName === "availableAgents" || query?.includes("availableAgents")) {
+    res.json({ data: { availableAgents: { agents: [] } } });
+    return;
+  }
+
+  if (operationName === "loadAgentState" || query?.includes("loadAgentState")) {
+    const threadId = variables?.data?.threadId ?? "";
+    const agentName = variables?.data?.agentName ?? "";
+    res.json({
+      data: {
+        loadAgentState: {
+          threadId,
+          agentName,
+          messages: JSON.stringify([]),
+        },
+      },
+    });
+    return;
+  }
+
+  if (!(operationName === "generateCopilotResponse" || query?.includes("generateCopilotResponse"))) {
+    res.status(400).json({ error: "Unsupported custom ADK operation" });
+    return;
+  }
+
+  const runtimeData = variables?.data;
+  if (!runtimeData || typeof runtimeData !== "object") {
+    res.status(400).json({ error: "Invalid Copilot request payload" });
+    return;
+  }
+
+  const threadId = typeof runtimeData.threadId === "string" && runtimeData.threadId
+    ? runtimeData.threadId
+    : randomUUID();
+  const runId = typeof runtimeData.runId === "string" && runtimeData.runId
+    ? runtimeData.runId
+    : randomUUID();
+
+  const tools = buildAdkTools(runtimeData.frontend?.actions ?? []);
+  const messages = buildAdkMessages(runtimeData.messages ?? []);
+  const context = buildAdkContext(runtimeData.frontend);
+  const state = buildAdkState(runtimeData.agentStates ?? []);
+  const forwardedProps = buildForwardedProps(runtimeData.forwardedParameters, variables?.properties);
+
+  try {
+    const response = await fetch(new URL("/agent", customAdkBaseUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        threadId,
+        runId,
+        state,
+        messages,
+        tools,
+        context,
+        forwardedProps,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      const errorPayload = await safeParseJson(response);
+      res.status(response.status).json(
+        errorPayload ?? { error: "Custom ADK request failed", status: response.status },
+      );
+      return;
+    }
+
+    const events = await collectSseEvents(response.body);
+    const gqlPayload = buildGraphqlResponseFromEvents(events, threadId, runId);
+    res.json({ data: { generateCopilotResponse: gqlPayload } });
+  } catch (error) {
+    console.error("Custom ADK GraphQL bridge error", error);
+    res.status(502).json({ error: "Failed to process custom ADK response" });
+  }
+}
+
+function buildAdkTools(actions) {
+  if (!Array.isArray(actions)) {
+    return [];
+  }
+
+  return actions
+    .map((action) => {
+      if (!action || typeof action !== "object") {
+        return null;
+      }
+
+      const name = typeof action.name === "string" ? action.name : undefined;
+      if (!name) {
+        return null;
+      }
+
+      const description = typeof action.description === "string" ? action.description : "";
+      let parameters;
+      if (typeof action.jsonSchema === "string") {
+        try {
+          parameters = JSON.parse(action.jsonSchema);
+        } catch (error) {
+          console.warn("Failed to parse action jsonSchema", error);
+          parameters = {};
+        }
+      } else if (action.jsonSchema && typeof action.jsonSchema === "object") {
+        parameters = action.jsonSchema;
+      } else {
+        parameters = {};
+      }
+
+      return {
+        name,
+        description,
+        parameters,
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildAdkMessages(messages) {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+
+  const result = [];
+
+  for (const entry of messages) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    if (entry.textMessage) {
+      const text = entry.textMessage;
+      const role = normalizeRole(text.role);
+      const message = {
+        id: entry.id ?? randomUUID(),
+        role,
+        content: typeof text.content === "string" ? text.content : "",
+      };
+      if (role === "user") {
+        message.user = { id: text.parentMessageId ?? entry.id ?? randomUUID() };
+      }
+      if (typeof text.parentMessageId === "string") {
+        message.parentMessageId = text.parentMessageId;
+      }
+      result.push(message);
+      continue;
+    }
+
+    if (entry.actionExecutionMessage) {
+      const actionMessage = entry.actionExecutionMessage;
+      const toolMessage = {
+        id: entry.id ?? randomUUID(),
+        role: "tool",
+        content:
+          typeof actionMessage.arguments === "string"
+            ? actionMessage.arguments
+            : JSON.stringify(actionMessage.arguments ?? {}),
+        toolCallId: actionMessage.parentMessageId ?? entry.id ?? randomUUID(),
+      };
+      result.push(toolMessage);
+      continue;
+    }
+
+    if (entry.resultMessage) {
+      const resultMessage = entry.resultMessage;
+      const toolMessage = {
+        id: entry.id ?? randomUUID(),
+        role: "tool",
+        content:
+          typeof resultMessage.result === "string"
+            ? resultMessage.result
+            : JSON.stringify(resultMessage.result ?? {}),
+        toolCallId: resultMessage.actionExecutionId ?? entry.id ?? randomUUID(),
+      };
+      result.push(toolMessage);
+      continue;
+    }
+  }
+
+  return result;
+}
+
+function normalizeRole(role) {
+  if (typeof role !== "string") {
+    return "user";
+  }
+  return role.toLowerCase();
+}
+
+function buildAdkContext(frontend) {
+  if (!frontend || typeof frontend !== "object") {
+    return [];
+  }
+
+  const context = [];
+  if (typeof frontend.url === "string" && frontend.url) {
+    context.push({ description: "Request origin", value: frontend.url });
+  }
+
+  if (typeof frontend.toDeprecate_fullContext === "string" && frontend.toDeprecate_fullContext) {
+    context.push({ description: "Form context", value: frontend.toDeprecate_fullContext });
+  }
+
+  return context;
+}
+
+function buildAdkState(agentStates) {
+  if (!Array.isArray(agentStates) || agentStates.length === 0) {
+    return {};
+  }
+
+  return { agentStates };
+}
+
+function buildForwardedProps(forwardedParameters, properties) {
+  const props = {};
+  if (forwardedParameters && typeof forwardedParameters === "object") {
+    props.forwardedParameters = forwardedParameters;
+  }
+  if (properties && typeof properties === "object") {
+    props.properties = properties;
+  }
+  return props;
+}
+
+async function safeParseJson(response) {
+  try {
+    const text = await response.text();
+    return text ? JSON.parse(text) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function collectSseEvents(stream) {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const events = [];
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    let separatorIndex;
+    while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+      const rawEvent = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+
+      const lines = rawEvent.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) {
+          continue;
+        }
+
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === "[DONE]") {
+          continue;
+        }
+
+        try {
+          events.push(JSON.parse(payload));
+        } catch (error) {
+          console.warn("Failed to parse SSE payload", payload, error);
+        }
+      }
+    }
+  }
+
+  return events;
+}
+
+function buildGraphqlResponseFromEvents(events, threadId, runId) {
+  const textMessages = new Map();
+  const toolMessages = new Map();
+
+  for (const event of events) {
+    if (!event || typeof event !== "object") {
+      continue;
+    }
+
+    switch (event.type) {
+      case "TEXT_MESSAGE_START": {
+        const id = event.messageId ?? randomUUID();
+        textMessages.set(id, {
+          id,
+          role: event.role ?? "assistant",
+          parts: [],
+        });
+        break;
+      }
+      case "TEXT_MESSAGE_CONTENT": {
+        const id = event.messageId;
+        if (!id || !textMessages.has(id)) {
+          break;
+        }
+        const entry = textMessages.get(id);
+        entry.parts.push(typeof event.delta === "string" ? event.delta : "");
+        break;
+      }
+      case "TEXT_MESSAGE_END": {
+        const id = event.messageId;
+        if (!id || !textMessages.has(id)) {
+          break;
+        }
+        const entry = textMessages.get(id);
+        entry.finished = true;
+        break;
+      }
+      case "TOOL_CALL_START": {
+        const id = event.toolCallId ?? randomUUID();
+        toolMessages.set(id, {
+          id,
+          name: event.toolCallName ?? "tool_call",
+          parentMessageId: event.parentMessageId ?? null,
+          parts: [],
+        });
+        break;
+      }
+      case "TOOL_CALL_ARGS": {
+        const id = event.toolCallId;
+        if (!id || !toolMessages.has(id)) {
+          break;
+        }
+        const entry = toolMessages.get(id);
+        entry.parts.push(typeof event.delta === "string" ? event.delta : "");
+        break;
+      }
+      case "TOOL_CALL_END": {
+        const id = event.toolCallId;
+        if (!id || !toolMessages.has(id)) {
+          break;
+        }
+        const entry = toolMessages.get(id);
+        entry.finished = true;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  const messages = [];
+
+  for (const entry of textMessages.values()) {
+    const content = entry.parts.join("");
+    messages.push({
+      __typename: "TextMessageOutput",
+      id: entry.id,
+      createdAt: new Date().toISOString(),
+      role: entry.role,
+      parentMessageId: null,
+      content: [content],
+      status: {
+        __typename: "SuccessMessageStatus",
+        code: "OK",
+      },
+    });
+  }
+
+  for (const entry of toolMessages.values()) {
+    const args = entry.parts.join("");
+    messages.push({
+      __typename: "ActionExecutionMessageOutput",
+      id: entry.id,
+      createdAt: new Date().toISOString(),
+      name: entry.name,
+      arguments: [args],
+      parentMessageId: entry.parentMessageId,
+      status: {
+        __typename: "SuccessMessageStatus",
+        code: "OK",
+      },
+    });
+  }
+
+  return {
+    threadId,
+    runId,
+    extensions: null,
+    status: {
+      __typename: "BaseResponseStatus",
+      code: "OK",
+    },
+    messages,
+    metaEvents: [],
+  };
 }
 
 app.use("/api/custom-adk", proxyCustomAdkRequest);
