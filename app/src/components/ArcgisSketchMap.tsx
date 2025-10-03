@@ -19,6 +19,93 @@ type ArcgisSketchMapProps = {
 
 let resourcePromise: Promise<void> | undefined
 
+function cloneSymbolInstance<TSymbol = any>(symbol: TSymbol): TSymbol | undefined {
+  if (!symbol) {
+    return undefined
+  }
+  if (typeof (symbol as any).clone === "function") {
+    try {
+      return (symbol as any).clone()
+    } catch {
+      // ignore and fall through to shallow copy
+    }
+  }
+  if (typeof symbol === "object") {
+    return { ...(symbol as any) }
+  }
+  return symbol
+}
+
+function applyAlphaToColor(color: any, alpha: number) {
+  if (!color) {
+    return color
+  }
+
+  if (typeof color.clone === "function") {
+    try {
+      const cloned = color.clone()
+      if (typeof cloned.a === "number") {
+        cloned.a = alpha
+        return cloned
+      }
+      if (Array.isArray(cloned)) {
+        const arr = cloned.slice()
+        arr[3] = alpha
+        return arr
+      }
+      if (typeof cloned === "object") {
+        return { ...cloned, a: alpha, alpha }
+      }
+      return cloned
+    } catch {
+      // fall through to other handling strategies
+    }
+  }
+
+  if (Array.isArray(color)) {
+    const arr = color.slice()
+    if (arr.length >= 4) {
+      arr[3] = alpha
+    } else {
+      while (arr.length < 3) {
+        arr.push(0)
+      }
+      arr[3] = alpha
+    }
+    return arr
+  }
+
+  if (typeof color === "object") {
+    return { ...color, a: alpha, alpha }
+  }
+
+  return color
+}
+
+function ensurePolygonSymbolTransparency(symbol: any) {
+  if (!symbol) {
+    return symbol
+  }
+
+  if (symbol.color !== undefined) {
+    symbol.color = applyAlphaToColor(symbol.color, 0.2)
+  } else {
+    symbol.color = [0, 0, 0, 0.2]
+  }
+
+  if (symbol.outline) {
+    const outlineClone = cloneSymbolInstance(symbol.outline)
+    if (outlineClone) {
+      if (outlineClone.color !== undefined) {
+        outlineClone.color = applyAlphaToColor(outlineClone.color, 1)
+      }
+      symbol.outline = outlineClone
+    }
+  }
+
+  return symbol
+}
+
 function loadScript(
   id: string,
   url: string,
@@ -238,13 +325,46 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
   const [mapView, setMapView] = useState<any>(null)
   const searchWidgetRef = useRef<any>(null)
   const defaultSymbolsRef = useRef<Record<string, any>>({})
+  const shouldPreserveViewRef = useRef(false)
+  const pendingGoToRef = useRef<{ target: any; zoom?: number } | null>(null)
+
+  const goToTarget = useCallback(
+    (target: any, options: { zoom?: number } = {}) => {
+      if (!target) {
+        return
+      }
+
+      const { zoom } = options
+      if (mapView) {
+        const goToOptions = typeof zoom === "number" ? { target, zoom } : { target }
+        mapView.goTo(goToOptions).catch(() => {})
+        return
+      }
+
+      pendingGoToRef.current = { target, zoom }
+    },
+    [mapView]
+  )
+
+  useEffect(() => {
+    if (!mapView || !pendingGoToRef.current) {
+      return
+    }
+
+    const { target, zoom } = pendingGoToRef.current
+    pendingGoToRef.current = null
+    goToTarget(target, { zoom })
+  }, [goToTarget, mapView])
 
   const updateGeometryFromEsri = useCallback(
-    (incomingGeometry: any | undefined) => {
+    (incomingGeometry: any | undefined, options: { preserveView?: boolean } = {}) => {
       if (!incomingGeometry) {
+        shouldPreserveViewRef.current = false
         onGeometryChange({ geoJson: undefined, latitude: undefined, longitude: undefined })
         return
       }
+
+      shouldPreserveViewRef.current = !!options.preserveView
 
       const requireFn = (window as any).require
       if (!requireFn) {
@@ -386,13 +506,13 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
 
     const handleCreate = (event: CustomEvent) => {
       if (event.detail?.state === "complete") {
-        updateGeometryFromEsri(event.detail.graphic?.geometry)
+        updateGeometryFromEsri(event.detail.graphic?.geometry, { preserveView: true })
       }
     }
 
     const handleUpdate = (event: CustomEvent) => {
       if (event.detail?.state === "complete" && event.detail.graphics?.[0]) {
-        updateGeometryFromEsri(event.detail.graphics[0].geometry)
+        updateGeometryFromEsri(event.detail.graphics[0].geometry, { preserveView: true })
       }
     }
 
@@ -446,7 +566,19 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       symbols.point = maybeClone(viewModel.pointSymbol)
       symbols.multipoint = maybeClone(viewModel.multipointSymbol)
       symbols.polyline = maybeClone(viewModel.polylineSymbol)
-      symbols.polygon = maybeClone(viewModel.polygonSymbol)
+      const polygonSymbol = maybeClone(viewModel.polygonSymbol)
+      if (polygonSymbol) {
+        const transparentPolygon = ensurePolygonSymbolTransparency(polygonSymbol)
+        symbols.polygon = transparentPolygon
+        try {
+          viewModel.polygonSymbol =
+            typeof transparentPolygon?.clone === "function"
+              ? transparentPolygon.clone()
+              : transparentPolygon
+        } catch {
+          viewModel.polygonSymbol = transparentPolygon
+        }
+      }
 
       defaultSymbolsRef.current = {
         ...defaultSymbolsRef.current,
@@ -529,6 +661,9 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
               } else {
                 symbol = candidate
               }
+              if (geometryType === "polygon") {
+                symbol = ensurePolygonSymbolTransparency(symbol)
+              }
               defaultSymbolsRef.current = {
                 ...defaultSymbolsRef.current,
                 [geometryType]: symbol
@@ -536,12 +671,27 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
             }
           }
 
+          let symbolForGraphic = symbol
+          if (symbolForGraphic && typeof (symbolForGraphic as any).clone === "function") {
+            try {
+              symbolForGraphic = (symbolForGraphic as any).clone()
+            } catch {
+              // ignore clone errors and fall back to existing symbol instance
+            }
+          } else if (symbolForGraphic && typeof symbolForGraphic === "object") {
+            symbolForGraphic = { ...(symbolForGraphic as any) }
+          }
+
           const graphic = new (Graphic as any)({
             geometry: esriGeometry,
-            ...(symbol ? { symbol } : {})
+            ...(symbolForGraphic ? { symbol: symbolForGraphic } : {})
           })
           layer.graphics.add(graphic)
-          mapView.goTo(esriGeometry).catch(() => {})
+          if (shouldPreserveViewRef.current) {
+            shouldPreserveViewRef.current = false
+          } else {
+            goToTarget(esriGeometry)
+          }
         } catch {
           // ignore malformed geometry
         }
@@ -549,7 +699,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
     )
 
     return undefined
-  }, [geometry, isReady, mapView, onGeometryChange])
+  }, [geometry, goToTarget, isReady, mapView, onGeometryChange])
 
   useEffect(() => {
     console.log("Search widget effect triggered:", { isReady, hasMapView: !!mapView })
@@ -602,7 +752,9 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
           console.log("Search result selected:", event)
           const geometry = event?.result?.feature?.geometry
           if (geometry) {
-            updateGeometryFromEsri(geometry)
+            updateGeometryFromEsri(geometry, { preserveView: true })
+            const zoom = geometry?.type === "point" ? 15 : undefined
+            goToTarget(geometry, typeof zoom === "number" ? { zoom } : undefined)
           }
         })
         if (handleSelectResult) {
@@ -614,7 +766,9 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
           const firstResult = event?.results?.find?.((group: any) => group?.results?.length)
           const geometry = firstResult?.results?.[0]?.feature?.geometry
           if (geometry) {
-            updateGeometryFromEsri(geometry)
+            updateGeometryFromEsri(geometry, { preserveView: true })
+            const zoom = geometry?.type === "point" ? 15 : undefined
+            goToTarget(geometry, typeof zoom === "number" ? { zoom } : undefined)
           }
         })
         if (handleSearchComplete) {
@@ -656,7 +810,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       }
       searchWidgetRef.current = null
     }
-  }, [isReady, mapView, updateGeometryFromEsri])
+  }, [goToTarget, isReady, mapView, updateGeometryFromEsri])
 
   const map = useMemo(() => {
     if (!isReady) {
