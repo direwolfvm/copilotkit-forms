@@ -229,7 +229,7 @@ schemaProperties.sponsor_contact = {
 }
 
 export const projectSchema: RJSFSchema = {
-  title: "CEQ Project Entity",
+  title: "Project Information",
   description:
     "Capture the attributes required by the Council on Environmental Quality (CEQ) project entity standard.",
   type: "object",
@@ -254,6 +254,9 @@ const order: Array<SimpleProjectField | "sponsor_contact"> = [
 export const projectUiSchema: UiSchema<ProjectFormData> = {
   "ui:order": order,
   id: {
+    "ui:widget": "hidden"
+  },
+  fiscal_year: {
     "ui:widget": "hidden"
   },
   sponsor_contact: {

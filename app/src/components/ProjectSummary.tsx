@@ -4,8 +4,7 @@ import { formatProjectSummary } from "../schema/projectSchema"
 const overviewFields: Array<{ key: SimpleProjectField; label: string }> = [
   { key: "title", label: "Title" },
   { key: "id", label: "Identifier" },
-  { key: "sector", label: "Sector" },
-  { key: "fiscal_year", label: "Fiscal year" }
+  { key: "sector", label: "Sector" }
 ]
 
 const agencyFields: Array<{ key: SimpleProjectField; label: string }> = [
@@ -96,14 +95,6 @@ export function ProjectSummary({ data }: ProjectSummaryProps) {
                 </dd>
               </div>
             ) : null}
-            {data.location_object ? (
-              <div className="summary-row">
-                <dt>Geometry</dt>
-                <dd>
-                  <pre className="summary-geojson">{data.location_object}</pre>
-                </dd>
-              </div>
-            ) : null}
           </dl>
         </div>
 
@@ -133,7 +124,7 @@ export function ProjectSummary({ data }: ProjectSummaryProps) {
 
         <div className="summary-card summary-card--full">
           <h3>Quick narrative</h3>
-          <pre className="summary-narrative">{summaryText}</pre>
+          <div className="summary-narrative">{summaryText}</div>
         </div>
       </div>
     </section>
