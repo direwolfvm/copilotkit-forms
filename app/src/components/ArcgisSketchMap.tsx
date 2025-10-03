@@ -1,7 +1,7 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 const ARCGIS_JS_URL = "https://js.arcgis.com/4.33/"
-const ARCGIS_COMPONENTS_URL = "https://js.arcgis.com/4.33/map-components/"
+const ARCGIS_COMPONENTS_URL = "https://js.arcgis.com/4.32/map-components/"
 const ARCGIS_CSS_URL = "https://js.arcgis.com/4.33/esri/themes/light/main.css"
 
 type GeometryChange = {
