@@ -293,30 +293,86 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
 
   useEffect(() => {
     if (!isReady || !containerRef.current) {
+      console.log("Map view setup: not ready or no container", { isReady, hasContainer: !!containerRef.current })
       return undefined
     }
 
-    const mapElement = containerRef.current.querySelector("arcgis-map") as any
-    if (!mapElement) {
-      return undefined
-    }
+    console.log("Map view setup: starting, container found")
+    
+    let cleanupFunctions: (() => void)[] = []
+    let isCancelled = false
 
-    const handleViewReady = (event: CustomEvent) => {
-      if (event.detail?.view) {
-        setMapView(event.detail.view)
+    const setupMapView = () => {
+      if (isCancelled) return
+
+      const mapElement = containerRef.current?.querySelector("arcgis-map") as any
+      if (!mapElement) {
+        console.log("Map view setup: no arcgis-map element found yet, will retry")
+        return false
       }
+
+      console.log("Map view setup: arcgis-map element found", mapElement)
+
+      const handleViewReady = (event: CustomEvent) => {
+        console.log("Map view ready event received:", event.detail)
+        if (event.detail?.view && !isCancelled) {
+          setMapView(event.detail.view)
+          console.log("Map view set:", event.detail.view)
+        }
+      }
+
+      if (mapElement.view && !isCancelled) {
+        console.log("Map element already has view:", mapElement.view)
+        setMapView(mapElement.view)
+        return true
+      }
+
+      mapElement.addEventListener("arcgisViewReady", handleViewReady as EventListener)
+      cleanupFunctions.push(() => {
+        mapElement.removeEventListener("arcgisViewReady", handleViewReady as EventListener)
+      })
+
+      // Fallback: check for view periodically in case the event doesn't fire
+      const checkForView = () => {
+        if (isCancelled) return
+        const currentMapElement = containerRef.current?.querySelector("arcgis-map") as any
+        if (currentMapElement?.view && !mapView) {
+          console.log("Found map view via polling:", currentMapElement.view)
+          setMapView(currentMapElement.view)
+        }
+      }
+      
+      const intervalId = setInterval(checkForView, 500)
+      cleanupFunctions.push(() => clearInterval(intervalId))
+      
+      const timeoutId = setTimeout(() => {
+        clearInterval(intervalId)
+        if (!mapView && !isCancelled) {
+          console.warn("Map view not ready after 15 seconds")
+        }
+      }, 15000)
+      cleanupFunctions.push(() => clearTimeout(timeoutId))
+
+      return true
     }
 
-    if (mapElement.view) {
-      setMapView(mapElement.view)
+    // Try to setup immediately
+    if (!setupMapView()) {
+      // If map element not found, wait a bit and retry
+      console.log("Map view setup: retrying in 100ms")
+      const retryTimeout = setTimeout(() => {
+        if (!isCancelled) {
+          setupMapView()
+        }
+      }, 100)
+      cleanupFunctions.push(() => clearTimeout(retryTimeout))
     }
-
-    mapElement.addEventListener("arcgisViewReady", handleViewReady as EventListener)
 
     return () => {
-      mapElement.removeEventListener("arcgisViewReady", handleViewReady as EventListener)
+      isCancelled = true
+      cleanupFunctions.forEach(cleanup => cleanup())
     }
-  }, [isReady])
+  }, [isReady, mapView])
 
   useEffect(() => {
     if (!isReady || !containerRef.current) {
@@ -401,7 +457,10 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
   }, [geometry, isReady, mapView, onGeometryChange])
 
   useEffect(() => {
+    console.log("Search widget effect triggered:", { isReady, hasMapView: !!mapView })
+    
     if (!isReady || !mapView) {
+      console.log("Search widget effect: conditions not met", { isReady, mapView })
       return undefined
     }
 
@@ -411,13 +470,17 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       return undefined
     }
 
+    console.log("Search widget: starting initialization")
     let isCancelled = false
 
     requireFn(["esri/widgets/Search"], (Search: any) => {
       if (isCancelled) {
+        console.log("Search widget initialization cancelled")
         return
       }
 
+      console.log("Search widget: Search class loaded, creating widget")
+      
       try {
         const searchWidget = new (Search as any)({ 
           view: mapView,
@@ -425,13 +488,15 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
           autoComplete: true
         })
         
+        console.log("Search widget created:", searchWidget)
+        
         // Ensure the map view UI is ready before adding the widget
         if (mapView.ui) {
           mapView.ui.add(searchWidget, { 
             position: "top-left", 
             index: 0 
           })
-          console.log("Search widget added to map")
+          console.log("Search widget added to map UI")
         } else {
           console.warn("Map view UI not ready")
         }
@@ -465,12 +530,15 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
           widget: searchWidget,
           handles
         }
+        
+        console.log("Search widget initialization complete")
       } catch (error) {
         console.error("Error creating search widget:", error)
       }
     })
 
     return () => {
+      console.log("Search widget effect cleanup")
       isCancelled = true
       const current = searchWidgetRef.current
       const searchWidget = current?.widget ?? current
