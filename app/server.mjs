@@ -1,6 +1,7 @@
 import express from "express";
 import { join, dirname } from "path";
 import { existsSync, readdirSync, statSync } from "fs";
+import { Readable } from "node:stream";
 import { fileURLToPath } from "url";
 
 import { callIpacProxy, callNepassistProxy, ProxyError } from "./server/geospatialProxy.js";
@@ -9,6 +10,9 @@ const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "dist");
 const port = parseInt(process.env.PORT ?? "8080", 10);
+const customAdkBaseUrl =
+  normalizeEnvValue(process.env.COPILOTKIT_CUSTOM_ADK_URL) ??
+  "https://permitting-adk-650621702399.us-east4.run.app";
 
 app.use(express.json({ limit: "1mb" }));
 
@@ -20,6 +24,67 @@ function normalizeEnvValue(value) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
+
+async function proxyCustomAdkRequest(req, res) {
+  const targetUrl = new URL(req.url || "/", customAdkBaseUrl);
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (!value) {
+      continue;
+    }
+    if (key.toLowerCase() === "host") {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      headers.set(key, value.join(","));
+    } else {
+      headers.set(key, value);
+    }
+  }
+
+  const method = req.method?.toUpperCase() ?? "GET";
+  const hasBody = !["GET", "HEAD"].includes(method);
+
+  let body;
+  if (hasBody) {
+    if (req.is("application/json") && req.body && typeof req.body === "object") {
+      body = JSON.stringify(req.body);
+      headers.set("content-type", "application/json");
+    } else if (typeof req.body === "string" || req.body instanceof Buffer) {
+      body = req.body;
+    }
+  }
+
+  try {
+    const response = await fetch(targetUrl, {
+      method,
+      headers,
+      body,
+      redirect: "follow",
+    });
+
+    res.status(response.status);
+    response.headers.forEach((value, key) => {
+      if (key.toLowerCase() === "transfer-encoding" || key.toLowerCase() === "content-length") {
+        return;
+      }
+      res.setHeader(key, value);
+    });
+
+    if (response.body) {
+      const nodeStream = Readable.fromWeb(response.body);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (error) {
+    console.error("Custom ADK proxy error", error);
+    res.status(502).json({ error: "Failed to reach custom ADK runtime" });
+  }
+}
+
+app.use("/api/custom-adk", proxyCustomAdkRequest);
 
 app.get("/env.js", (req, res) => {
   const config = {};
