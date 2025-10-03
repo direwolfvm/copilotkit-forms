@@ -3,6 +3,8 @@ import { createElement, useEffect, useMemo, useRef, useState } from "react"
 const ARCGIS_JS_URL = "https://js.arcgis.com/4.33/"
 const ARCGIS_COMPONENTS_URL = "https://js.arcgis.com/4.33/map-components/"
 const ARCGIS_CSS_URL = "https://js.arcgis.com/4.33/esri/themes/light/main.css"
+const ARCGIS_COMPONENTS_CSS_URL =
+  "https://js.arcgis.com/4.33/map-components/assets/esri/themes/light/main.css"
 
 type GeometryChange = {
   geoJson?: string
@@ -62,6 +64,7 @@ function ensureArcgisResources() {
   if (!resourcePromise) {
     resourcePromise = Promise.all([
       loadStyle("arcgis-css", ARCGIS_CSS_URL),
+      loadStyle("arcgis-components-css", ARCGIS_COMPONENTS_CSS_URL),
       loadScript("arcgis-js", ARCGIS_JS_URL)
     ])
       .then(() => loadScript("arcgis-components", ARCGIS_COMPONENTS_URL, { type: "module" }))
