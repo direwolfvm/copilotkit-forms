@@ -407,6 +407,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
 
     const requireFn = (window as any).require
     if (!requireFn) {
+      console.warn("ArcGIS require function not available")
       return undefined
     }
 
@@ -417,36 +418,55 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
         return
       }
 
-      const searchWidget = new (Search as any)({ view: mapView })
-      searchWidgetRef.current = searchWidget
-      mapView.ui.add(searchWidget, { position: "top-left" })
-
-      const handles: any[] = []
-
-      const handleSelectResult = searchWidget.on("select-result", (event: any) => {
-        const geometry = event?.result?.feature?.geometry
-        if (geometry) {
-          updateGeometryFromEsri(geometry)
+      try {
+        const searchWidget = new (Search as any)({ 
+          view: mapView,
+          allPlaceholder: "Search for places or addresses",
+          autoComplete: true
+        })
+        
+        // Ensure the map view UI is ready before adding the widget
+        if (mapView.ui) {
+          mapView.ui.add(searchWidget, { 
+            position: "top-left", 
+            index: 0 
+          })
+          console.log("Search widget added to map")
+        } else {
+          console.warn("Map view UI not ready")
         }
-      })
-      if (handleSelectResult) {
-        handles.push(handleSelectResult)
-      }
 
-      const handleSearchComplete = searchWidget.on("search-complete", (event: any) => {
-        const firstResult = event?.results?.find?.((group: any) => group?.results?.length)
-        const geometry = firstResult?.results?.[0]?.feature?.geometry
-        if (geometry) {
-          updateGeometryFromEsri(geometry)
+        const handles: any[] = []
+
+        const handleSelectResult = searchWidget.on("select-result", (event: any) => {
+          console.log("Search result selected:", event)
+          const geometry = event?.result?.feature?.geometry
+          if (geometry) {
+            updateGeometryFromEsri(geometry)
+          }
+        })
+        if (handleSelectResult) {
+          handles.push(handleSelectResult)
         }
-      })
-      if (handleSearchComplete) {
-        handles.push(handleSearchComplete)
-      }
 
-      searchWidgetRef.current = {
-        widget: searchWidget,
-        handles
+        const handleSearchComplete = searchWidget.on("search-complete", (event: any) => {
+          console.log("Search completed:", event)
+          const firstResult = event?.results?.find?.((group: any) => group?.results?.length)
+          const geometry = firstResult?.results?.[0]?.feature?.geometry
+          if (geometry) {
+            updateGeometryFromEsri(geometry)
+          }
+        })
+        if (handleSearchComplete) {
+          handles.push(handleSearchComplete)
+        }
+
+        searchWidgetRef.current = {
+          widget: searchWidget,
+          handles
+        }
+      } catch (error) {
+        console.error("Error creating search widget:", error)
       }
     })
 
@@ -456,12 +476,20 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       const searchWidget = current?.widget ?? current
       if (current?.handles) {
         current.handles.forEach((handle: any) => {
-          handle?.remove?.()
+          try {
+            handle?.remove?.()
+          } catch (error) {
+            console.warn("Error removing handle:", error)
+          }
         })
       }
       if (searchWidget) {
-        mapView.ui?.remove?.(searchWidget)
-        searchWidget.destroy?.()
+        try {
+          mapView.ui?.remove?.(searchWidget)
+          searchWidget.destroy?.()
+        } catch (error) {
+          console.warn("Error destroying search widget:", error)
+        }
       }
       searchWidgetRef.current = null
     }
