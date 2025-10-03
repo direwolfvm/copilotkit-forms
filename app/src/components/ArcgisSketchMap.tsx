@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useRef, useState } from "react"
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 const ARCGIS_JS_URL = "https://js.arcgis.com/4.33/"
 const ARCGIS_COMPONENTS_URL = "https://js.arcgis.com/4.33/map-components/"
@@ -220,6 +220,41 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
 
+  const updateGeometryFromEsri = useCallback(
+    (incomingGeometry: any | undefined) => {
+      if (!incomingGeometry) {
+        onGeometryChange({ geoJson: undefined, latitude: undefined, longitude: undefined })
+        return
+      }
+
+      const requireFn = (window as any).require
+      if (!requireFn) {
+        return
+      }
+
+      requireFn([
+        "esri/geometry/support/webMercatorUtils"
+      ], (webMercatorUtils: any) => {
+        let geographic: any = incomingGeometry
+        try {
+          if ((incomingGeometry as any).spatialReference?.wkid !== 4326) {
+            geographic = webMercatorUtils.webMercatorToGeographic(incomingGeometry)
+          }
+        } catch {
+          geographic = incomingGeometry
+        }
+
+        const { geoJson, centroid } = convertToGeoJsonGeometry(geographic)
+        onGeometryChange({
+          geoJson,
+          latitude: centroid?.latitude,
+          longitude: centroid?.longitude
+        })
+      })
+    },
+    [onGeometryChange]
+  )
+
   useEffect(() => {
     let cancelled = false
     ensureArcgisResources()
@@ -274,52 +309,20 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       return undefined
     }
 
-    const notifyChange = (incomingGeometry: any | undefined) => {
-      if (!incomingGeometry) {
-        onGeometryChange({ geoJson: undefined, latitude: undefined, longitude: undefined })
-        return
-      }
-
-      const requireFn = (window as any).require
-      if (!requireFn) {
-        return
-      }
-
-      requireFn([
-        "esri/geometry/support/webMercatorUtils"
-      ], (webMercatorUtils: any) => {
-        let geographic: any = incomingGeometry
-        try {
-          if ((incomingGeometry as any).spatialReference?.wkid !== 4326) {
-            geographic = webMercatorUtils.webMercatorToGeographic(incomingGeometry)
-          }
-        } catch {
-          geographic = incomingGeometry
-        }
-
-        const { geoJson, centroid } = convertToGeoJsonGeometry(geographic)
-        onGeometryChange({
-          geoJson,
-          latitude: centroid?.latitude,
-          longitude: centroid?.longitude
-        })
-      })
-    }
-
     const handleCreate = (event: CustomEvent) => {
       if (event.detail?.state === "complete") {
-        notifyChange(event.detail.graphic?.geometry)
+        updateGeometryFromEsri(event.detail.graphic?.geometry)
       }
     }
 
     const handleUpdate = (event: CustomEvent) => {
       if (event.detail?.state === "complete" && event.detail.graphics?.[0]) {
-        notifyChange(event.detail.graphics[0].geometry)
+        updateGeometryFromEsri(event.detail.graphics[0].geometry)
       }
     }
 
     const handleDelete = () => {
-      notifyChange(undefined)
+      updateGeometryFromEsri(undefined)
     }
 
     sketchElement.addEventListener("arcgisCreate", handleCreate as EventListener)
@@ -331,7 +334,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       sketchElement.removeEventListener("arcgisUpdate", handleUpdate as EventListener)
       sketchElement.removeEventListener("arcgisDelete", handleDelete as EventListener)
     }
-  }, [isReady, onGeometryChange])
+  }, [isReady, updateGeometryFromEsri])
 
   useEffect(() => {
     if (!isReady || !mapView || !containerRef.current) {
@@ -378,6 +381,39 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
 
     return undefined
   }, [geometry, isReady, mapView, onGeometryChange])
+
+  useEffect(() => {
+    if (!isReady || !containerRef.current) {
+      return undefined
+    }
+    const searchElement = containerRef.current.querySelector("arcgis-search") as any
+    if (!searchElement) {
+      return undefined
+    }
+
+    const handleSelectResult = (event: CustomEvent) => {
+      const geometry = event?.detail?.result?.feature?.geometry
+      if (geometry) {
+        updateGeometryFromEsri(geometry)
+      }
+    }
+
+    const handleSearchComplete = (event: CustomEvent) => {
+      const firstResult = event?.detail?.results?.find?.((group: any) => group?.results?.length)
+      const geometry = firstResult?.results?.[0]?.feature?.geometry
+      if (geometry) {
+        updateGeometryFromEsri(geometry)
+      }
+    }
+
+    searchElement.addEventListener("arcgisSelectResult", handleSelectResult as EventListener)
+    searchElement.addEventListener("arcgisSearchComplete", handleSearchComplete as EventListener)
+
+    return () => {
+      searchElement.removeEventListener("arcgisSelectResult", handleSelectResult as EventListener)
+      searchElement.removeEventListener("arcgisSearchComplete", handleSearchComplete as EventListener)
+    }
+  }, [isReady, updateGeometryFromEsri])
 
   const map = useMemo(() => {
     if (!isReady) {
