@@ -236,6 +236,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
+  const searchWidgetRef = useRef<any>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -396,6 +397,39 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
     return undefined
   }, [geometry, isReady, mapView, onGeometryChange])
 
+  useEffect(() => {
+    if (!isReady || !mapView) {
+      return undefined
+    }
+
+    const requireFn = (window as any).require
+    if (!requireFn) {
+      return undefined
+    }
+
+    let isCancelled = false
+
+    requireFn(["esri/widgets/Search"], (Search: any) => {
+      if (isCancelled) {
+        return
+      }
+
+      const searchWidget = new (Search as any)({ view: mapView })
+      searchWidgetRef.current = searchWidget
+      mapView.ui.add(searchWidget, { position: "top-left" })
+    })
+
+    return () => {
+      isCancelled = true
+      const searchWidget = searchWidgetRef.current
+      if (searchWidget) {
+        mapView.ui?.remove?.(searchWidget)
+        searchWidget.destroy?.()
+        searchWidgetRef.current = null
+      }
+    }
+  }, [isReady, mapView])
+
   const map = useMemo(() => {
     if (!isReady) {
       return <div className="location-map__loading">Loading map…</div>
@@ -403,7 +437,6 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
     return createElement(
       "arcgis-map",
       { basemap: "topo-vector", center: "-98,39", zoom: "4" },
-      createElement("arcgis-search", { slot: "widgets", position: "top-left", key: "search" }),
       createElement("arcgis-sketch", {
         key: "sketch",
         "creation-mode": "single",
