@@ -36,7 +36,7 @@ import {
 } from "./utils/geospatial"
 import { majorPermits } from "./utils/majorPermits"
 
-const CUSTOM_ADK_PROXY_URL = "/api/custom-adk"
+const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
 
 type CopilotRuntimeMode = "default" | "custom"
 

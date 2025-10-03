@@ -26,7 +26,23 @@ function normalizeEnvValue(value) {
 }
 
 async function proxyCustomAdkRequest(req, res) {
-  const targetUrl = new URL(req.url || "/", customAdkBaseUrl);
+  const requestedPath = req.url ?? "/";
+  let proxyPath;
+
+  // The Copilot Runtime expects requests to be routed through the `/agent` entrypoint.
+  // When the frontend hits the base proxy URL we implicitly redirect to that path so the
+  // deployment works even if the caller forgot the suffix.
+  if (requestedPath === "/") {
+    proxyPath = "/agent";
+  } else if (requestedPath.startsWith("/?")) {
+    proxyPath = `/agent${requestedPath.slice(1)}`;
+  } else if (requestedPath.length === 0) {
+    proxyPath = "/agent";
+  } else {
+    proxyPath = requestedPath;
+  }
+
+  const targetUrl = new URL(proxyPath, customAdkBaseUrl);
 
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
