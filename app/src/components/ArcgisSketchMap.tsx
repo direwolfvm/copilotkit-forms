@@ -76,7 +76,9 @@ function ensureArcgisResources() {
   if (!resourcePromise) {
     resourcePromise = Promise.all([
       loadStyle("arcgis-css", ARCGIS_CSS_URL),
+
       loadStyle("arcgis-components-css", ARCGIS_COMPONENTS_CSS_URL, { optional: true }),
+
       loadScript("arcgis-js", ARCGIS_JS_URL)
     ])
       .then(() => loadScript("arcgis-components", ARCGIS_COMPONENTS_URL, { type: "module" }))
