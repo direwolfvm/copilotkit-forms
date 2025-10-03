@@ -279,9 +279,6 @@ function buildAdkMessages(messages) {
         role,
         content: typeof text.content === "string" ? text.content : "",
       };
-      if (role === "user") {
-        message.user = { id: text.parentMessageId ?? entry.id ?? randomUUID() };
-      }
       if (typeof text.parentMessageId === "string") {
         message.parentMessageId = text.parentMessageId;
       }
