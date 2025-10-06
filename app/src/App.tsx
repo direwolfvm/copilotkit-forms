@@ -598,7 +598,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     try {
       await saveProjectSnapshot({
         formData: next,
-        permittingChecklist,
         geospatialResults
       })
       setLastSaved(new Date().toLocaleString())
