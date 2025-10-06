@@ -15,6 +15,23 @@ const customAdkBaseUrl =
   normalizeEnvValue(process.env.COPILOTKIT_CUSTOM_ADK_URL) ??
   "https://permitting-adk-650621702399.us-east4.run.app";
 
+function resolveSupabaseUrl() {
+  return (
+    normalizeEnvValue(process.env.VITE_SUPABASE_URL) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL) ??
+    normalizeEnvValue(process.env.SUPABASE_URL)
+  );
+}
+
+function resolveSupabaseAnonKey() {
+  return (
+    normalizeEnvValue(process.env.VITE_SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.SUPABASE_PUBLIC_ANON_KEY)
+  );
+}
+
 app.use(express.json({ limit: "1mb" }));
 
 function normalizeEnvValue(value) {
@@ -103,6 +120,80 @@ async function proxyCustomAdkRequest(req, res) {
   } catch (error) {
     console.error("Custom ADK proxy error", error);
     res.status(502).json({ error: "Failed to reach custom ADK runtime" });
+  }
+}
+
+async function proxySupabaseRequest(req, res) {
+  const supabaseUrl = resolveSupabaseUrl();
+  const supabaseAnonKey = resolveSupabaseAnonKey();
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    res.status(500).json({ error: "Supabase credentials are not configured" });
+    return;
+  }
+
+  const targetUrl = new URL(req.url ?? "/", supabaseUrl);
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (!value) {
+      continue;
+    }
+
+    const lowerKey = key.toLowerCase();
+    if (lowerKey === "host" || lowerKey === "content-length") {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      headers.set(key, value.join(","));
+    } else {
+      headers.set(key, value);
+    }
+  }
+
+  headers.set("apikey", supabaseAnonKey);
+  headers.set("Authorization", `Bearer ${supabaseAnonKey}`);
+
+  const method = req.method?.toUpperCase() ?? "GET";
+  const hasBody = !["GET", "HEAD"].includes(method);
+
+  let body;
+  if (hasBody) {
+    if (req.is("application/json") && req.body && typeof req.body === "object") {
+      body = JSON.stringify(req.body);
+      headers.set("content-type", "application/json");
+    } else if (typeof req.body === "string" || req.body instanceof Buffer) {
+      body = req.body;
+    }
+  }
+
+  try {
+    const response = await fetch(targetUrl, {
+      method,
+      headers,
+      body,
+      redirect: "follow",
+    });
+
+    res.status(response.status);
+    response.headers.forEach((value, key) => {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey === "transfer-encoding" || lowerKey === "content-length") {
+        return;
+      }
+      res.setHeader(key, value);
+    });
+
+    if (response.body) {
+      const nodeStream = Readable.fromWeb(response.body);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (error) {
+    console.error("Supabase proxy error", error);
+    res.status(502).json({ error: "Failed to reach Supabase" });
   }
 }
 
@@ -532,6 +623,8 @@ function buildGraphqlResponseFromEvents(events, threadId, runId) {
   };
 }
 
+app.use("/api/supabase", proxySupabaseRequest);
+
 app.use("/api/custom-adk", proxyCustomAdkRequest);
 
 app.get("/env.js", (req, res) => {
@@ -551,19 +644,12 @@ app.get("/env.js", (req, res) => {
     config.runtimeUrl = runtimeUrl;
   }
 
-  const supabaseUrl =
-    normalizeEnvValue(process.env.VITE_SUPABASE_URL) ??
-    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL) ??
-    normalizeEnvValue(process.env.SUPABASE_URL);
+  const supabaseUrl = resolveSupabaseUrl();
   if (supabaseUrl) {
     config.supabaseUrl = supabaseUrl;
   }
 
-  const supabaseAnonKey =
-    normalizeEnvValue(process.env.VITE_SUPABASE_ANON_KEY) ??
-    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ??
-    normalizeEnvValue(process.env.SUPABASE_ANON_KEY) ??
-    normalizeEnvValue(process.env.SUPABASE_PUBLIC_ANON_KEY);
+  const supabaseAnonKey = resolveSupabaseAnonKey();
   if (supabaseAnonKey) {
     config.supabaseAnonKey = supabaseAnonKey;
   }

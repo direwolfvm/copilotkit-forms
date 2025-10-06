@@ -65,15 +65,12 @@ export async function saveProjectSnapshot({
 
   const sanitizedRecord = stripUndefined(record)
 
-  const endpoint = new URL("/rest/v1/project", supabaseUrl)
-  endpoint.searchParams.set("on_conflict", "id")
+  const endpoint = `/api/supabase/rest/v1/project?${new URLSearchParams({ on_conflict: "id" }).toString()}`
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "resolution=merge-duplicates,return=representation"
     },
     body: JSON.stringify(sanitizedRecord)
@@ -95,27 +92,21 @@ export async function saveProjectSnapshot({
   const projectId = determineProjectId(numericId, responsePayload)
 
   await createPreScreeningProcessInstance({
-    supabaseUrl,
-    supabaseAnonKey,
     projectId,
     projectTitle: normalizedTitle
   })
 }
 
 type CreatePreScreeningProcessInstanceArgs = {
-  supabaseUrl: string
-  supabaseAnonKey: string
   projectId: number
   projectTitle: string | null
 }
 
 async function createPreScreeningProcessInstance({
-  supabaseUrl,
-  supabaseAnonKey,
   projectId,
   projectTitle
 }: CreatePreScreeningProcessInstanceArgs): Promise<void> {
-  const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
+  const endpoint = "/api/supabase/rest/v1/process_instance"
   const timestamp = new Date().toISOString()
 
   const processInstancePayload = stripUndefined({
@@ -127,12 +118,10 @@ async function createPreScreeningProcessInstance({
     retrieved_timestamp: timestamp
   })
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "return=representation"
     },
     body: JSON.stringify(processInstancePayload)
