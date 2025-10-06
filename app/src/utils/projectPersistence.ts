@@ -200,8 +200,10 @@ export async function submitDecisionPayload({
 
   const missingElements = DECISION_ELEMENT_TITLES.filter((title) => !decisionElements.has(title))
   if (missingElements.length > 0) {
-    throw new ProjectPersistenceError(
-      `Decision elements are not configured for: ${missingElements.join(", ")}.`
+    console.warn(
+      "Decision elements are not configured for:",
+      missingElements.join(", "),
+      "— proceeding with available configuration."
     )
   }
 
@@ -505,7 +507,10 @@ function buildDecisionPayloadRecords({
   for (const builder of DECISION_ELEMENT_BUILDERS) {
     const element = decisionElements.get(builder.title)
     if (!element) {
-      throw new ProjectPersistenceError(`Missing decision element configuration for "${builder.title}".`)
+      console.warn(
+        `Skipping decision payload for "${builder.title}" because the decision element is not configured.`
+      )
+      continue
     }
 
     const data = builder.build({
