@@ -24,7 +24,7 @@ import {
 } from "./components/PermittingChecklistSection"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
-import { ProjectPersistenceError, saveProjectSnapshot } from "./utils/projectPersistence"
+import { ProjectPersistenceError, saveProjectSnapshot, submitDecisionPayload } from "./utils/projectPersistence"
 import { LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
 import type { GeospatialResultsState } from "./types/geospatial"
@@ -88,6 +88,11 @@ type ChecklistUpsertInput = {
   completed?: boolean
   notes?: string
   source?: PermittingChecklistItem["source"]
+}
+
+type DecisionSubmitState = {
+  status: "idle" | "saving" | "success" | "error"
+  message?: string
 }
 
 const MIN_PROJECT_IDENTIFIER = 10_000_000
@@ -177,6 +182,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   )
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>(undefined)
+  const [decisionSubmitState, setDecisionSubmitState] = useState<DecisionSubmitState>({ status: "idle" })
 
   useEffect(() => {
     persistedProjectFormState = {
@@ -381,6 +387,38 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const handleRemoveChecklistItem = useCallback((id: string) => {
     setPermittingChecklist((previous) => previous.filter((item) => item.id !== id))
   }, [])
+
+  const handleSubmitDecisionPayload = useCallback(async () => {
+    setDecisionSubmitState({ status: "saving" })
+
+    let preparedFormData = formData
+    const candidateId = formData.id ? Number.parseInt(formData.id, 10) : Number.NaN
+    if (!formData.id || Number.isNaN(candidateId) || !Number.isFinite(candidateId)) {
+      const generated = applyGeneratedProjectId(formData, formData.id)
+      preparedFormData = generated
+      if (generated.id !== formData.id) {
+        setFormData(generated)
+      }
+    }
+
+    try {
+      await submitDecisionPayload({
+        formData: preparedFormData,
+        geospatialResults,
+        permittingChecklist
+      })
+      setDecisionSubmitState({ status: "success", message: "Decision payload submitted." })
+    } catch (error) {
+      console.error("Failed to submit decision payload", error)
+      let message = "Unable to submit decision payloads."
+      if (error instanceof ProjectPersistenceError) {
+        message = error.message
+      } else if (error instanceof Error) {
+        message = error.message
+      }
+      setDecisionSubmitState({ status: "error", message })
+    }
+  }, [formData, geospatialResults, permittingChecklist, setFormData])
 
   useCopilotAction(
     {
@@ -594,6 +632,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setFormData(next)
     setIsSaving(true)
     setSaveError(undefined)
+    setDecisionSubmitState((previous) => (previous.status === "idle" ? previous : { status: "idle" }))
 
     try {
       await saveProjectSnapshot({
@@ -623,6 +662,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setPermittingChecklist([])
     setSaveError(undefined)
     setIsSaving(false)
+    setDecisionSubmitState({ status: "idle" })
   }
 
   const updateLocationFields = useCallback(
@@ -922,9 +962,34 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               onSubmit={handleSubmit}
               liveValidate
             >
-              <button type="submit" className="usa-button primary" disabled={isSaving}>
-                {isSaving ? "Saving…" : "Save project snapshot"}
-              </button>
+              <div className="form-panel__actions">
+                <button type="submit" className="usa-button primary" disabled={isSaving}>
+                  {isSaving ? "Saving…" : "Save project snapshot"}
+                </button>
+                <button
+                  type="button"
+                  className="usa-button usa-button--outline secondary"
+                  onClick={handleSubmitDecisionPayload}
+                  disabled={isSaving || decisionSubmitState.status === "saving"}
+                >
+                  {decisionSubmitState.status === "saving" ? "Submitting…" : "Submit decision payload"}
+                </button>
+              </div>
+              {decisionSubmitState.status === "saving" ? (
+                <div className="form-panel__status">
+                  <span className="status" role="status">Submitting decision payload…</span>
+                </div>
+              ) : decisionSubmitState.status === "error" ? (
+                <div className="form-panel__status">
+                  <span className="status status--error" role="alert">{decisionSubmitState.message}</span>
+                </div>
+              ) : decisionSubmitState.status === "success" ? (
+                <div className="form-panel__status">
+                  <span className="status" role="status">
+                    {decisionSubmitState.message ?? "Decision payload submitted."}
+                  </span>
+                </div>
+              ) : null}
             </Form>
           </div>
           <PermittingChecklistSection
