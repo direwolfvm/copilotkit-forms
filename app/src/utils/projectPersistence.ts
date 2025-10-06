@@ -1,4 +1,3 @@
-import type { PermittingChecklistItem } from "../components/PermittingChecklistSection"
 import type { ProjectContact, ProjectFormData } from "../schema/projectSchema"
 import type { GeospatialResultsState, GeospatialServiceState } from "../types/geospatial"
 import { getSupabaseAnonKey, getSupabaseUrl } from "../runtimeConfig"
@@ -14,13 +13,11 @@ export class ProjectPersistenceError extends Error {
 
 type SaveProjectSnapshotArgs = {
   formData: ProjectFormData
-  permittingChecklist: PermittingChecklistItem[]
   geospatialResults: GeospatialResultsState
 }
 
 export async function saveProjectSnapshot({
   formData,
-  permittingChecklist,
   geospatialResults
 }: SaveProjectSnapshotArgs): Promise<void> {
   const supabaseUrl = getSupabaseUrl()
@@ -57,9 +54,8 @@ export async function saveProjectSnapshot({
     location_lon: normalizeNumber(formData.location_lon),
     location_object: locationResult.value,
     sponsor_contact: normalizeContact(formData.sponsor_contact),
-    other: buildOtherPayload(formData, permittingChecklist, geospatialResults, locationResult),
+    other: buildOtherPayload(formData, geospatialResults, locationResult),
     data_source_system: DATA_SOURCE_SYSTEM,
-    data_record_version: normalizedId ?? null,
     last_updated: timestamp,
     retrieved_timestamp: timestamp
   }
@@ -172,7 +168,6 @@ function parseLocationObject(value: string | undefined): LocationParseResult {
 
 function buildOtherPayload(
   formData: ProjectFormData,
-  permittingChecklist: PermittingChecklistItem[],
   geospatialResults: GeospatialResultsState,
   locationResult: LocationParseResult
 ): Record<string, unknown> | null {
@@ -181,30 +176,6 @@ function buildOtherPayload(
   const notes = normalizeString(formData.other)
   if (notes) {
     other.notes = notes
-  }
-
-  const nepa: Record<string, string> = {}
-  const ceCode = normalizeString(formData.nepa_categorical_exclusion_code)
-  if (ceCode) {
-    nepa.categoricalExclusionCode = ceCode
-  }
-
-  const conformance = normalizeString(formData.nepa_conformance_conditions)
-  if (conformance) {
-    nepa.conformanceConditions = conformance
-  }
-
-  const extraordinary = normalizeString(formData.nepa_extraordinary_circumstances)
-  if (extraordinary) {
-    nepa.extraordinaryCircumstances = extraordinary
-  }
-
-  if (Object.keys(nepa).length > 0) {
-    other.nepa = nepa
-  }
-
-  if (permittingChecklist.length > 0) {
-    other.permittingChecklist = permittingChecklist.map((item) => stripUndefined(item))
   }
 
   if (hasMeaningfulGeospatialResults(geospatialResults)) {
