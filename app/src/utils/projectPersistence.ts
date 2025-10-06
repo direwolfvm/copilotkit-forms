@@ -92,15 +92,12 @@ export async function saveProjectSnapshot({
     retrieved_timestamp: timestamp
   })
 
-  const endpoint = new URL("/rest/v1/project", supabaseUrl)
-  endpoint.searchParams.set("on_conflict", "id")
+  const endpoint = `/api/supabase/rest/v1/project?${new URLSearchParams({ on_conflict: "id" }).toString()}`
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "resolution=merge-duplicates,return=representation"
     },
     body: JSON.stringify(sanitizedRecord)
@@ -252,15 +249,11 @@ export async function submitDecisionPayload({
 }
 
 type CreatePreScreeningProcessInstanceArgs = {
-  supabaseUrl: string
-  supabaseAnonKey: string
   projectId: number
   projectTitle: string | null
 }
 
 async function createPreScreeningProcessInstance({
-  supabaseUrl,
-  supabaseAnonKey,
   projectId,
   projectTitle
 }: CreatePreScreeningProcessInstanceArgs): Promise<number> {
@@ -276,12 +269,10 @@ async function createPreScreeningProcessInstance({
     retrieved_timestamp: timestamp
   })
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "return=representation"
     },
     body: JSON.stringify(processInstancePayload)
