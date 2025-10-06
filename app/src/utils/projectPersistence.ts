@@ -3,6 +3,8 @@ import type { GeospatialResultsState, GeospatialServiceState } from "../types/ge
 import { getSupabaseAnonKey, getSupabaseUrl } from "../runtimeConfig"
 
 const DATA_SOURCE_SYSTEM = "project-portal"
+const PRE_SCREENING_PROCESS_MODEL_ID = 1
+const PRE_SCREENING_TITLE_SUFFIX = "Pre-Screening"
 
 export class ProjectPersistenceError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -30,6 +32,7 @@ export async function saveProjectSnapshot({
   }
 
   const normalizedId = normalizeString(formData.id)
+  const normalizedTitle = normalizeString(formData.title)
   const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
 
   if (normalizedId && (Number.isNaN(numericId) || !Number.isFinite(numericId))) {
@@ -42,7 +45,7 @@ export async function saveProjectSnapshot({
 
   const record: Record<string, unknown> = {
     id: numericId,
-    title: normalizeString(formData.title),
+    title: normalizedTitle,
     description: normalizeString(formData.description),
     sector: normalizeString(formData.sector),
     lead_agency: normalizeString(formData.lead_agency),
@@ -76,18 +79,10 @@ export async function saveProjectSnapshot({
     body: JSON.stringify(sanitizedRecord)
   })
 
+  const responseText = await response.text()
+
   if (!response.ok) {
-    let errorDetail: string | undefined
-    try {
-      const body = await response.json()
-      errorDetail = typeof body?.message === "string" ? body.message : JSON.stringify(body)
-    } catch (jsonError) {
-      try {
-        errorDetail = await response.text()
-      } catch (textError) {
-        errorDetail = jsonError instanceof Error ? jsonError.message : undefined
-      }
-    }
+    const errorDetail = extractErrorDetail(responseText)
 
     throw new ProjectPersistenceError(
       errorDetail
@@ -95,6 +90,136 @@ export async function saveProjectSnapshot({
         : `Supabase request failed (${response.status}).`
     )
   }
+
+  const responsePayload = responseText ? safeJsonParse(responseText) : undefined
+  const projectId = determineProjectId(numericId, responsePayload)
+
+  await createPreScreeningProcessInstance({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId,
+    projectTitle: normalizedTitle
+  })
+}
+
+type CreatePreScreeningProcessInstanceArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  projectId: number
+  projectTitle: string | null
+}
+
+async function createPreScreeningProcessInstance({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId,
+  projectTitle
+}: CreatePreScreeningProcessInstanceArgs): Promise<void> {
+  const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
+  const processInstancePayload = stripUndefined({
+    title: buildProcessInstanceTitle(projectTitle),
+    process_model_id: PRE_SCREENING_PROCESS_MODEL_ID,
+    project_id: projectId
+  })
+
+  const response = await fetch(endpoint.toString(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(processInstancePayload)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to create process instance (${response.status}): ${errorDetail}`
+        : `Failed to create process instance (${response.status}).`
+    )
+  }
+}
+
+function buildProcessInstanceTitle(projectTitle: string | null): string {
+  if (projectTitle && projectTitle.length > 0) {
+    return `${projectTitle} ${PRE_SCREENING_TITLE_SUFFIX}`
+  }
+  return PRE_SCREENING_TITLE_SUFFIX
+}
+
+function determineProjectId(
+  explicitId: number | undefined,
+  payload: unknown
+): number {
+  if (typeof explicitId === "number" && Number.isFinite(explicitId)) {
+    return explicitId
+  }
+
+  const derivedId = extractProjectId(payload)
+  if (typeof derivedId === "number" && Number.isFinite(derivedId)) {
+    return derivedId
+  }
+
+  throw new ProjectPersistenceError("Supabase response did not include a project identifier.")
+}
+
+function extractProjectId(payload: unknown): number | undefined {
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      const id = extractProjectId(entry)
+      if (typeof id === "number") {
+        return id
+      }
+    }
+    return undefined
+  }
+
+  if (payload && typeof payload === "object") {
+    const candidate = (payload as Record<string, unknown>).id
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate
+    }
+  }
+
+  return undefined
+}
+
+function safeJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
+}
+
+function extractErrorDetail(responseText: string): string | undefined {
+  if (!responseText) {
+    return undefined
+  }
+
+  const parsed = safeJsonParse(responseText)
+  if (parsed && typeof parsed === "object" && "message" in parsed) {
+    const message = (parsed as { message?: unknown }).message
+    if (typeof message === "string") {
+      return message
+    }
+  }
+
+  if (parsed && typeof parsed === "object") {
+    try {
+      return JSON.stringify(parsed)
+    } catch {
+      // ignore JSON stringify errors and fall back to raw text
+    }
+  }
+
+  return responseText
 }
 
 function normalizeString(value: string | null | undefined): string | null {
