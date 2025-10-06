@@ -105,7 +105,12 @@ async function proxyCustomAdkRequest(req, res) {
 
     res.status(response.status);
     response.headers.forEach((value, key) => {
-      if (key.toLowerCase() === "transfer-encoding" || key.toLowerCase() === "content-length") {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey === "transfer-encoding" ||
+        lowerKey === "content-length" ||
+        lowerKey === "content-encoding"
+      ) {
         return;
       }
       res.setHeader(key, value);
@@ -179,7 +184,11 @@ async function proxySupabaseRequest(req, res) {
     res.status(response.status);
     response.headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase();
-      if (lowerKey === "transfer-encoding" || lowerKey === "content-length") {
+      if (
+        lowerKey === "transfer-encoding" ||
+        lowerKey === "content-length" ||
+        lowerKey === "content-encoding"
+      ) {
         return;
       }
       res.setHeader(key, value);
