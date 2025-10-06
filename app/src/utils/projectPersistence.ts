@@ -393,7 +393,7 @@ async function fetchDecisionElements({
   supabaseAnonKey
 }: FetchDecisionElementsArgs): Promise<DecisionElementMap> {
   const endpoint = new URL("/rest/v1/decision_element", supabaseUrl)
-  endpoint.searchParams.set("select", "id,title,evaluation_data")
+  endpoint.searchParams.set("select", "id,title")
 
   const response = await fetch(endpoint.toString(), {
     method: "GET",
