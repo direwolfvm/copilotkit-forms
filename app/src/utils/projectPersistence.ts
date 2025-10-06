@@ -116,10 +116,15 @@ async function createPreScreeningProcessInstance({
   projectTitle
 }: CreatePreScreeningProcessInstanceArgs): Promise<void> {
   const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
+  const timestamp = new Date().toISOString()
+
   const processInstancePayload = stripUndefined({
     title: buildProcessInstanceTitle(projectTitle),
-    process_model_id: PRE_SCREENING_PROCESS_MODEL_ID,
-    project_id: projectId
+    process_model: PRE_SCREENING_PROCESS_MODEL_ID,
+    parent_project_id: projectId,
+    data_source_system: DATA_SOURCE_SYSTEM,
+    last_updated: timestamp,
+    retrieved_timestamp: timestamp
   })
 
   const response = await fetch(endpoint.toString(), {
