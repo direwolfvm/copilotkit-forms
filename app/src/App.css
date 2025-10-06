@@ -147,6 +147,18 @@
   gap: 1.5rem;
 }
 
+.form-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.form-panel__status {
+  display: flex;
+  align-items: center;
+}
+
 .form-panel__header {
   display: flex;
   flex-direction: column;
