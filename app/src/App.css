@@ -99,6 +99,12 @@
   border-radius: 999px;
 }
 
+.status--error {
+  color: var(--color-danger, #b91c1c);
+  background: color-mix(in srgb, var(--surface) 80%, var(--color-danger, #b91c1c) 20%);
+  border: 1px solid color-mix(in srgb, var(--color-danger, #b91c1c) 45%, transparent);
+}
+
 .usa-alert {
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--theme-gold-300) 45%, transparent);

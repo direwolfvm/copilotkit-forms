@@ -1,6 +1,8 @@
 interface CopilotRuntimeConfig {
   publicApiKey?: string | null
   runtimeUrl?: string | null
+  supabaseUrl?: string | null
+  supabaseAnonKey?: string | null
 }
 
 declare global {
@@ -26,16 +28,34 @@ function readRuntimeConfigFromWindow(): CopilotRuntimeConfig | undefined {
   return window.__COPILOTKIT_RUNTIME_CONFIG__ ?? undefined
 }
 
+const envVars = import.meta.env as Record<string, string | undefined>
+
 export function getPublicApiKey(): string | undefined {
   return (
-    normalize(import.meta.env.VITE_COPILOTKIT_PUBLIC_API_KEY) ??
+    normalize(envVars.VITE_COPILOTKIT_PUBLIC_API_KEY) ??
     normalize(readRuntimeConfigFromWindow()?.publicApiKey ?? undefined)
   )
 }
 
 export function getRuntimeUrl(): string | undefined {
   return (
-    normalize(import.meta.env.VITE_COPILOTKIT_RUNTIME_URL) ??
+    normalize(envVars.VITE_COPILOTKIT_RUNTIME_URL) ??
     normalize(readRuntimeConfigFromWindow()?.runtimeUrl ?? undefined)
+  )
+}
+
+export function getSupabaseUrl(): string | undefined {
+  return (
+    normalize(envVars.VITE_SUPABASE_URL) ??
+    normalize(envVars.NEXT_PUBLIC_SUPABASE_URL) ??
+    normalize(readRuntimeConfigFromWindow()?.supabaseUrl ?? undefined)
+  )
+}
+
+export function getSupabaseAnonKey(): string | undefined {
+  return (
+    normalize(envVars.VITE_SUPABASE_ANON_KEY) ??
+    normalize(envVars.NEXT_PUBLIC_SUPABASE_ANON_KEY) ??
+    normalize(readRuntimeConfigFromWindow()?.supabaseAnonKey ?? undefined)
   )
 }
