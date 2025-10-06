@@ -278,7 +278,7 @@
 .geospatial-results__cards {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .geospatial-results__card {
