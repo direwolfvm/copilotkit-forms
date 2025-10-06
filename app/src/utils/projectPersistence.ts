@@ -119,7 +119,7 @@ async function createPreScreeningProcessInstance({
   const timestamp = new Date().toISOString()
 
   const processInstancePayload = stripUndefined({
-    title: buildProcessInstanceTitle(projectTitle),
+    description: buildProcessInstanceDescription(projectTitle),
     process_model: PRE_SCREENING_PROCESS_MODEL_ID,
     parent_project_id: projectId,
     data_source_system: DATA_SOURCE_SYSTEM,
@@ -151,7 +151,7 @@ async function createPreScreeningProcessInstance({
   }
 }
 
-function buildProcessInstanceTitle(projectTitle: string | null): string {
+function buildProcessInstanceDescription(projectTitle: string | null): string {
   if (projectTitle && projectTitle.length > 0) {
     return `${projectTitle} ${PRE_SCREENING_TITLE_SUFFIX}`
   }
