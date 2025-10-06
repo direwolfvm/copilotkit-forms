@@ -24,6 +24,7 @@ import {
 } from "./components/PermittingChecklistSection"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
+import { ProjectPersistenceError, saveProjectSnapshot } from "./utils/projectPersistence"
 import { LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
 import type { GeospatialResultsState } from "./types/geospatial"
@@ -174,6 +175,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const [permittingChecklist, setPermittingChecklist] = useState<PermittingChecklistItem[]>(() =>
     persistedProjectFormState ? cloneValue(persistedProjectFormState.permittingChecklist) : []
   )
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     persistedProjectFormState = {
@@ -586,11 +589,32 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     )
   }
 
-  const handleSubmit = (event: IChangeEvent<ProjectFormData>) => {
-    setFormData((previous) =>
-      applyGeneratedProjectId(event.formData ?? createEmptyProjectData(), previous?.id)
-    )
-    setLastSaved(new Date().toLocaleString())
+  const handleSubmit = async (event: IChangeEvent<ProjectFormData>) => {
+    const next = applyGeneratedProjectId(event.formData ?? createEmptyProjectData(), formData?.id)
+    setFormData(next)
+    setIsSaving(true)
+    setSaveError(undefined)
+
+    try {
+      await saveProjectSnapshot({
+        formData: next,
+        permittingChecklist,
+        geospatialResults
+      })
+      setLastSaved(new Date().toLocaleString())
+    } catch (error) {
+      console.error("Failed to save project snapshot", error)
+      setLastSaved(undefined)
+      if (error instanceof ProjectPersistenceError) {
+        setSaveError(error.message)
+      } else if (error instanceof Error) {
+        setSaveError(error.message)
+      } else {
+        setSaveError("Unable to save project snapshot.")
+      }
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleReset = () => {
@@ -598,6 +622,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setLastSaved(undefined)
     setGeospatialResults({ nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] })
     setPermittingChecklist([])
+    setSaveError(undefined)
+    setIsSaving(false)
   }
 
   const updateLocationFields = useCallback(
@@ -851,7 +877,13 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             <button type="button" className="usa-button usa-button--outline secondary" onClick={handleReset}>
               Reset form
             </button>
-            {lastSaved ? <span className="status">Last saved {lastSaved}</span> : null}
+            {isSaving ? (
+              <span className="status" aria-live="polite">Saving…</span>
+            ) : saveError ? (
+              <span className="status status--error" role="alert">{saveError}</span>
+            ) : lastSaved ? (
+              <span className="status">Last saved {lastSaved}</span>
+            ) : null}
           </div>
         </header>
 
@@ -891,8 +923,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               onSubmit={handleSubmit}
               liveValidate
             >
-              <button type="submit" className="usa-button primary">
-                Save project snapshot
+              <button type="submit" className="usa-button primary" disabled={isSaving}>
+                {isSaving ? "Saving…" : "Save project snapshot"}
               </button>
             </Form>
           </div>

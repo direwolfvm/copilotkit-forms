@@ -551,6 +551,23 @@ app.get("/env.js", (req, res) => {
     config.runtimeUrl = runtimeUrl;
   }
 
+  const supabaseUrl =
+    normalizeEnvValue(process.env.VITE_SUPABASE_URL) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL) ??
+    normalizeEnvValue(process.env.SUPABASE_URL);
+  if (supabaseUrl) {
+    config.supabaseUrl = supabaseUrl;
+  }
+
+  const supabaseAnonKey =
+    normalizeEnvValue(process.env.VITE_SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.SUPABASE_PUBLIC_ANON_KEY);
+  if (supabaseAnonKey) {
+    config.supabaseAnonKey = supabaseAnonKey;
+  }
+
   res.setHeader("Cache-Control", "no-store");
   res.type("application/javascript");
 
