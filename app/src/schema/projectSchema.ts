@@ -13,7 +13,6 @@ export interface ProjectFormData {
   description?: string
   sector?: string
   lead_agency?: string
-  fiscal_year?: string
   participating_agencies?: string
   sponsor?: string
   sponsor_contact?: ProjectContact
@@ -66,13 +65,6 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
     description: "Agency responsible for leading the environmental review.",
     jsonType: "string",
     placeholder: "Department of Energy"
-  },
-  {
-    key: "fiscal_year",
-    title: "Fiscal Year",
-    description: "Fiscal year associated with this project record (e.g., 2025).",
-    jsonType: "string",
-    placeholder: "2025"
   },
   {
     key: "participating_agencies",
@@ -234,7 +226,7 @@ export const projectSchema: RJSFSchema = {
     "Capture the attributes required by the Council on Environmental Quality (CEQ) project entity standard.",
   type: "object",
   properties: schemaProperties,
-  required: ["title", "lead_agency", "fiscal_year", "description"]
+  required: ["title", "lead_agency", "description"]
 }
 
 const order: Array<SimpleProjectField | "sponsor_contact"> = [
@@ -242,7 +234,6 @@ const order: Array<SimpleProjectField | "sponsor_contact"> = [
   "title",
   "sector",
   "lead_agency",
-  "fiscal_year",
   "participating_agencies",
   "sponsor",
   "sponsor_contact",
@@ -254,9 +245,6 @@ const order: Array<SimpleProjectField | "sponsor_contact"> = [
 export const projectUiSchema: UiSchema<ProjectFormData> = {
   "ui:order": order,
   id: {
-    "ui:widget": "hidden"
-  },
-  fiscal_year: {
     "ui:widget": "hidden"
   },
   sponsor_contact: {
@@ -296,15 +284,8 @@ for (const field of projectFieldDetails) {
   }
 }
 
-function computeDefaultFiscalYear(): string {
-  const futureDate = new Date()
-  futureDate.setDate(futureDate.getDate() + 90)
-  return futureDate.getFullYear().toString()
-}
-
 export function createEmptyProjectData(): ProjectFormData {
   return {
-    fiscal_year: computeDefaultFiscalYear(),
     sponsor_contact: {}
   }
 }
@@ -334,9 +315,6 @@ export function formatProjectSummary(data: ProjectFormData): string {
   }
   if (data.lead_agency) {
     summaryLines.push(`Lead agency: ${data.lead_agency}`)
-  }
-  if (data.fiscal_year) {
-    summaryLines.push(`Fiscal year: ${data.fiscal_year}`)
   }
   if (data.participating_agencies) {
     summaryLines.push(`Participating agencies: ${data.participating_agencies}`)
