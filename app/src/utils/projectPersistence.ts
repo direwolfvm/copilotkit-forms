@@ -174,7 +174,7 @@ export async function submitDecisionPayload({
 
   if (!numericId || Number.isNaN(numericId) || !Number.isFinite(numericId)) {
     throw new ProjectPersistenceError(
-      "A numeric project identifier is required to submit decision payloads. Save the project snapshot first."
+      "A numeric project identifier is required to submit pre-screening data. Save the project snapshot first."
     )
   }
 
@@ -242,8 +242,8 @@ export async function submitDecisionPayload({
 
     throw new ProjectPersistenceError(
       errorDetail
-        ? `Failed to submit decision payloads (${response.status}): ${errorDetail}`
-        : `Failed to submit decision payloads (${response.status}).`
+        ? `Failed to submit pre-screening data (${response.status}): ${errorDetail}`
+        : `Failed to submit pre-screening data (${response.status}).`
     )
   }
 }

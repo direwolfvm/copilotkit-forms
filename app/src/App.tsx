@@ -407,10 +407,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         geospatialResults,
         permittingChecklist
       })
-      setDecisionSubmitState({ status: "success", message: "Decision payload submitted." })
+      setDecisionSubmitState({ status: "success", message: "Pre-screening data submitted." })
     } catch (error) {
-      console.error("Failed to submit decision payload", error)
-      let message = "Unable to submit decision payloads."
+      console.error("Failed to submit pre-screening data", error)
+      let message = "Unable to submit pre-screening data."
       if (error instanceof ProjectPersistenceError) {
         message = error.message
       } else if (error instanceof Error) {
@@ -901,6 +901,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       defaultOpen
       suggestions={sidebarSuggestions}
       clickOutsideToClose={false}
+      labels={{ title: "Permitting Copilot" }}
     >
       <main className="app usa-prose">
         <header className="app-header">
@@ -966,30 +967,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
                 <button type="submit" className="usa-button primary" disabled={isSaving}>
                   {isSaving ? "Saving…" : "Save project snapshot"}
                 </button>
-                <button
-                  type="button"
-                  className="usa-button usa-button--outline secondary"
-                  onClick={handleSubmitDecisionPayload}
-                  disabled={isSaving || decisionSubmitState.status === "saving"}
-                >
-                  {decisionSubmitState.status === "saving" ? "Submitting…" : "Submit decision payload"}
-                </button>
               </div>
-              {decisionSubmitState.status === "saving" ? (
-                <div className="form-panel__status">
-                  <span className="status" role="status">Submitting decision payload…</span>
-                </div>
-              ) : decisionSubmitState.status === "error" ? (
-                <div className="form-panel__status">
-                  <span className="status status--error" role="alert">{decisionSubmitState.message}</span>
-                </div>
-              ) : decisionSubmitState.status === "success" ? (
-                <div className="form-panel__status">
-                  <span className="status" role="status">
-                    {decisionSubmitState.message ?? "Decision payload submitted."}
-                  </span>
-                </div>
-              ) : null}
             </Form>
           </div>
           <PermittingChecklistSection
@@ -1012,6 +990,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             isRunningGeospatial={isGeospatialRunning}
             hasGeometry={hasGeometry}
             bufferMiles={DEFAULT_BUFFER_MILES}
+            onSubmitPreScreeningData={handleSubmitDecisionPayload}
+            preScreeningSubmitState={decisionSubmitState}
+            isProjectSaving={isSaving}
           />
         </section>
       </main>

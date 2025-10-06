@@ -33,6 +33,9 @@ interface NepaReviewSectionProps {
   isRunningGeospatial: boolean
   hasGeometry: boolean
   bufferMiles: number
+  onSubmitPreScreeningData: () => void
+  preScreeningSubmitState: { status: "idle" | "saving" | "success" | "error"; message?: string }
+  isProjectSaving: boolean
 }
 
 function NepassistSummaryTable({ items }: { items: NepassistSummaryItem[] }) {
@@ -175,7 +178,10 @@ export function NepaReviewSection({
   onRunGeospatialScreen,
   isRunningGeospatial,
   hasGeometry,
-  bufferMiles
+  bufferMiles,
+  onSubmitPreScreeningData,
+  preScreeningSubmitState,
+  isProjectSaving
 }: NepaReviewSectionProps) {
   const categoricalId = useId()
   const conformanceId = useId()
@@ -186,6 +192,29 @@ export function NepaReviewSection({
   const extraordinaryConfig = fieldConfigs.nepa_extraordinary_circumstances
 
   const lastRunLabel = formatTimestamp(geospatialResults.lastRunAt)
+
+  let submissionStatus: ReactNode = null
+  if (preScreeningSubmitState.status === "saving") {
+    submissionStatus = (
+      <div className="form-panel__status">
+        <span className="status" role="status">Submitting pre-screening data…</span>
+      </div>
+    )
+  } else if (preScreeningSubmitState.status === "error") {
+    submissionStatus = (
+      <div className="form-panel__status">
+        <span className="status status--error" role="alert">{preScreeningSubmitState.message}</span>
+      </div>
+    )
+  } else if (preScreeningSubmitState.status === "success") {
+    submissionStatus = (
+      <div className="form-panel__status">
+        <span className="status" role="status">
+          {preScreeningSubmitState.message ?? "Pre-screening data submitted."}
+        </span>
+      </div>
+    )
+  }
 
   return (
     <section className="form-panel" aria-label="NEPA review details">
@@ -286,6 +315,17 @@ export function NepaReviewSection({
         {!hasGeometry ? (
           <p className="help-block geospatial-footer__hint">Draw a project geometry to enable the screening tools.</p>
         ) : null}
+      </div>
+      <div className="form-panel__footer pre-screening-footer">
+        {submissionStatus}
+        <button
+          type="button"
+          className="usa-button usa-button--outline secondary"
+          onClick={onSubmitPreScreeningData}
+          disabled={isProjectSaving || preScreeningSubmitState.status === "saving"}
+        >
+          {preScreeningSubmitState.status === "saving" ? "Submitting…" : "Submit pre-screening data"}
+        </button>
       </div>
     </section>
   )
