@@ -249,11 +249,15 @@ export async function submitDecisionPayload({
 }
 
 type CreatePreScreeningProcessInstanceArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
   projectId: number
   projectTitle: string | null
 }
 
 async function createPreScreeningProcessInstance({
+  supabaseUrl,
+  supabaseAnonKey,
   projectId,
   projectTitle
 }: CreatePreScreeningProcessInstanceArgs): Promise<number> {
@@ -269,10 +273,12 @@ async function createPreScreeningProcessInstance({
     retrieved_timestamp: timestamp
   })
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(endpoint.toString(), {
     method: "POST",
     headers: {
       "content-type": "application/json",
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "return=representation"
     },
     body: JSON.stringify(processInstancePayload)
