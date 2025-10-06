@@ -396,6 +396,7 @@ async function fetchDecisionElements({
 }: FetchDecisionElementsArgs): Promise<DecisionElementMap> {
   const endpoint = new URL("/rest/v1/decision_element", supabaseUrl)
   endpoint.searchParams.set("select", "id,title")
+  endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
 
   const response = await fetch(endpoint.toString(), {
     method: "GET",
