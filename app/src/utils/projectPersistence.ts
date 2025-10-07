@@ -302,7 +302,7 @@ function buildProjectInitiatedEventData({
   projectRecord
 }: BuildProjectInitiatedEventDataArgs): Record<string, unknown> {
   return stripUndefined({
-    process_instance: processInstanceId,
+    process: processInstanceId,
     project_id: projectId,
     project_title: projectTitle,
     project_snapshot: projectRecord
@@ -321,7 +321,7 @@ function buildPreScreeningInitiatedEventData({
   evaluation
 }: BuildPreScreeningEventDataArgs): Record<string, unknown> {
   return stripUndefined({
-    process_instance: processInstanceId,
+    process: processInstanceId,
     project_id: projectId,
     total_payloads: evaluation.total,
     payloads_with_content: evaluation.completedTitles,
@@ -454,7 +454,7 @@ async function caseEventExists({
 }: CaseEventIdentifier): Promise<boolean> {
   const endpoint = new URL("/rest/v1/case_event", supabaseUrl)
   endpoint.searchParams.set("select", "id")
-  endpoint.searchParams.set("process_instance", `eq.${processInstanceId}`)
+  endpoint.searchParams.set("parent_process_id", `eq.${processInstanceId}`)
   endpoint.searchParams.set("type", `eq.${eventType}`)
   endpoint.searchParams.set("limit", "1")
 
@@ -508,7 +508,7 @@ async function createCaseEvent({
   const timestamp = new Date().toISOString()
 
   const payload = stripUndefined({
-    process_instance: processInstanceId,
+    parent_process_id: processInstanceId,
     type: eventType,
     data_source_system: DATA_SOURCE_SYSTEM,
     last_updated: timestamp,
@@ -545,7 +545,7 @@ function buildCaseEventData(
   eventData?: Record<string, unknown> | null
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
-    process_instance: processInstanceId
+    process: processInstanceId
   }
 
   if (eventData && typeof eventData === "object") {
@@ -566,7 +566,7 @@ function buildPreScreeningCompleteEventData({
   evaluation
 }: BuildPreScreeningEventDataArgs): Record<string, unknown> {
   return stripUndefined({
-    process_instance: processInstanceId,
+    process: processInstanceId,
     project_id: projectId,
     total_payloads: evaluation.total,
     payloads_with_content: evaluation.completedTitles,
