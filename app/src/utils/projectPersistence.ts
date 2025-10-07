@@ -451,7 +451,7 @@ type BuildDecisionPayloadRecordsArgs = {
 }
 
 type DecisionPayloadBuilderContext = {
-  elementId: number
+  elementId: number | undefined
   projectRecord: Record<string, unknown>
   geospatialResults: GeospatialResultsState
   permittingChecklist: PermittingChecklistItem[]
@@ -507,25 +507,44 @@ function buildDecisionPayloadRecords({
 
   for (const builder of DECISION_ELEMENT_BUILDERS) {
     const element = decisionElements.get(builder.title)
+
     if (!element) {
       console.warn(
-        `Skipping decision payload for "${builder.title}" because the decision element is not configured.`
+        `Decision element "${builder.title}" is not configured; using fallback payload metadata.`
       )
-      continue
     }
 
-    const data = builder.build({
-      elementId: element.id,
+    const baseData = builder.build({
+      elementId: element?.id,
       projectRecord,
       geospatialResults,
       permittingChecklist,
       formData
     })
 
+    const data = (() => {
+      if (element) {
+        return baseData
+      }
+
+      const withFallback: Record<string, unknown> = { ...baseData }
+      const existingId = (baseData as { id?: unknown }).id
+      if (typeof existingId !== "number" && typeof existingId !== "string") {
+        withFallback.id = builder.title
+      }
+
+      const existingTitle = (baseData as { title?: unknown }).title
+      if (typeof existingTitle !== "string" || existingTitle.length === 0) {
+        withFallback.title = builder.title
+      }
+
+      return withFallback
+    })()
+
     records.push(
       stripUndefined({
         process_instance: processInstanceId,
-        decision_element: element.id,
+        decision_element: element?.id,
         data_source_system: DATA_SOURCE_SYSTEM,
         last_updated: timestamp,
         retrieved_timestamp: timestamp,
@@ -543,7 +562,7 @@ function buildProjectDetailsPayload({
 }: DecisionPayloadBuilderContext): Record<string, unknown> {
   const hasDetails = hasAnyKeys(projectRecord)
   return stripUndefined({
-    id: elementId,
+    id: typeof elementId === "number" ? elementId : undefined,
     project: hasDetails ? projectRecord : null
   })
 }
@@ -557,7 +576,7 @@ function buildNepaAssistPayload({
   const summary = nepassist ? emptyToNull(nepassist.summary) : null
 
   return stripUndefined({
-    id: elementId,
+    id: typeof elementId === "number" ? elementId : undefined,
     nepa_assist_raw: raw,
     nepa_assist_summary: summary
   })
@@ -572,7 +591,7 @@ function buildIpacPayload({
   const summary = ipac ? emptyToNull(ipac.summary) : null
 
   return stripUndefined({
-    id: elementId,
+    id: typeof elementId === "number" ? elementId : undefined,
     ipac_raw: raw,
     ipac_summary: summary
   })
@@ -597,7 +616,7 @@ function buildPermitNotesPayload({
   const notes = normalizeString(formData.other)
 
   return stripUndefined({
-    id: elementId,
+    id: typeof elementId === "number" ? elementId : undefined,
     permits: permits.length > 0 ? permits : null,
     notes
   })
@@ -611,7 +630,7 @@ function buildCategoricalExclusionPayload({
   const rationale = buildCategoricalRationale(formData)
 
   return stripUndefined({
-    id: elementId,
+    id: typeof elementId === "number" ? elementId : undefined,
     ce_candidates: candidates.length > 0 ? candidates : null,
     rationale
   })
@@ -645,7 +664,7 @@ function buildConditionsPayload({
   const notes = normalizeString(formData.nepa_extraordinary_circumstances)
 
   return stripUndefined({
-    id: elementId,
+    id: typeof elementId === "number" ? elementId : undefined,
     conditions: conditions.length > 0 ? conditions : null,
     notes
   })
@@ -659,7 +678,7 @@ function buildResourceNotesPayload({
   const summary = buildResourceSummary(geospatialResults)
 
   return stripUndefined({
-    id: elementId,
+    id: typeof elementId === "number" ? elementId : undefined,
     resources: resources.length > 0 ? resources : null,
     summary
   })
