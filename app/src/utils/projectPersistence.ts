@@ -455,7 +455,7 @@ async function caseEventExists({
   const endpoint = new URL("/rest/v1/case_event", supabaseUrl)
   endpoint.searchParams.set("select", "id")
   endpoint.searchParams.set("process_instance", `eq.${processInstanceId}`)
-  endpoint.searchParams.set("event_type", `eq.${eventType}`)
+  endpoint.searchParams.set("type", `eq.${eventType}`)
   endpoint.searchParams.set("limit", "1")
 
   const response = await fetch(endpoint.toString(), {
@@ -509,7 +509,7 @@ async function createCaseEvent({
 
   const payload = stripUndefined({
     process_instance: processInstanceId,
-    event_type: eventType,
+    type: eventType,
     data_source_system: DATA_SOURCE_SYSTEM,
     last_updated: timestamp,
     retrieved_timestamp: timestamp,
