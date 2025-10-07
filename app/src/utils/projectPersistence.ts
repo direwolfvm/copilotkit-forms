@@ -277,7 +277,7 @@ export async function submitDecisionPayload({
   }
 
   const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
-  endpoint.searchParams.set("on_conflict", "process_instance,decision_element")
+  endpoint.searchParams.set("on_conflict", "process,process_decision_element")
 
   const response = await fetch(endpoint.toString(), {
     method: "POST",
@@ -408,7 +408,7 @@ function hasMeaningfulDecisionPayloadData(data: unknown): boolean {
     return false
   }
 
-  return containsMeaningfulValue(data, new Set(["id", "process_instance"]))
+  return containsMeaningfulValue(data, new Set(["id", "process"]))
 }
 
 function containsMeaningfulValue(value: unknown, ignoredKeys: ReadonlySet<string>): boolean {
@@ -556,7 +556,7 @@ async function createCaseEvent({
     data_source_system: DATA_SOURCE_SYSTEM,
     last_updated: timestamp,
     retrieved_timestamp: timestamp,
-    data: buildCaseEventData(processInstanceId, eventData)
+    other: buildCaseEventData(processInstanceId, eventData)
   })
 
   const response = await fetch(endpoint.toString(), {
@@ -891,8 +891,8 @@ function buildDecisionPayloadRecords({
 
     records.push(
       stripUndefined({
-        process_instance: processInstanceId,
-        decision_element: element?.id,
+        process: processInstanceId,
+        process_decision_element: element?.id,
         data_source_system: DATA_SOURCE_SYSTEM,
         last_updated: timestamp,
         retrieved_timestamp: timestamp,

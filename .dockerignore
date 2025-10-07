@@ -10,3 +10,4 @@ app/.env.local
 app/.env.*
 .git
 .gitignore
+database-schema/
