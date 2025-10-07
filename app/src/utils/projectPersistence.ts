@@ -18,7 +18,48 @@ const CASE_EVENT_TYPES = {
   PRE_SCREENING_COMPLETE: "Pre-screening complete"
 } as const
 
+const SUPABASE_PROXY_PREFIX = "/api/supabase"
+
 type CaseEventType = (typeof CASE_EVENT_TYPES)[keyof typeof CASE_EVENT_TYPES]
+
+type SupabaseFetchRequest = {
+  url: string
+  init: RequestInit
+}
+
+function buildSupabaseFetchRequest(
+  endpoint: URL,
+  supabaseAnonKey: string,
+  init: RequestInit
+): SupabaseFetchRequest {
+  const headers = new Headers(init.headers ?? undefined)
+
+  let url: string
+  if (shouldUseSupabaseProxy()) {
+    headers.delete("apikey")
+    headers.delete("authorization")
+    url = `${SUPABASE_PROXY_PREFIX}${endpoint.pathname}${endpoint.search}${endpoint.hash}`
+  } else {
+    if (!headers.has("apikey")) {
+      headers.set("apikey", supabaseAnonKey)
+    }
+    if (!headers.has("authorization")) {
+      headers.set("Authorization", `Bearer ${supabaseAnonKey}`)
+    }
+    url = endpoint.toString()
+  }
+
+  const finalInit: RequestInit = {
+    ...init,
+    headers
+  }
+
+  return { url, init: finalInit }
+}
+
+function shouldUseSupabaseProxy(): boolean {
+  return typeof window !== "undefined"
+}
 
 export class ProjectPersistenceError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -328,16 +369,15 @@ async function submitDecisionPayloadRecords({
   const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
   endpoint.searchParams.set("on_conflict", "process,process_decision_element")
 
-  const response = await fetch(endpoint.toString(), {
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "resolution=merge-duplicates,return=representation"
     },
     body: JSON.stringify(records)
   })
+  const response = await fetch(url, init)
 
   const responseText = await response.text()
 
@@ -385,16 +425,15 @@ async function replaceProcessDecisionPayloadRecords({
 
   const insertEndpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
 
-  const insertResponse = await fetch(insertEndpoint.toString(), {
+  const { url, init } = buildSupabaseFetchRequest(insertEndpoint, supabaseAnonKey, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "return=minimal"
     },
     body: JSON.stringify(records)
   })
+  const insertResponse = await fetch(url, init)
 
   const insertResponseText = await insertResponse.text()
 
@@ -426,15 +465,14 @@ async function deleteExistingProcessDecisionPayloadRecords({
   deleteEndpoint.searchParams.set("process", `eq.${processInstanceId}`)
   deleteEndpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
 
-  const deleteResponse = await fetch(deleteEndpoint.toString(), {
+  const { url, init } = buildSupabaseFetchRequest(deleteEndpoint, supabaseAnonKey, {
     method: "DELETE",
     headers: {
       "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "return=minimal"
     }
   })
+  const deleteResponse = await fetch(url, init)
 
   const deleteResponseText = await deleteResponse.text()
 
@@ -641,13 +679,10 @@ async function caseEventExists({
   endpoint.searchParams.set("type", `eq.${eventType}`)
   endpoint.searchParams.set("limit", "1")
 
-  const response = await fetch(endpoint.toString(), {
-    method: "GET",
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`
-    }
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "GET"
   })
+  const response = await fetch(url, init)
 
   const responseText = await response.text()
 
@@ -699,16 +734,15 @@ async function createCaseEvent({
     other: buildCaseEventData(processInstanceId, eventData)
   })
 
-  const response = await fetch(endpoint.toString(), {
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "return=minimal"
     },
     body: JSON.stringify(payload)
   })
+  const response = await fetch(url, init)
 
   const responseText = await response.text()
 
@@ -782,16 +816,15 @@ async function createPreScreeningProcessInstance({
     retrieved_timestamp: timestamp
   })
 
-  const response = await fetch(endpoint.toString(), {
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
       Prefer: "return=representation"
     },
     body: JSON.stringify(processInstancePayload)
   })
+  const response = await fetch(url, init)
 
   const responseText = await response.text()
 
@@ -878,13 +911,10 @@ async function fetchDecisionElements({
   endpoint.searchParams.set("select", "id,title")
   endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
 
-  const response = await fetch(endpoint.toString(), {
-    method: "GET",
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`
-    }
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "GET"
   })
+  const response = await fetch(url, init)
 
   const responseText = await response.text()
 
@@ -2075,13 +2105,10 @@ async function fetchSupabaseList<T>(
   if (configure) {
     configure(endpoint)
   }
-  const response = await fetch(endpoint.toString(), {
-    method: "GET",
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`
-    }
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "GET"
   })
+  const response = await fetch(url, init)
   const responseText = await response.text()
   if (!response.ok) {
     const errorDetail = extractErrorDetail(responseText)
