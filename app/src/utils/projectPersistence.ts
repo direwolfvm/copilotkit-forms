@@ -1601,6 +1601,7 @@ type ProjectRow = {
 type ProcessInstanceRow = {
   id?: number | null
   parent_project_id?: number | null
+  title?: string | null
   description?: string | null
   last_updated?: string | null
   created_at?: string | null
@@ -2243,7 +2244,7 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
-        "id,parent_project_id,description,last_updated,created_at,data_source_system"
+        "id,parent_project_id,title:description,description,last_updated,created_at,data_source_system"
       )
       endpoint.searchParams.set("parent_project_id", projectIdFilter)
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
@@ -2296,9 +2297,10 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
       continue
     }
     const description = typeof row.description === "string" ? row.description : null
+    const title = typeof row.title === "string" ? row.title : description
     const summary: ProjectProcessSummary = {
       id,
-      title: description,
+      title,
       description,
       lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
       createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
