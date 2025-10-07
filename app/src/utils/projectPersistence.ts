@@ -6,6 +6,13 @@ import { getSupabaseAnonKey, getSupabaseUrl } from "../runtimeConfig"
 const DATA_SOURCE_SYSTEM = "project-portal"
 const PRE_SCREENING_PROCESS_MODEL_ID = 1
 const PRE_SCREENING_TITLE_SUFFIX = "Pre-Screening"
+const CASE_EVENT_TYPES = {
+  PROJECT_INITIATED: "Project initiated",
+  PRE_SCREENING_INITIATED: "Pre-screening initiated",
+  PRE_SCREENING_COMPLETE: "Pre-screening complete"
+} as const
+
+type CaseEventType = (typeof CASE_EVENT_TYPES)[keyof typeof CASE_EVENT_TYPES]
 
 export class ProjectPersistenceError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -111,6 +118,19 @@ export async function saveProjectSnapshot({
     supabaseAnonKey,
     projectId,
     projectTitle: normalizedTitle
+  })
+
+  await createCaseEvent({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    eventType: CASE_EVENT_TYPES.PROJECT_INITIATED,
+    eventData: buildProjectInitiatedEventData({
+      processInstanceId,
+      projectId,
+      projectTitle: normalizedTitle,
+      projectRecord
+    })
   })
 
   return processInstanceId
@@ -238,6 +258,320 @@ export async function submitDecisionPayload({
         : `Failed to submit pre-screening data (${response.status}).`
     )
   }
+
+  const evaluation = evaluateDecisionPayloads(records)
+
+  await ensureCaseEvent({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    eventType: CASE_EVENT_TYPES.PRE_SCREENING_INITIATED,
+    eventData: buildPreScreeningInitiatedEventData({
+      processInstanceId,
+      projectId: numericId,
+      evaluation
+    })
+  })
+
+  if (evaluation.isComplete) {
+    await ensureCaseEvent({
+      supabaseUrl,
+      supabaseAnonKey,
+      processInstanceId,
+      eventType: CASE_EVENT_TYPES.PRE_SCREENING_COMPLETE,
+      eventData: buildPreScreeningCompleteEventData({
+        processInstanceId,
+        projectId: numericId,
+        evaluation
+      })
+    })
+  }
+}
+
+type BuildProjectInitiatedEventDataArgs = {
+  processInstanceId: number
+  projectId: number
+  projectTitle: string | null
+  projectRecord: Record<string, unknown>
+}
+
+function buildProjectInitiatedEventData({
+  processInstanceId,
+  projectId,
+  projectTitle,
+  projectRecord
+}: BuildProjectInitiatedEventDataArgs): Record<string, unknown> {
+  return stripUndefined({
+    process_instance: processInstanceId,
+    project_id: projectId,
+    project_title: projectTitle,
+    project_snapshot: projectRecord
+  })
+}
+
+type BuildPreScreeningEventDataArgs = {
+  processInstanceId: number
+  projectId: number
+  evaluation: DecisionPayloadEvaluation
+}
+
+function buildPreScreeningInitiatedEventData({
+  processInstanceId,
+  projectId,
+  evaluation
+}: BuildPreScreeningEventDataArgs): Record<string, unknown> {
+  return stripUndefined({
+    process_instance: processInstanceId,
+    project_id: projectId,
+    total_payloads: evaluation.total,
+    payloads_with_content: evaluation.completedTitles,
+    payloads_with_content_count: evaluation.completedTitles.length
+  })
+}
+
+type DecisionPayloadEvaluation = {
+  total: number
+  completedTitles: string[]
+  isComplete: boolean
+}
+
+function evaluateDecisionPayloads(
+  records: Array<Record<string, unknown>>
+): DecisionPayloadEvaluation {
+  const titles = DECISION_ELEMENT_BUILDERS.map((builder) => builder.title)
+  const completedTitles: string[] = []
+
+  for (let index = 0; index < titles.length; index += 1) {
+    const record = records[index]
+    if (!record) {
+      continue
+    }
+
+    const data = (record as { data?: unknown }).data
+    if (hasMeaningfulDecisionPayloadData(data)) {
+      completedTitles.push(titles[index])
+    }
+  }
+
+  return {
+    total: titles.length,
+    completedTitles,
+    isComplete: completedTitles.length === titles.length
+  }
+}
+
+function hasMeaningfulDecisionPayloadData(data: unknown): boolean {
+  if (!data || typeof data !== "object") {
+    return false
+  }
+
+  return containsMeaningfulValue(data, new Set(["id", "process_instance"]))
+}
+
+function containsMeaningfulValue(value: unknown, ignoredKeys: ReadonlySet<string>): boolean {
+  if (value === null || typeof value === "undefined") {
+    return false
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value)
+  }
+
+  if (typeof value === "boolean") {
+    return true
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => containsMeaningfulValue(entry, ignoredKeys))
+  }
+
+  if (typeof value === "object") {
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (ignoredKeys.has(key)) {
+        continue
+      }
+      if (containsMeaningfulValue(entry, ignoredKeys)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  return true
+}
+
+type CaseEventArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+  eventType: CaseEventType
+  eventData?: Record<string, unknown> | null
+}
+
+async function ensureCaseEvent({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId,
+  eventType,
+  eventData
+}: CaseEventArgs): Promise<void> {
+  const exists = await caseEventExists({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    eventType
+  })
+
+  if (exists) {
+    return
+  }
+
+  await createCaseEvent({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    eventType,
+    eventData
+  })
+}
+
+type CaseEventIdentifier = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+  eventType: CaseEventType
+}
+
+async function caseEventExists({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId,
+  eventType
+}: CaseEventIdentifier): Promise<boolean> {
+  const endpoint = new URL("/rest/v1/case_event", supabaseUrl)
+  endpoint.searchParams.set("select", "id")
+  endpoint.searchParams.set("process_instance", `eq.${processInstanceId}`)
+  endpoint.searchParams.set("event_type", `eq.${eventType}`)
+  endpoint.searchParams.set("limit", "1")
+
+  const response = await fetch(endpoint.toString(), {
+    method: "GET",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`
+    }
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to check case events (${response.status}): ${errorDetail}`
+        : `Failed to check case events (${response.status}).`
+    )
+  }
+
+  if (!responseText) {
+    return false
+  }
+
+  const payload = safeJsonParse(responseText)
+
+  if (!Array.isArray(payload)) {
+    return false
+  }
+
+  return payload.some((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return false
+    }
+    const id = (entry as { id?: unknown }).id
+    return typeof id === "number" && Number.isFinite(id)
+  })
+}
+
+async function createCaseEvent({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId,
+  eventType,
+  eventData
+}: CaseEventArgs): Promise<void> {
+  const endpoint = new URL("/rest/v1/case_event", supabaseUrl)
+  const timestamp = new Date().toISOString()
+
+  const payload = stripUndefined({
+    process_instance: processInstanceId,
+    event_type: eventType,
+    data_source_system: DATA_SOURCE_SYSTEM,
+    last_updated: timestamp,
+    retrieved_timestamp: timestamp,
+    data: buildCaseEventData(processInstanceId, eventData)
+  })
+
+  const response = await fetch(endpoint.toString(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to record "${eventType}" case event (${response.status}): ${errorDetail}`
+        : `Failed to record "${eventType}" case event (${response.status}).`
+    )
+  }
+}
+
+function buildCaseEventData(
+  processInstanceId: number,
+  eventData?: Record<string, unknown> | null
+): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    process_instance: processInstanceId
+  }
+
+  if (eventData && typeof eventData === "object") {
+    for (const [key, value] of Object.entries(eventData)) {
+      if (typeof value === "undefined") {
+        continue
+      }
+      base[key] = value
+    }
+  }
+
+  return base
+}
+
+function buildPreScreeningCompleteEventData({
+  processInstanceId,
+  projectId,
+  evaluation
+}: BuildPreScreeningEventDataArgs): Record<string, unknown> {
+  return stripUndefined({
+    process_instance: processInstanceId,
+    project_id: projectId,
+    total_payloads: evaluation.total,
+    payloads_with_content: evaluation.completedTitles,
+    payloads_with_content_count: evaluation.completedTitles.length
+  })
 }
 
 type CreatePreScreeningProcessInstanceArgs = {
