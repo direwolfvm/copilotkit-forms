@@ -130,6 +130,24 @@ function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === "object" && value !== null) {
+    return value as Record<string, unknown>
+  }
+  return undefined
+}
+
+function parseJsonOrWrap(text: string): unknown {
+  if (!text) {
+    return null
+  }
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { data: text }
+  }
+}
+
 type PersistedProjectFormState = {
   formData: ProjectFormData
   lastSaved?: string
@@ -809,29 +827,32 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               body: JSON.stringify(nepaBody)
             })
             const text = await response.text()
-            let payload: any = null
-            if (text) {
-              try {
-                payload = JSON.parse(text)
-              } catch (error) {
-                payload = { data: text }
-              }
-            }
+            const payload = parseJsonOrWrap(text)
+            const payloadRecord = asRecord(payload)
             if (!response.ok) {
+              const payloadError =
+                payloadRecord && typeof payloadRecord["error"] === "string"
+                  ? (payloadRecord["error"] as string)
+                  : undefined
               const errorMessage =
-                (payload && typeof payload === "object" && typeof payload.error === "string"
-                  ? payload.error
-                  : text) || `NEPA Assist request failed (${response.status})`
+                (payloadError ?? text) || `NEPA Assist request failed (${response.status})`
               throw new Error(errorMessage)
             }
-            const data = payload && typeof payload === "object" && "data" in payload ? payload.data : payload
+            const data =
+              payloadRecord && "data" in payloadRecord
+                ? payloadRecord["data"]
+                : payload
+            const meta =
+              payloadRecord && "meta" in payloadRecord
+                ? asRecord(payloadRecord["meta"])
+                : undefined
             setGeospatialResults((previous) => ({
               ...previous,
               nepassist: {
                 status: "success",
                 summary: summarizeNepassist(data),
                 raw: data,
-                meta: payload?.meta
+                meta
               }
             }))
           } catch (error) {
@@ -863,29 +884,32 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               body: JSON.stringify(ipacBody)
             })
             const text = await response.text()
-            let payload: any = null
-            if (text) {
-              try {
-                payload = JSON.parse(text)
-              } catch (error) {
-                payload = { data: text }
-              }
-            }
+            const payload = parseJsonOrWrap(text)
+            const payloadRecord = asRecord(payload)
             if (!response.ok) {
+              const payloadError =
+                payloadRecord && typeof payloadRecord["error"] === "string"
+                  ? (payloadRecord["error"] as string)
+                  : undefined
               const errorMessage =
-                (payload && typeof payload === "object" && typeof payload.error === "string"
-                  ? payload.error
-                  : text) || `IPaC request failed (${response.status})`
+                (payloadError ?? text) || `IPaC request failed (${response.status})`
               throw new Error(errorMessage)
             }
-            const data = payload && typeof payload === "object" && "data" in payload ? payload.data : payload
+            const data =
+              payloadRecord && "data" in payloadRecord
+                ? payloadRecord["data"]
+                : payload
+            const meta =
+              payloadRecord && "meta" in payloadRecord
+                ? asRecord(payloadRecord["meta"])
+                : undefined
             setGeospatialResults((previous) => ({
               ...previous,
               ipac: {
                 status: "success",
                 summary: summarizeIpac(data),
                 raw: data,
-                meta: payload?.meta
+                meta
               }
             }))
           } catch (error) {
