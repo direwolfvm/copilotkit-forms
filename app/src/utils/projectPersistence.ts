@@ -844,7 +844,7 @@ function buildDecisionPayloadRecords({
       formData
     })
 
-    const data = (() => {
+    const evaluationData = (() => {
       if (element) {
         return baseData
       }
@@ -870,7 +870,7 @@ function buildDecisionPayloadRecords({
         data_source_system: DATA_SOURCE_SYSTEM,
         last_updated: timestamp,
         retrieved_timestamp: timestamp,
-        data
+        evaluation_data: evaluationData
       })
     )
   }
