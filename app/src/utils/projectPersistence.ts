@@ -1640,7 +1640,7 @@ type ProcessInstanceRow = {
 
 type CaseEventRow = {
   id?: number | null
-  process_instance?: number | null
+  parent_process_id?: number | null
   event_type?: string | null
   last_updated?: string | null
   data?: unknown
@@ -2291,9 +2291,9 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
         (endpoint) => {
           endpoint.searchParams.set(
             "select",
-            "id,process_instance,event_type,last_updated,data"
+            "id,parent_process_id,event_type,last_updated,data"
           )
-          endpoint.searchParams.set("process_instance", `in.(${processIds.join(",")})`)
+          endpoint.searchParams.set("parent_process_id", `in.(${processIds.join(",")})`)
           endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
         }
       )
@@ -2301,7 +2301,7 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
 
   const caseEventsByProcess = new Map<number, CaseEventSummary[]>()
   for (const row of caseEvents) {
-    const processId = parseNumericId(row.process_instance)
+    const processId = parseNumericId(row.parent_process_id)
     const id = parseNumericId(row.id)
     if (typeof processId !== "number" || typeof id !== "number") {
       continue
