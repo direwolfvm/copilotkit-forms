@@ -1,0 +1,234 @@
+.copilotKitSidebar {
+  font-family: var(--usa-font-family-sans, "Public Sans", system-ui, sans-serif);
+  color: var(--color-text);
+  --copilot-kit-primary-color: var(--accent);
+  --copilot-kit-contrast-color: var(--accent-contrast);
+  --copilot-kit-background-color: color-mix(in srgb, var(--surface) 98%, rgba(255, 255, 255, 0.6) 2%);
+  --copilot-kit-input-background-color: var(--surface);
+  --copilot-kit-secondary-color: color-mix(in srgb, var(--surface-muted) 92%, rgba(31, 79, 153, 0.05) 8%);
+  --copilot-kit-secondary-contrast-color: var(--color-text);
+  --copilot-kit-separator-color: color-mix(in srgb, var(--border) 80%, rgba(31, 79, 153, 0.12) 20%);
+  --copilot-kit-muted-color: color-mix(in srgb, var(--color-text-muted) 82%, var(--color-text) 18%);
+  --copilot-kit-shadow-sm: var(--shadow-subtle);
+  --copilot-kit-shadow-md: var(--shadow);
+  --copilot-kit-shadow-lg: 0 60px 120px -68px rgba(3, 20, 48, 0.42);
+  --copilot-sidebar-top-offset: clamp(5.25rem, 4vw + 3.5rem, 7.25rem);
+  --copilot-sidebar-side-offset: clamp(1.35rem, 3vw, 3rem);
+  --copilot-sidebar-bottom-offset: clamp(1.75rem, 6vh, 3.5rem);
+}
+
+.copilotKitSidebar svg {
+  color: currentColor;
+}
+
+@media (min-width: 640px) {
+  .copilotKitSidebar {
+    top: var(--copilot-sidebar-top-offset);
+    right: var(--copilot-sidebar-side-offset);
+    bottom: var(--copilot-sidebar-bottom-offset);
+    left: auto;
+  }
+
+  .copilotKitSidebar .copilotKitWindow {
+    top: var(--copilot-sidebar-top-offset);
+    right: var(--copilot-sidebar-side-offset);
+    bottom: var(--copilot-sidebar-bottom-offset);
+    left: auto;
+    width: min(30rem, calc(100vw - (var(--copilot-sidebar-side-offset) * 2) - 2rem));
+    min-height: 0;
+    max-height: calc(100vh - (var(--copilot-sidebar-top-offset) + var(--copilot-sidebar-bottom-offset)));
+  }
+}
+
+.copilotKitSidebar .copilotKitWindow {
+  background: color-mix(in srgb, var(--surface) 97%, rgba(31, 79, 153, 0.04) 3%);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, rgba(31, 79, 153, 0.12) 15%);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+}
+
+.copilotKitSidebar .copilotKitHeader {
+  background: color-mix(in srgb, var(--surface) 96%, rgba(31, 79, 153, 0.06) 4%);
+  color: var(--color-heading);
+  border-bottom: 1px solid var(--border-strong);
+  font-weight: 700;
+  padding: 1.35rem 2rem 1.1rem;
+  gap: 1rem;
+}
+
+.copilotKitSidebar .copilotKitHeaderTitle {
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+.copilotKitSidebar .copilotKitHeader button {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, white 45%);
+  background: linear-gradient(140deg, var(--accent) 0%, var(--accent-dark) 100%);
+  color: var(--accent-contrast);
+  font-weight: 700;
+  padding: 0.55rem 1.25rem;
+  box-shadow: 0 18px 42px -32px rgba(7, 29, 66, 0.45);
+}
+
+.copilotKitSidebar .copilotKitHeader button:hover,
+.copilotKitSidebar .copilotKitHeader button:focus-visible {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 84%, black 16%), var(--accent-dark));
+  border-color: var(--accent-dark);
+  color: var(--accent-contrast);
+}
+
+.copilotKitSidebar .copilotKitMessages,
+.copilotKitSidebar .copilotKitInputContainer {
+  background: color-mix(in srgb, var(--surface) 98%, rgba(31, 79, 153, 0.05) 2%);
+}
+
+.copilotKitSidebar .copilotKitMessages {
+  color: var(--color-text);
+}
+
+.copilotKitSidebar .copilotKitMessagesContainer {
+  padding: 1.5rem 2rem;
+  gap: 1.1rem;
+}
+
+.copilotKitSidebar .copilotKitMessage {
+  border-radius: 18px;
+  padding: 1rem 1.2rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, rgba(31, 79, 153, 0.14) 18%);
+  background: color-mix(in srgb, var(--surface-muted) 94%, rgba(31, 79, 153, 0.05) 6%);
+  color: var(--color-text);
+  box-shadow: 0 18px 36px -34px rgba(7, 29, 66, 0.35);
+}
+
+.copilotKitSidebar .copilotKitMessage.copilotKitUserMessage {
+  background: linear-gradient(140deg, var(--accent) 0%, var(--accent-dark) 100%);
+  color: var(--accent-contrast);
+  border-color: color-mix(in srgb, var(--accent-dark) 60%, transparent 40%);
+  box-shadow: 0 24px 52px -34px rgba(7, 29, 66, 0.55);
+}
+
+.copilotKitSidebar .copilotKitMessage.copilotKitAssistantMessage {
+  background: color-mix(in srgb, var(--surface) 97%, rgba(31, 79, 153, 0.08) 3%);
+  border-color: color-mix(in srgb, var(--border) 70%, rgba(31, 79, 153, 0.18) 30%);
+}
+
+.copilotKitSidebar .copilotKitMessageControls {
+  padding-top: 0.35rem;
+}
+
+.copilotKitSidebar .copilotKitMessageControlButton {
+  color: color-mix(in srgb, var(--color-text-muted) 70%, var(--color-text) 30%);
+}
+
+.copilotKitSidebar .copilotKitMessageControlButton:hover,
+.copilotKitSidebar .copilotKitMessageControlButton:focus-visible {
+  color: var(--color-heading);
+}
+
+.copilotKitSidebar .copilotKitMessagesFooter {
+  background: color-mix(in srgb, var(--surface) 97%, rgba(31, 79, 153, 0.08) 3%);
+  border: 1px solid color-mix(in srgb, var(--border) 82%, rgba(31, 79, 153, 0.16) 18%);
+  border-radius: 18px;
+  box-shadow: var(--copilot-kit-shadow-sm);
+  padding: 1rem 1.2rem;
+  color: color-mix(in srgb, var(--color-text-muted) 75%, var(--color-text) 25%);
+}
+
+.copilotKitSidebar .copilotKitMessages footer h6 {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--color-text-muted) 72%, var(--color-heading) 28%);
+}
+
+.copilotKitSidebar .copilotKitMessages footer .suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.copilotKitSidebar .copilotKitMessages footer .suggestions .suggestion {
+  border-radius: 999px;
+  padding: 0.55rem 1.05rem;
+  font-size: 0.9rem;
+  background: color-mix(in srgb, var(--surface) 94%, rgba(31, 79, 153, 0.1) 6%);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, rgba(31, 79, 153, 0.2) 25%);
+  color: color-mix(in srgb, var(--color-text-muted) 78%, var(--color-text) 22%);
+  box-shadow: 0 14px 28px -26px rgba(7, 29, 66, 0.35);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.copilotKitSidebar .copilotKitMessages footer .suggestions button:not(:disabled):hover,
+.copilotKitSidebar .copilotKitMessages footer .suggestions button:not(:disabled):focus-visible {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 80%, white 20%), var(--accent));
+  border-color: color-mix(in srgb, var(--accent-dark) 55%, transparent 45%);
+  color: var(--accent-contrast);
+  box-shadow: 0 18px 40px -30px rgba(7, 29, 66, 0.45);
+  transform: translateY(-1px);
+}
+
+.copilotKitSidebar .copilotKitInput {
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  padding: 1rem 1.15rem 0.85rem;
+}
+
+.copilotKitSidebar .copilotKitInput > textarea {
+  border-radius: 14px;
+  min-height: 120px !important;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, rgba(31, 79, 153, 0.14) 20%);
+  background: color-mix(in srgb, var(--surface) 98%, rgba(31, 79, 153, 0.05) 2%);
+  color: var(--color-text);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  padding: 0.85rem 0.95rem;
+  box-shadow: inset 0 1px 2px rgba(7, 29, 66, 0.08);
+}
+
+.copilotKitSidebar .copilotKitInput > textarea::placeholder {
+  color: color-mix(in srgb, var(--color-text-muted) 70%, rgba(17, 38, 60, 0.55) 30%);
+}
+
+.copilotKitSidebar .copilotKitButton {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, white 45%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+  color: var(--accent-contrast);
+  font-weight: 700;
+  padding: 0.6rem 1.4rem;
+  box-shadow: 0 20px 44px -32px rgba(7, 29, 66, 0.45);
+  transition: transform 0.18s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.copilotKitSidebar .copilotKitButton:hover,
+.copilotKitSidebar .copilotKitButton:focus-visible {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 84%, black 16%), var(--accent-dark));
+  border-color: var(--accent-dark);
+  transform: translateY(-1px);
+}
+
+.copilotKitSidebar .copilotKitButtonIcon svg {
+  width: 1em;
+  height: 1em;
+}
+
+@media (max-width: 639px) {
+  .copilotKitSidebar .copilotKitWindow {
+    border-radius: 22px;
+  }
+
+  .copilotKitSidebar .copilotKitMessagesContainer {
+    padding-inline: 1.35rem;
+  }
+}

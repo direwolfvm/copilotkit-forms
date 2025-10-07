@@ -8,6 +8,7 @@ import { CopilotKit, useCopilotAction, useCopilotReadable } from "@copilotkit/re
 import { CopilotSidebar } from "@copilotkit/react-ui"
 import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import "@copilotkit/react-ui/styles.css"
+import "./copilot-overrides.css"
 
 import type { ProjectFormData, ProjectContact, SimpleProjectField } from "./schema/projectSchema"
 import {
