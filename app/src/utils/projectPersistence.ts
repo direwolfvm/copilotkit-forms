@@ -7,18 +7,6 @@ const DATA_SOURCE_SYSTEM = "project-portal"
 const PRE_SCREENING_PROCESS_MODEL_ID = 1
 const PRE_SCREENING_TITLE_SUFFIX = "Pre-Screening"
 
-const DECISION_ELEMENT_TITLES = [
-  "Provide complete project details",
-  "Confirm or upload NEPA Assist results if auto fetch fails",
-  "Confirm or upload IPaC results if auto fetch fails",
-  "Provide permit applicability notes",
-  "Enter CE references and rationale",
-  "List applicable conditions and notes",
-  "Provide resource-by-resource notes"
-] as const
-
-type DecisionElementTitle = (typeof DECISION_ELEMENT_TITLES)[number]
-
 export class ProjectPersistenceError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options)
@@ -50,7 +38,7 @@ type DecisionElementRecord = {
   title: string
 }
 
-type DecisionElementMap = Map<DecisionElementTitle, DecisionElementRecord>
+type DecisionElementMap = Map<string, DecisionElementRecord>
 
 export async function saveProjectSnapshot({
   formData,
@@ -198,7 +186,9 @@ export async function submitDecisionPayload({
 
   const decisionElements = await fetchDecisionElements({ supabaseUrl, supabaseAnonKey })
 
-  const missingElements = DECISION_ELEMENT_TITLES.filter((title) => !decisionElements.has(title))
+  const missingElements = DECISION_ELEMENT_BUILDERS.map((builder) => builder.title).filter(
+    (title) => !decisionElements.has(title)
+  )
   if (missingElements.length > 0) {
     console.warn(
       "Decision elements are not configured for:",
@@ -431,9 +421,7 @@ async function fetchDecisionElements({
       if (typeof title !== "string" || typeof id !== "number" || !Number.isFinite(id)) {
         continue
       }
-      if ((DECISION_ELEMENT_TITLES as readonly string[]).includes(title)) {
-        map.set(title as DecisionElementTitle, { id, title })
-      }
+      map.set(title, { id, title })
     }
   }
 
@@ -459,11 +447,11 @@ type DecisionPayloadBuilderContext = {
 }
 
 type DecisionElementBuilder = {
-  title: DecisionElementTitle
+  title: string
   build: (context: DecisionPayloadBuilderContext) => Record<string, unknown>
 }
 
-const DECISION_ELEMENT_BUILDERS: DecisionElementBuilder[] = [
+const DECISION_ELEMENT_BUILDERS: ReadonlyArray<DecisionElementBuilder> = [
   {
     title: "Provide complete project details",
     build: buildProjectDetailsPayload
