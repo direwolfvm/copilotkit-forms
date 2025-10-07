@@ -1012,6 +1012,44 @@ const DECISION_ELEMENT_TITLES = {
   RESOURCE_NOTES: DECISION_ELEMENT_BUILDERS[6]?.title ?? "Provide resource-by-resource notes"
 } as const
 
+const DECISION_ELEMENT_FALLBACK_IDS: Record<string, number> = {
+  [DECISION_ELEMENT_TITLES.PROJECT_DETAILS]: 1,
+  [DECISION_ELEMENT_TITLES.NEPA_ASSIST]: 2,
+  [DECISION_ELEMENT_TITLES.IPAC]: 3,
+  [DECISION_ELEMENT_TITLES.PERMIT_NOTES]: 4,
+  [DECISION_ELEMENT_TITLES.CE_REFERENCES]: 5,
+  [DECISION_ELEMENT_TITLES.CONDITIONS]: 6,
+  [DECISION_ELEMENT_TITLES.RESOURCE_NOTES]: 7
+}
+
+const CEQ_PROJECT_FIELDS = [
+  "id",
+  "created_at",
+  "title",
+  "description",
+  "sector",
+  "lead_agency",
+  "participating_agencies",
+  "location_lat",
+  "location_lon",
+  "location_object",
+  "type",
+  "funding",
+  "start_date",
+  "current_status",
+  "sponsor",
+  "sponsor_contact",
+  "parent_project_id",
+  "location_text",
+  "other",
+  "record_owner_agency",
+  "data_source_agency",
+  "data_source_system",
+  "data_record_version",
+  "last_updated",
+  "retrieved_timestamp"
+] as const
+
 function buildDecisionPayloadRecords({
   processInstanceId,
   timestamp,
@@ -1062,7 +1100,8 @@ function buildDecisionPayloadRecords({
     records.push(
       stripUndefined({
         process: processInstanceId,
-        process_decision_element: element?.id,
+        process_decision_element:
+          element?.id ?? DECISION_ELEMENT_FALLBACK_IDS[builder.title] ?? undefined,
         data_source_system: DATA_SOURCE_SYSTEM,
         last_updated: timestamp,
         retrieved_timestamp: timestamp,
@@ -1074,14 +1113,27 @@ function buildDecisionPayloadRecords({
   return records
 }
 
+function pickCeqProjectDetails(record: Record<string, unknown>): Record<string, unknown> {
+  const selected: Record<string, unknown> = {}
+
+  for (const field of CEQ_PROJECT_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(record, field)) {
+      selected[field] = (record as Record<string, unknown>)[field]
+    }
+  }
+
+  return stripUndefined(selected)
+}
+
 function buildProjectDetailsPayload({
   elementId,
   projectRecord
 }: DecisionPayloadBuilderContext): Record<string, unknown> {
-  const hasDetails = hasAnyKeys(projectRecord)
+  const ceqProjectRecord = pickCeqProjectDetails(projectRecord)
+  const hasDetails = hasAnyKeys(ceqProjectRecord)
   return stripUndefined({
     id: typeof elementId === "number" ? elementId : undefined,
-    project: hasDetails ? projectRecord : null
+    project: hasDetails ? ceqProjectRecord : null
   })
 }
 
@@ -1612,12 +1664,14 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
 
 type ProjectRow = {
   id?: number | string | null
+  created_at?: string | null
   title?: string | null
   description?: string | null
   sector?: string | null
   lead_agency?: string | null
   participating_agencies?: string | null
   sponsor?: string | null
+  type?: string | null
   funding?: string | null
   location_text?: string | null
   location_lat?: number | null
@@ -1625,7 +1679,15 @@ type ProjectRow = {
   location_object?: unknown
   sponsor_contact?: unknown
   other?: unknown
+  start_date?: string | null
+  current_status?: string | null
+  parent_project_id?: number | null
+  record_owner_agency?: string | null
+  data_source_agency?: string | null
+  data_source_system?: string | null
+  data_record_version?: string | null
   last_updated?: string | null
+  retrieved_timestamp?: string | null
 }
 
 type ProcessInstanceRow = {
@@ -1647,7 +1709,7 @@ type CaseEventRow = {
 }
 
 type ProcessDecisionPayloadRow = {
-  decision_element?: number | null
+  process_decision_element?: number | null
   evaluation_data?: unknown
   last_updated?: string | null
 }
@@ -2143,12 +2205,14 @@ async function fetchProjectRow(
         "select",
         [
           "id",
+          "created_at",
           "title",
           "description",
           "sector",
           "lead_agency",
           "participating_agencies",
           "sponsor",
+          "type",
           "funding",
           "location_text",
           "location_lat",
@@ -2156,7 +2220,15 @@ async function fetchProjectRow(
           "location_object",
           "sponsor_contact",
           "other",
-          "last_updated"
+          "start_date",
+          "current_status",
+          "parent_project_id",
+          "record_owner_agency",
+          "data_source_agency",
+          "data_source_system",
+          "data_record_version",
+          "last_updated",
+          "retrieved_timestamp"
         ].join(",")
       )
       endpoint.searchParams.set("id", `eq.${projectId}`)
@@ -2197,7 +2269,7 @@ async function fetchProcessDecisionPayloadRows({
     "/rest/v1/process_decision_payload",
     "decision payloads",
     (endpoint) => {
-      endpoint.searchParams.set("select", "decision_element,evaluation_data,last_updated")
+      endpoint.searchParams.set("select", "process_decision_element,evaluation_data,last_updated")
       endpoint.searchParams.set("process_instance", `eq.${processInstanceId}`)
     }
   )
@@ -2430,7 +2502,11 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
         continue
       }
       const evaluation = payload.evaluation_data as Record<string, unknown>
-      const title = determineDecisionElementTitle(payload.decision_element, evaluation, titleMap)
+      const title = determineDecisionElementTitle(
+        payload.process_decision_element,
+        evaluation,
+        titleMap
+      )
       if (!title) {
         continue
       }
