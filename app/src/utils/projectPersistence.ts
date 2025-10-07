@@ -455,9 +455,20 @@ function isMissingOnConflictConstraintError(errorDetail?: string): boolean {
   if (!errorDetail) {
     return false
   }
-  return errorDetail
-    .toLowerCase()
-    .includes("no unique or exclusion constraint matching the on conflict specification")
+
+  // Supabase/PostgREST error messages differ slightly depending on the underlying
+  // Postgres version and configuration. Normalize the message and search for the
+  // common fragments that indicate the ON CONFLICT clause could not be matched to
+  // a unique constraint so we can fall back to the delete-and-insert workflow.
+  const normalizedDetail = errorDetail.toLowerCase()
+
+  if (normalizedDetail.includes("no unique or exclusion constraint")) {
+    return true
+  }
+
+  return (
+    normalizedDetail.includes("on conflict") && normalizedDetail.includes("unique constraint")
+  )
 }
 
 type BuildProjectInitiatedEventDataArgs = {
