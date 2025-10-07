@@ -513,7 +513,7 @@ async function createCaseEvent({
     data_source_system: DATA_SOURCE_SYSTEM,
     last_updated: timestamp,
     retrieved_timestamp: timestamp,
-    data: buildCaseEventData(processInstanceId, eventData)
+    other: buildCaseEventData(processInstanceId, eventData)
   })
 
   const response = await fetch(endpoint.toString(), {
