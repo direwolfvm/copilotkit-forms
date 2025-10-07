@@ -2193,7 +2193,7 @@ async function fetchLatestPreScreeningProcessInstanceRecord({
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
-        "id,parent_project_id,process_model,last_updated,created_at,description"
+        "id,parent_project_id,process_model,last_updated,created_at,title:description,description"
       )
       endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
       endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
