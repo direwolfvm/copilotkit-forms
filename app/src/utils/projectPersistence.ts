@@ -276,31 +276,12 @@ export async function submitDecisionPayload({
     return
   }
 
-  const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
-  endpoint.searchParams.set("on_conflict", "process,process_decision_element")
-
-  const response = await fetch(endpoint.toString(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
-      Prefer: "resolution=merge-duplicates,return=representation"
-    },
-    body: JSON.stringify(records)
+  await submitDecisionPayloadRecords({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    records
   })
-
-  const responseText = await response.text()
-
-  if (!response.ok) {
-    const errorDetail = extractErrorDetail(responseText)
-
-    throw new ProjectPersistenceError(
-      errorDetail
-        ? `Failed to submit pre-screening data (${response.status}): ${errorDetail}`
-        : `Failed to submit pre-screening data (${response.status}).`
-    )
-  }
 
   const evaluation = evaluateDecisionPayloads(records)
 
@@ -329,6 +310,154 @@ export async function submitDecisionPayload({
       })
     })
   }
+}
+
+type SubmitDecisionPayloadRecordsArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+  records: Array<Record<string, unknown>>
+}
+
+async function submitDecisionPayloadRecords({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId,
+  records
+}: SubmitDecisionPayloadRecordsArgs): Promise<void> {
+  const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
+  endpoint.searchParams.set("on_conflict", "process,process_decision_element")
+
+  const response = await fetch(endpoint.toString(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify(records)
+  })
+
+  const responseText = await response.text()
+
+  if (response.ok) {
+    return
+  }
+
+  const errorDetail = extractErrorDetail(responseText)
+
+  if (response.status === 400 && isMissingOnConflictConstraintError(errorDetail)) {
+    await replaceProcessDecisionPayloadRecords({
+      supabaseUrl,
+      supabaseAnonKey,
+      processInstanceId,
+      records
+    })
+    return
+  }
+
+  throw new ProjectPersistenceError(
+    errorDetail
+      ? `Failed to submit pre-screening data (${response.status}): ${errorDetail}`
+      : `Failed to submit pre-screening data (${response.status}).`
+  )
+}
+
+type ReplaceProcessDecisionPayloadRecordsArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+  records: Array<Record<string, unknown>>
+}
+
+async function replaceProcessDecisionPayloadRecords({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId,
+  records
+}: ReplaceProcessDecisionPayloadRecordsArgs): Promise<void> {
+  await deleteExistingProcessDecisionPayloadRecords({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId
+  })
+
+  const insertEndpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
+
+  const insertResponse = await fetch(insertEndpoint.toString(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(records)
+  })
+
+  const insertResponseText = await insertResponse.text()
+
+  if (insertResponse.ok) {
+    return
+  }
+
+  const errorDetail = extractErrorDetail(insertResponseText)
+
+  throw new ProjectPersistenceError(
+    errorDetail
+      ? `Failed to submit pre-screening data (${insertResponse.status}): ${errorDetail}`
+      : `Failed to submit pre-screening data (${insertResponse.status}).`
+  )
+}
+
+type DeleteProcessDecisionPayloadRecordsArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+}
+
+async function deleteExistingProcessDecisionPayloadRecords({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId
+}: DeleteProcessDecisionPayloadRecordsArgs): Promise<void> {
+  const deleteEndpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
+  deleteEndpoint.searchParams.set("process", `eq.${processInstanceId}`)
+  deleteEndpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+
+  const deleteResponse = await fetch(deleteEndpoint.toString(), {
+    method: "DELETE",
+    headers: {
+      "content-type": "application/json",
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      Prefer: "return=minimal"
+    }
+  })
+
+  const deleteResponseText = await deleteResponse.text()
+
+  if (deleteResponse.ok) {
+    return
+  }
+
+  const errorDetail = extractErrorDetail(deleteResponseText)
+
+  throw new ProjectPersistenceError(
+    errorDetail
+      ? `Failed to remove existing pre-screening data (${deleteResponse.status}): ${errorDetail}`
+      : `Failed to remove existing pre-screening data (${deleteResponse.status}).`
+  )
+}
+
+function isMissingOnConflictConstraintError(errorDetail?: string): boolean {
+  if (!errorDetail) {
+    return false
+  }
+  return errorDetail
+    .toLowerCase()
+    .includes("no unique or exclusion constraint matching the on conflict specification")
 }
 
 type BuildProjectInitiatedEventDataArgs = {
