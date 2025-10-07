@@ -1601,6 +1601,7 @@ type ProjectRow = {
 type ProcessInstanceRow = {
   id?: number | null
   parent_project_id?: number | null
+  title?: string | null
   description?: string | null
   last_updated?: string | null
   created_at?: string | null
@@ -2192,7 +2193,7 @@ async function fetchLatestPreScreeningProcessInstanceRecord({
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
-        "id,parent_project_id,process_model,last_updated,created_at,description"
+        "id,parent_project_id,process_model,last_updated,created_at,title:description,description"
       )
       endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
       endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
@@ -2243,7 +2244,7 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
-        "id,parent_project_id,description,last_updated,created_at,data_source_system"
+        "id,parent_project_id,title:description,description,last_updated,created_at,data_source_system"
       )
       endpoint.searchParams.set("parent_project_id", projectIdFilter)
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
