@@ -1601,7 +1601,6 @@ type ProjectRow = {
 type ProcessInstanceRow = {
   id?: number | null
   parent_project_id?: number | null
-  title?: string | null
   description?: string | null
   last_updated?: string | null
   created_at?: string | null
@@ -2193,7 +2192,7 @@ async function fetchLatestPreScreeningProcessInstanceRecord({
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
-        "id,parent_project_id,process_model,last_updated,created_at,title,description"
+        "id,parent_project_id,process_model,last_updated,created_at,description"
       )
       endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
       endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
@@ -2244,7 +2243,7 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
-        "id,parent_project_id,title,description,last_updated,created_at,data_source_system"
+        "id,parent_project_id,description,last_updated,created_at,data_source_system"
       )
       endpoint.searchParams.set("parent_project_id", projectIdFilter)
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
@@ -2296,10 +2295,11 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
     if (typeof projectId !== "number" || typeof id !== "number") {
       continue
     }
+    const description = typeof row.description === "string" ? row.description : null
     const summary: ProjectProcessSummary = {
       id,
-      title: typeof row.title === "string" ? row.title : null,
-      description: typeof row.description === "string" ? row.description : null,
+      title: description,
+      description,
       lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
       createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
       caseEvents: []
