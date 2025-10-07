@@ -223,7 +223,7 @@ export async function submitDecisionPayload({
     return
   }
 
-  const endpoint = new URL("/rest/v1/decision_payload", supabaseUrl)
+  const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
   endpoint.searchParams.set("on_conflict", "process_instance,decision_element")
 
   const response = await fetch(endpoint.toString(), {
