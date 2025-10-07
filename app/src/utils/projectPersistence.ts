@@ -1,5 +1,11 @@
+import { createEmptyProjectData } from "../schema/projectSchema"
 import type { ProjectContact, ProjectFormData } from "../schema/projectSchema"
-import type { GeospatialResultsState, GeospatialServiceState } from "../types/geospatial"
+import type {
+  GeospatialResultsState,
+  GeospatialServiceState,
+  NepassistSummaryItem,
+  IpacSummary
+} from "../types/geospatial"
 import type { PermittingChecklistItem } from "../components/PermittingChecklistSection"
 import { getSupabaseAnonKey, getSupabaseUrl } from "../runtimeConfig"
 
@@ -46,6 +52,43 @@ type DecisionElementRecord = {
 }
 
 type DecisionElementMap = Map<string, DecisionElementRecord>
+
+export type CaseEventSummary = {
+  id: number
+  eventType?: string | null
+  lastUpdated?: string | null
+  data?: unknown
+}
+
+export type ProjectProcessSummary = {
+  id: number
+  title?: string | null
+  description?: string | null
+  lastUpdated?: string | null
+  createdTimestamp?: string | null
+  caseEvents: CaseEventSummary[]
+}
+
+export type ProjectSummary = {
+  id: number
+  title?: string | null
+  description?: string | null
+  lastUpdated?: string | null
+}
+
+export type ProjectHierarchy = {
+  project: ProjectSummary
+  processes: ProjectProcessSummary[]
+}
+
+export type LoadedPermittingChecklistItem = Omit<PermittingChecklistItem, "id">
+
+export type LoadedProjectPortalState = {
+  formData: ProjectFormData
+  geospatialResults: GeospatialResultsState
+  permittingChecklist: LoadedPermittingChecklistItem[]
+  lastUpdated?: string
+}
 
 export async function saveProjectSnapshot({
   formData,
@@ -673,40 +716,13 @@ async function fetchExistingProcessInstanceId({
   supabaseAnonKey,
   projectId
 }: FetchExistingProcessInstanceIdArgs): Promise<number | undefined> {
-  const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
-  endpoint.searchParams.set("select", "id,parent_project_id,process_model,last_updated")
-  endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
-  endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
-  endpoint.searchParams.append("order", "last_updated.desc.nullslast")
-  endpoint.searchParams.append("order", "id.desc")
-  endpoint.searchParams.set("limit", "1")
-
-  const response = await fetch(endpoint.toString(), {
-    method: "GET",
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`
-    }
+  const record = await fetchLatestPreScreeningProcessInstanceRecord({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId
   })
-
-  const responseText = await response.text()
-
-  if (!response.ok) {
-    const errorDetail = extractErrorDetail(responseText)
-
-    throw new ProjectPersistenceError(
-      errorDetail
-        ? `Failed to look up process instance (${response.status}): ${errorDetail}`
-        : `Failed to look up process instance (${response.status}).`
-    )
-  }
-
-  const payload = responseText ? safeJsonParse(responseText) : undefined
-  const processInstanceId = extractNumericId(payload)
-
-  return typeof processInstanceId === "number" && Number.isFinite(processInstanceId)
-    ? processInstanceId
-    : undefined
+  const processInstanceId = parseNumericId(record?.id)
+  return typeof processInstanceId === "number" ? processInstanceId : undefined
 }
 
 type FetchDecisionElementsArgs = {
@@ -815,6 +831,16 @@ const DECISION_ELEMENT_BUILDERS: ReadonlyArray<DecisionElementBuilder> = [
     build: buildResourceNotesPayload
   }
 ]
+
+const DECISION_ELEMENT_TITLES = {
+  PROJECT_DETAILS: DECISION_ELEMENT_BUILDERS[0]?.title ?? "Provide complete project details",
+  NEPA_ASSIST: DECISION_ELEMENT_BUILDERS[1]?.title ?? "Confirm or upload NEPA Assist results if auto fetch fails",
+  IPAC: DECISION_ELEMENT_BUILDERS[2]?.title ?? "Confirm or upload IPaC results if auto fetch fails",
+  PERMIT_NOTES: DECISION_ELEMENT_BUILDERS[3]?.title ?? "Provide permit applicability notes",
+  CE_REFERENCES: DECISION_ELEMENT_BUILDERS[4]?.title ?? "Enter CE references and rationale",
+  CONDITIONS: DECISION_ELEMENT_BUILDERS[5]?.title ?? "List applicable conditions and notes",
+  RESOURCE_NOTES: DECISION_ELEMENT_BUILDERS[6]?.title ?? "Provide resource-by-resource notes"
+} as const
 
 function buildDecisionPayloadRecords({
   processInstanceId,
@@ -1412,4 +1438,855 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
     result[key] = entry
   }
   return result as T
+}
+
+type ProjectRow = {
+  id?: number | string | null
+  title?: string | null
+  description?: string | null
+  sector?: string | null
+  lead_agency?: string | null
+  participating_agencies?: string | null
+  sponsor?: string | null
+  funding?: string | null
+  location_text?: string | null
+  location_lat?: number | null
+  location_lon?: number | null
+  location_object?: unknown
+  sponsor_contact?: unknown
+  other?: unknown
+  last_updated?: string | null
+}
+
+type ProcessInstanceRow = {
+  id?: number | null
+  parent_project_id?: number | null
+  title?: string | null
+  description?: string | null
+  last_updated?: string | null
+  created_timestamp?: string | null
+  process_model?: number | null
+}
+
+type CaseEventRow = {
+  id?: number | null
+  process_instance?: number | null
+  event_type?: string | null
+  last_updated?: string | null
+  data?: unknown
+}
+
+type ProcessDecisionPayloadRow = {
+  decision_element?: number | null
+  evaluation_data?: unknown
+  last_updated?: string | null
+}
+
+type ProjectOtherRecord = {
+  notes?: string
+  geospatial?: {
+    lastRunAt?: string
+    messages?: string[]
+    nepassist?: unknown
+    ipac?: unknown
+  }
+  invalidLocationObject?: string
+}
+
+type StoredGeospatialRecord = {
+  status?: unknown
+  summary?: unknown
+  error?: unknown
+  meta?: unknown
+  raw?: unknown
+}
+
+function parseNumericId(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number.parseInt(value, 10)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+function parseTimestamp(value?: string | null): number | undefined {
+  if (!value) {
+    return undefined
+  }
+  const timestamp = Date.parse(value)
+  return Number.isNaN(timestamp) ? undefined : timestamp
+}
+
+function pickLatestTimestamp(a?: string | null, b?: string | null): string | undefined {
+  const aTime = parseTimestamp(a ?? undefined)
+  const bTime = parseTimestamp(b ?? undefined)
+  if (typeof aTime === "number" && typeof bTime === "number") {
+    return bTime >= aTime ? (b ?? undefined) : (a ?? undefined)
+  }
+  if (typeof bTime === "number") {
+    return b ?? undefined
+  }
+  if (typeof aTime === "number") {
+    return a ?? undefined
+  }
+  return (b ?? a) ?? undefined
+}
+
+function compareByTimestampDesc(a?: string | null, b?: string | null): number {
+  const aTime = parseTimestamp(a ?? undefined)
+  const bTime = parseTimestamp(b ?? undefined)
+  if (typeof aTime === "number" && typeof bTime === "number") {
+    return bTime - aTime
+  }
+  if (typeof aTime === "number") {
+    return -1
+  }
+  if (typeof bTime === "number") {
+    return 1
+  }
+  if (a && b) {
+    return b.localeCompare(a)
+  }
+  if (a) {
+    return -1
+  }
+  if (b) {
+    return 1
+  }
+  return 0
+}
+
+function safeStringifyJson(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value
+  }
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return undefined
+  }
+}
+
+function parseProjectContactRecord(value: unknown): ProjectContact | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+  const contact = value as Record<string, unknown>
+  const normalized: ProjectContact = {}
+  if (typeof contact.name === "string" && contact.name.trim().length > 0) {
+    normalized.name = contact.name
+  }
+  if (typeof contact.organization === "string" && contact.organization.trim().length > 0) {
+    normalized.organization = contact.organization
+  }
+  if (typeof contact.email === "string" && contact.email.trim().length > 0) {
+    normalized.email = contact.email
+  }
+  if (typeof contact.phone === "string" && contact.phone.trim().length > 0) {
+    normalized.phone = contact.phone
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function parseProjectOther(value: unknown): ProjectOtherRecord | undefined {
+  if (!value) {
+    return undefined
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    try {
+      return parseProjectOther(JSON.parse(value))
+    } catch {
+      return { notes: value }
+    }
+  }
+  if (typeof value !== "object") {
+    return undefined
+  }
+  const record = value as Record<string, unknown>
+  const other: ProjectOtherRecord = {}
+  if (typeof record.notes === "string" && record.notes.trim().length > 0) {
+    other.notes = record.notes
+  }
+  const geospatial = record.geospatial
+  if (geospatial && typeof geospatial === "object") {
+    const geoRecord = geospatial as Record<string, unknown>
+    other.geospatial = {}
+    if (typeof geoRecord.lastRunAt === "string" && geoRecord.lastRunAt.trim().length > 0) {
+      other.geospatial.lastRunAt = geoRecord.lastRunAt
+    }
+    if (Array.isArray(geoRecord.messages)) {
+      other.geospatial.messages = geoRecord.messages.filter((entry) => typeof entry === "string") as string[]
+    }
+    if ("nepassist" in geoRecord) {
+      other.geospatial.nepassist = geoRecord.nepassist
+    }
+    if ("ipac" in geoRecord) {
+      other.geospatial.ipac = geoRecord.ipac
+    }
+  }
+  if (typeof record.invalidLocationObject === "string" && record.invalidLocationObject.trim().length > 0) {
+    other.invalidLocationObject = record.invalidLocationObject
+  }
+  return Object.keys(other).length > 0 ? other : undefined
+}
+
+function parseGeospatialStatus(value: unknown): GeospatialResultsState["nepassist"]["status"] | undefined {
+  if (value === "idle" || value === "loading" || value === "success" || value === "error") {
+    return value
+  }
+  return undefined
+}
+
+function parseStoredGeospatialService<TSummary>(
+  value: unknown
+): GeospatialServiceState<TSummary> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+  const record = value as StoredGeospatialRecord
+  const status = parseGeospatialStatus(record.status)
+  const service: GeospatialServiceState<TSummary> = { status: status ?? "idle" }
+  if (Object.prototype.hasOwnProperty.call(record, "summary")) {
+    const summary = record.summary as unknown
+    if (summary !== null) {
+      service.summary = summary as TSummary
+    }
+  }
+  if (typeof record.error === "string" && record.error.trim().length > 0) {
+    service.error = record.error
+  }
+  if (record.meta && typeof record.meta === "object") {
+    service.meta = record.meta as Record<string, unknown>
+  }
+  if (Object.prototype.hasOwnProperty.call(record, "raw")) {
+    service.raw = record.raw
+  }
+  return service
+}
+
+function applyProjectRecordToState({
+  formData,
+  geospatialResults,
+  projectRecord
+}: {
+  formData: ProjectFormData
+  geospatialResults: GeospatialResultsState
+  projectRecord: Record<string, unknown>
+}): void {
+  const maybeString = (value: unknown) => (typeof value === "string" && value.trim().length > 0 ? value : undefined)
+  const maybeNumber = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : undefined
+
+  const title = maybeString(projectRecord.title)
+  if (title) {
+    formData.title = title
+  }
+  const description = maybeString(projectRecord.description)
+  if (description) {
+    formData.description = description
+  }
+  const sector = maybeString(projectRecord.sector)
+  if (sector) {
+    formData.sector = sector
+  }
+  const leadAgency = maybeString(projectRecord.lead_agency)
+  if (leadAgency) {
+    formData.lead_agency = leadAgency
+  }
+  const participating = maybeString(projectRecord.participating_agencies)
+  if (participating) {
+    formData.participating_agencies = participating
+  }
+  const sponsor = maybeString(projectRecord.sponsor)
+  if (sponsor) {
+    formData.sponsor = sponsor
+  }
+  const funding = maybeString(projectRecord.funding)
+  if (funding) {
+    formData.funding = funding
+  }
+  const locationText = maybeString(projectRecord.location_text)
+  if (locationText) {
+    formData.location_text = locationText
+  }
+  const latitude = maybeNumber(projectRecord.location_lat)
+  if (typeof latitude === "number") {
+    formData.location_lat = latitude
+  }
+  const longitude = maybeNumber(projectRecord.location_lon)
+  if (typeof longitude === "number") {
+    formData.location_lon = longitude
+  }
+  const locationObject = safeStringifyJson(projectRecord.location_object)
+  if (locationObject) {
+    formData.location_object = locationObject
+  }
+
+  const contact = parseProjectContactRecord(projectRecord.sponsor_contact)
+  if (contact) {
+    formData.sponsor_contact = { ...formData.sponsor_contact, ...contact }
+  }
+
+  const other = parseProjectOther(projectRecord.other)
+  if (other?.notes) {
+    formData.other = other.notes
+  }
+  if (other?.invalidLocationObject && !formData.location_object) {
+    formData.location_object = other.invalidLocationObject
+  }
+  if (other?.geospatial) {
+    if (other.geospatial.lastRunAt) {
+      geospatialResults.lastRunAt = other.geospatial.lastRunAt
+    }
+    if (other.geospatial.messages && other.geospatial.messages.length > 0) {
+      geospatialResults.messages = other.geospatial.messages
+    }
+    const storedNepassist = parseStoredGeospatialService<NepassistSummaryItem[]>(
+      other.geospatial.nepassist
+    )
+    if (storedNepassist) {
+      geospatialResults.nepassist = { ...geospatialResults.nepassist, ...storedNepassist }
+    }
+    const storedIpac = parseStoredGeospatialService<IpacSummary>(other.geospatial.ipac)
+    if (storedIpac) {
+      geospatialResults.ipac = { ...geospatialResults.ipac, ...storedIpac }
+    }
+  }
+}
+
+function parseChecklistItems(value: unknown): LoadedPermittingChecklistItem[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const items: LoadedPermittingChecklistItem[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") {
+      continue
+    }
+    const record = entry as Record<string, unknown>
+    const label = typeof record.label === "string" ? record.label.trim() : ""
+    if (!label) {
+      continue
+    }
+    const checklistItem: LoadedPermittingChecklistItem = {
+      label,
+      completed: Boolean(record.completed)
+    }
+    if (record.source === "copilot" || record.source === "manual" || record.source === "seed") {
+      checklistItem.source = record.source
+    }
+    if (typeof record.notes === "string" && record.notes.trim().length > 0) {
+      checklistItem.notes = record.notes
+    }
+    items.push(checklistItem)
+  }
+  return items
+}
+
+function joinStrings(values: unknown): string | undefined {
+  if (!Array.isArray(values)) {
+    return undefined
+  }
+  const filtered = values
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0)
+  return filtered.length > 0 ? filtered.join("\n") : undefined
+}
+
+function determineDecisionElementTitle(
+  decisionElementId: unknown,
+  evaluationData: Record<string, unknown>,
+  titleMap: Map<number, string>
+): string | undefined {
+  if (typeof decisionElementId === "number" && titleMap.has(decisionElementId)) {
+    return titleMap.get(decisionElementId)
+  }
+  const fallbackId = evaluationData.id
+  if (typeof fallbackId === "string" && fallbackId.trim().length > 0) {
+    return fallbackId
+  }
+  const fallbackTitle = evaluationData.title
+  if (typeof fallbackTitle === "string" && fallbackTitle.trim().length > 0) {
+    return fallbackTitle
+  }
+  return undefined
+}
+
+function applyDecisionPayloadToState({
+  title,
+  evaluation,
+  formData,
+  geospatialResults,
+  permittingChecklist
+}: {
+  title: string
+  evaluation: Record<string, unknown>
+  formData: ProjectFormData
+  geospatialResults: GeospatialResultsState
+  permittingChecklist: LoadedPermittingChecklistItem[]
+}): void {
+  switch (title) {
+    case DECISION_ELEMENT_TITLES.PROJECT_DETAILS: {
+      const project = evaluation.project
+      if (project && typeof project === "object") {
+        applyProjectRecordToState({
+          formData,
+          geospatialResults,
+          projectRecord: project as Record<string, unknown>
+        })
+      }
+      break
+    }
+    case DECISION_ELEMENT_TITLES.NEPA_ASSIST: {
+      const nextService: GeospatialServiceState<NepassistSummaryItem[]> = {
+        ...geospatialResults.nepassist
+      }
+      if (Array.isArray(evaluation.nepa_assist_summary)) {
+        nextService.summary = evaluation.nepa_assist_summary as NepassistSummaryItem[]
+      } else if (
+        Object.prototype.hasOwnProperty.call(evaluation, "nepa_assist_summary") &&
+        evaluation.nepa_assist_summary === null
+      ) {
+        nextService.summary = undefined
+      }
+      if (Object.prototype.hasOwnProperty.call(evaluation, "nepa_assist_raw")) {
+        nextService.raw = evaluation.nepa_assist_raw
+      }
+      if (
+        nextService.status === "idle" &&
+        (Array.isArray(nextService.summary) || (nextService.raw !== undefined && nextService.raw !== null))
+      ) {
+        nextService.status = "success"
+      }
+      geospatialResults.nepassist = nextService
+      break
+    }
+    case DECISION_ELEMENT_TITLES.IPAC: {
+      const nextService: GeospatialServiceState<IpacSummary> = {
+        ...geospatialResults.ipac
+      }
+      if (evaluation.ipac_summary && typeof evaluation.ipac_summary === "object") {
+        nextService.summary = evaluation.ipac_summary as IpacSummary
+      } else if (
+        Object.prototype.hasOwnProperty.call(evaluation, "ipac_summary") &&
+        evaluation.ipac_summary === null
+      ) {
+        nextService.summary = undefined
+      }
+      if (Object.prototype.hasOwnProperty.call(evaluation, "ipac_raw")) {
+        nextService.raw = evaluation.ipac_raw
+      }
+      if (
+        nextService.status === "idle" &&
+        ((nextService.summary && typeof nextService.summary === "object") ||
+          (nextService.raw !== undefined && nextService.raw !== null))
+      ) {
+        nextService.status = "success"
+      }
+      geospatialResults.ipac = nextService
+      break
+    }
+    case DECISION_ELEMENT_TITLES.PERMIT_NOTES: {
+      const permits = parseChecklistItems(evaluation.permits)
+      if (permits.length > 0) {
+        permittingChecklist.splice(0, permittingChecklist.length, ...permits)
+      }
+      if (typeof evaluation.notes === "string" && evaluation.notes.trim().length > 0) {
+        formData.other = evaluation.notes
+      }
+      break
+    }
+    case DECISION_ELEMENT_TITLES.CE_REFERENCES: {
+      const candidates = joinStrings(evaluation.ce_candidates)
+      if (candidates) {
+        formData.nepa_categorical_exclusion_code = candidates
+      }
+      break
+    }
+    case DECISION_ELEMENT_TITLES.CONDITIONS: {
+      const conditions = joinStrings(evaluation.conditions)
+      if (conditions) {
+        formData.nepa_conformance_conditions = conditions
+      }
+      if (typeof evaluation.notes === "string" && evaluation.notes.trim().length > 0) {
+        formData.nepa_extraordinary_circumstances = evaluation.notes
+      }
+      break
+    }
+    default:
+      break
+  }
+}
+
+async function fetchSupabaseList<T>(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  path: string,
+  resourceDescription: string,
+  configure?: (endpoint: URL) => void
+): Promise<T[]> {
+  const endpoint = new URL(path, supabaseUrl)
+  if (configure) {
+    configure(endpoint)
+  }
+  const response = await fetch(endpoint.toString(), {
+    method: "GET",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`
+    }
+  })
+  const responseText = await response.text()
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to load ${resourceDescription} (${response.status}): ${errorDetail}`
+        : `Failed to load ${resourceDescription} (${response.status}).`
+    )
+  }
+  if (!responseText) {
+    return []
+  }
+  const payload = safeJsonParse(responseText)
+  if (!Array.isArray(payload)) {
+    return []
+  }
+  return payload as T[]
+}
+
+async function fetchProjectRow(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  projectId: number
+): Promise<ProjectRow | undefined> {
+  const rows = await fetchSupabaseList<ProjectRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/project",
+    "project",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        [
+          "id",
+          "title",
+          "description",
+          "sector",
+          "lead_agency",
+          "participating_agencies",
+          "sponsor",
+          "funding",
+          "location_text",
+          "location_lat",
+          "location_lon",
+          "location_object",
+          "sponsor_contact",
+          "other",
+          "last_updated"
+        ].join(",")
+      )
+      endpoint.searchParams.set("id", `eq.${projectId}`)
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+  return rows[0]
+}
+
+async function fetchDecisionElementTitleMap({
+  supabaseUrl,
+  supabaseAnonKey
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+}): Promise<Map<number, string>> {
+  const elements = await fetchDecisionElements({ supabaseUrl, supabaseAnonKey })
+  const map = new Map<number, string>()
+  for (const element of elements.values()) {
+    map.set(element.id, element.title)
+  }
+  return map
+}
+
+async function fetchProcessDecisionPayloadRows({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+}): Promise<ProcessDecisionPayloadRow[]> {
+  return fetchSupabaseList<ProcessDecisionPayloadRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_decision_payload",
+    "decision payloads",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "decision_element,evaluation_data,last_updated")
+      endpoint.searchParams.set("process_instance", `eq.${processInstanceId}`)
+    }
+  )
+}
+
+async function fetchLatestPreScreeningProcessInstanceRecord({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  projectId: number
+}): Promise<ProcessInstanceRow | undefined> {
+  const rows = await fetchSupabaseList<ProcessInstanceRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_instance",
+    "process instance",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        "id,parent_project_id,process_model,last_updated,created_timestamp,title,description"
+      )
+      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+      endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.append("order", "last_updated.desc.nullslast")
+      endpoint.searchParams.append("order", "id.desc")
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+  return rows[0]
+}
+
+export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const projects = await fetchSupabaseList<ProjectRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/project",
+    "projects",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,title,description,last_updated")
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+      endpoint.searchParams.append("order", "last_updated.desc.nullslast")
+    }
+  )
+
+  const projectIds = projects
+    .map((row) => parseNumericId(row.id))
+    .filter((id): id is number => typeof id === "number")
+
+  if (projectIds.length === 0) {
+    return []
+  }
+
+  const projectIdFilter = `in.(${projectIds.join(",")})`
+
+  const processes = await fetchSupabaseList<ProcessInstanceRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_instance",
+    "processes",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        "id,parent_project_id,title,description,last_updated,created_timestamp,data_source_system"
+      )
+      endpoint.searchParams.set("parent_project_id", projectIdFilter)
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+    }
+  )
+
+  const processIds = processes
+    .map((row) => parseNumericId(row.id))
+    .filter((id): id is number => typeof id === "number")
+
+  const caseEvents = processIds.length
+    ? await fetchSupabaseList<CaseEventRow>(
+        supabaseUrl,
+        supabaseAnonKey,
+        "/rest/v1/case_event",
+        "case events",
+        (endpoint) => {
+          endpoint.searchParams.set(
+            "select",
+            "id,process_instance,event_type,last_updated,data"
+          )
+          endpoint.searchParams.set("process_instance", `in.(${processIds.join(",")})`)
+          endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+        }
+      )
+    : []
+
+  const caseEventsByProcess = new Map<number, CaseEventSummary[]>()
+  for (const row of caseEvents) {
+    const processId = parseNumericId(row.process_instance)
+    const id = parseNumericId(row.id)
+    if (typeof processId !== "number" || typeof id !== "number") {
+      continue
+    }
+    const events = caseEventsByProcess.get(processId) ?? []
+    events.push({
+      id,
+      eventType: typeof row.event_type === "string" ? row.event_type : null,
+      lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
+      data: row.data ?? undefined
+    })
+    caseEventsByProcess.set(processId, events)
+  }
+
+  const processesByProject = new Map<number, ProjectProcessSummary[]>()
+  for (const row of processes) {
+    const projectId = parseNumericId(row.parent_project_id)
+    const id = parseNumericId(row.id)
+    if (typeof projectId !== "number" || typeof id !== "number") {
+      continue
+    }
+    const summary: ProjectProcessSummary = {
+      id,
+      title: typeof row.title === "string" ? row.title : null,
+      description: typeof row.description === "string" ? row.description : null,
+      lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
+      createdTimestamp: typeof row.created_timestamp === "string" ? row.created_timestamp : null,
+      caseEvents: []
+    }
+    const events = caseEventsByProcess.get(id)
+    if (events && events.length > 0) {
+      events.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
+      summary.caseEvents = events
+    }
+    const existing = processesByProject.get(projectId)
+    if (existing) {
+      existing.push(summary)
+    } else {
+      processesByProject.set(projectId, [summary])
+    }
+  }
+
+  const hierarchy: ProjectHierarchy[] = []
+  for (const row of projects) {
+    const projectId = parseNumericId(row.id)
+    if (typeof projectId !== "number") {
+      continue
+    }
+    const projectSummary: ProjectSummary = {
+      id: projectId,
+      title: typeof row.title === "string" ? row.title : null,
+      description: typeof row.description === "string" ? row.description : null,
+      lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null
+    }
+    const projectProcesses = processesByProject.get(projectId) ?? []
+    projectProcesses.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
+    hierarchy.push({ project: projectSummary, processes: projectProcesses })
+  }
+
+  hierarchy.sort((a, b) => compareByTimestampDesc(a.project.lastUpdated, b.project.lastUpdated))
+
+  return hierarchy
+}
+
+export async function loadProjectPortalState(projectId: number): Promise<LoadedProjectPortalState> {
+  if (!Number.isFinite(projectId)) {
+    throw new ProjectPersistenceError("Project identifier must be numeric.")
+  }
+
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const projectRow = await fetchProjectRow(supabaseUrl, supabaseAnonKey, projectId)
+  if (!projectRow) {
+    throw new ProjectPersistenceError(`Project ${projectId} was not found.`)
+  }
+
+  const formData: ProjectFormData = createEmptyProjectData()
+  formData.id = projectId.toString()
+
+  const geospatialResults: GeospatialResultsState = {
+    nepassist: { status: "idle" },
+    ipac: { status: "idle" }
+  }
+
+  applyProjectRecordToState({
+    formData,
+    geospatialResults,
+    projectRecord: projectRow as Record<string, unknown>
+  })
+
+  let lastUpdated = typeof projectRow.last_updated === "string" ? projectRow.last_updated : undefined
+
+  const permittingChecklist: LoadedPermittingChecklistItem[] = []
+
+  const processRecord = await fetchLatestPreScreeningProcessInstanceRecord({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId
+  })
+
+  if (processRecord?.id) {
+    if (typeof processRecord.last_updated === "string") {
+      lastUpdated = pickLatestTimestamp(lastUpdated, processRecord.last_updated)
+    }
+
+    const titleMap = await fetchDecisionElementTitleMap({ supabaseUrl, supabaseAnonKey })
+    const payloads = await fetchProcessDecisionPayloadRows({
+      supabaseUrl,
+      supabaseAnonKey,
+      processInstanceId: processRecord.id
+    })
+
+    for (const payload of payloads) {
+      if (typeof payload.last_updated === "string") {
+        lastUpdated = pickLatestTimestamp(lastUpdated, payload.last_updated)
+      }
+      if (!payload.evaluation_data || typeof payload.evaluation_data !== "object") {
+        continue
+      }
+      const evaluation = payload.evaluation_data as Record<string, unknown>
+      const title = determineDecisionElementTitle(payload.decision_element, evaluation, titleMap)
+      if (!title) {
+        continue
+      }
+      applyDecisionPayloadToState({
+        title,
+        evaluation,
+        formData,
+        geospatialResults,
+        permittingChecklist
+      })
+    }
+  }
+
+  if (!formData.sponsor_contact) {
+    formData.sponsor_contact = {}
+  }
+
+  if (!geospatialResults.messages) {
+    geospatialResults.messages = []
+  }
+
+  return {
+    formData,
+    geospatialResults,
+    permittingChecklist,
+    lastUpdated
+  }
 }

@@ -1,9 +1,37 @@
-import { NavLink, Navigate, Outlet, Route, Routes } from "react-router-dom"
-import PortalPage from "./PortalPage"
-import { ProjectsPage } from "./ProjectsPage"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { useParams } from "react-router-dom"
+import type { ChangeEvent } from "react"
+import Form from "@rjsf/core"
+import type { IChangeEvent } from "@rjsf/core"
+import validator from "@rjsf/validator-ajv8"
+import { CopilotKit, useCopilotAction, useCopilotReadable } from "@copilotkit/react-core"
+import { CopilotSidebar } from "@copilotkit/react-ui"
+import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
+import "@copilotkit/react-ui/styles.css"
+
+import type { ProjectFormData, ProjectContact, SimpleProjectField } from "./schema/projectSchema"
+import {
+  createEmptyProjectData,
+  formatProjectSummary,
+  isNumericProjectField,
+  projectFieldDetails,
+  projectSchema,
+  projectUiSchema
+} from "./schema/projectSchema"
+import { ProjectSummary } from "./components/ProjectSummary"
+import {
+  PermittingChecklistSection,
+  type PermittingChecklistItem
+} from "./components/PermittingChecklistSection"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
-import { ProjectPersistenceError, saveProjectSnapshot, submitDecisionPayload } from "./utils/projectPersistence"
+import {
+  ProjectPersistenceError,
+  saveProjectSnapshot,
+  submitDecisionPayload,
+  loadProjectPortalState,
+  type LoadedPermittingChecklistItem
+} from "./utils/projectPersistence"
 import { LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
 import type { GeospatialResultsState } from "./types/geospatial"
@@ -109,30 +137,11 @@ function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value === "object" && value !== null) {
-    return value as Record<string, unknown>
-  }
-  return undefined
-}
-
-function parseJsonOrWrap(text: string): unknown {
-  if (!text) {
-    return null
-  }
-  try {
-    return JSON.parse(text)
-  } catch {
-    return { data: text }
-  }
-}
-
 type PersistedProjectFormState = {
   formData: ProjectFormData
   lastSaved?: string
   geospatialResults: GeospatialResultsState
   permittingChecklist: PermittingChecklistItem[]
-  hasSavedSnapshot: boolean
 }
 
 let persistedProjectFormState: PersistedProjectFormState | undefined
@@ -149,25 +158,7 @@ function RuntimeSelectionControl() {
     setRuntimeMode(value)
   }
 
-function Layout() {
   return (
-    <div className="site-shell">
-      <header className="site-header">
-        <div className="site-header__inner">
-          <span className="site-header__brand">Project Portal</span>
-          <nav className="site-nav" aria-label="Primary">
-            <NavLink
-              to="/projects"
-              className={({ isActive }) =>
-                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
-              }
-            >
-              Projects
-            </NavLink>
-            <NavLink
-              to="/portal"
-              className={({ isActive }) =>
-                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
     <label className="runtime-toggle">
       <span className="runtime-toggle__label">Copilot runtime</span>
       <select
@@ -199,19 +190,99 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>(undefined)
   const [decisionSubmitState, setDecisionSubmitState] = useState<DecisionSubmitState>({ status: "idle" })
-  const [hasSavedSnapshot, setHasSavedSnapshot] = useState<boolean>(
-    () => persistedProjectFormState?.hasSavedSnapshot ?? false
-  )
+  const { projectId } = useParams<{ projectId?: string }>()
+  const [projectLoadState, setProjectLoadState] = useState<{
+    status: "idle" | "loading" | "error"
+    message?: string
+  }>({ status: "idle" })
+
+  useEffect(() => {
+    if (!projectId) {
+      setProjectLoadState((previous) => (previous.status === "idle" ? previous : { status: "idle" }))
+      return
+    }
+
+    const trimmed = projectId.trim()
+    const parsedId = Number.parseInt(trimmed, 10)
+    if (!Number.isFinite(parsedId)) {
+      setProjectLoadState({ status: "error", message: "Invalid project identifier." })
+      return
+    }
+
+    let isCancelled = false
+    setProjectLoadState({ status: "loading" })
+
+    loadProjectPortalState(parsedId)
+      .then((loaded) => {
+        if (isCancelled) {
+          return
+        }
+
+        const nextFormData = applyGeneratedProjectId(cloneValue(loaded.formData), loaded.formData.id)
+        setFormData(nextFormData)
+        setGeospatialResults(cloneValue(loaded.geospatialResults))
+
+        const checklistWithIds: PermittingChecklistItem[] = loaded.permittingChecklist.map(
+          (item: LoadedPermittingChecklistItem) => ({
+            ...item,
+            id: generateChecklistItemId()
+          })
+        )
+        setPermittingChecklist(checklistWithIds)
+
+        const formattedTimestamp = (() => {
+          if (loaded.lastUpdated) {
+            const parsedTimestamp = Date.parse(loaded.lastUpdated)
+            if (!Number.isNaN(parsedTimestamp)) {
+              return new Date(parsedTimestamp).toLocaleString()
+            }
+            return loaded.lastUpdated
+          }
+          return undefined
+        })()
+
+        setLastSaved(formattedTimestamp)
+        setSaveError(undefined)
+        setIsSaving(false)
+        setDecisionSubmitState({ status: "idle" })
+        setProjectLoadState({ status: "idle" })
+      })
+      .catch((error) => {
+        if (isCancelled) {
+          return
+        }
+        console.error("Failed to load project data", error)
+        const message =
+          error instanceof ProjectPersistenceError
+            ? error.message
+            : error instanceof Error
+            ? error.message
+            : "Unable to load project data."
+        setProjectLoadState({ status: "error", message })
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [
+    projectId,
+    setFormData,
+    setGeospatialResults,
+    setPermittingChecklist,
+    setLastSaved,
+    setSaveError,
+    setIsSaving,
+    setDecisionSubmitState
+  ])
 
   useEffect(() => {
     persistedProjectFormState = {
       formData: cloneValue(formData),
       lastSaved,
       geospatialResults: cloneValue(geospatialResults),
-      permittingChecklist: cloneValue(permittingChecklist),
-      hasSavedSnapshot
+      permittingChecklist: cloneValue(permittingChecklist)
     }
-  }, [formData, geospatialResults, lastSaved, permittingChecklist, hasSavedSnapshot])
+  }, [formData, geospatialResults, lastSaved, permittingChecklist])
 
   const locationFieldDetail = useMemo(
     () => projectFieldDetails.find((field) => field.key === "location_text"),
@@ -409,14 +480,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   }, [])
 
   const handleSubmitDecisionPayload = useCallback(async () => {
-    if (!hasSavedSnapshot) {
-      setDecisionSubmitState({
-        status: "error",
-        message: "Save the project snapshot before submitting pre-screening data."
-      })
-      return
-    }
-
     setDecisionSubmitState({ status: "saving" })
 
     let preparedFormData = formData
@@ -446,7 +509,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       }
       setDecisionSubmitState({ status: "error", message })
     }
-  }, [formData, geospatialResults, permittingChecklist, setFormData, hasSavedSnapshot])
+  }, [formData, geospatialResults, permittingChecklist, setFormData])
 
   useCopilotAction(
     {
@@ -653,7 +716,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setFormData((previous) =>
       applyGeneratedProjectId(event.formData ?? createEmptyProjectData(), previous?.id)
     )
-    setHasSavedSnapshot(false)
   }
 
   const handleSubmit = async (event: IChangeEvent<ProjectFormData>) => {
@@ -669,7 +731,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         geospatialResults
       })
       setLastSaved(new Date().toLocaleString())
-      setHasSavedSnapshot(true)
     } catch (error) {
       console.error("Failed to save project snapshot", error)
       setLastSaved(undefined)
@@ -693,7 +754,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setSaveError(undefined)
     setIsSaving(false)
     setDecisionSubmitState({ status: "idle" })
-    setHasSavedSnapshot(false)
   }
 
   const updateLocationFields = useCallback(
@@ -824,32 +884,29 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               body: JSON.stringify(nepaBody)
             })
             const text = await response.text()
-            const payload = parseJsonOrWrap(text)
-            const payloadRecord = asRecord(payload)
+            let payload: any = null
+            if (text) {
+              try {
+                payload = JSON.parse(text)
+              } catch (error) {
+                payload = { data: text }
+              }
+            }
             if (!response.ok) {
-              const payloadError =
-                payloadRecord && typeof payloadRecord["error"] === "string"
-                  ? (payloadRecord["error"] as string)
-                  : undefined
               const errorMessage =
-                (payloadError ?? text) || `NEPA Assist request failed (${response.status})`
+                (payload && typeof payload === "object" && typeof payload.error === "string"
+                  ? payload.error
+                  : text) || `NEPA Assist request failed (${response.status})`
               throw new Error(errorMessage)
             }
-            const data =
-              payloadRecord && "data" in payloadRecord
-                ? payloadRecord["data"]
-                : payload
-            const meta =
-              payloadRecord && "meta" in payloadRecord
-                ? asRecord(payloadRecord["meta"])
-                : undefined
+            const data = payload && typeof payload === "object" && "data" in payload ? payload.data : payload
             setGeospatialResults((previous) => ({
               ...previous,
               nepassist: {
                 status: "success",
                 summary: summarizeNepassist(data),
                 raw: data,
-                meta
+                meta: payload?.meta
               }
             }))
           } catch (error) {
@@ -881,41 +938,139 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               body: JSON.stringify(ipacBody)
             })
             const text = await response.text()
-            const payload = parseJsonOrWrap(text)
-            const payloadRecord = asRecord(payload)
+            let payload: any = null
+            if (text) {
+              try {
+                payload = JSON.parse(text)
+              } catch (error) {
+                payload = { data: text }
+              }
+            }
             if (!response.ok) {
-              const payloadError =
-                payloadRecord && typeof payloadRecord["error"] === "string"
-                  ? (payloadRecord["error"] as string)
-                  : undefined
               const errorMessage =
-                (payloadError ?? text) || `IPaC request failed (${response.status})`
+                (payload && typeof payload === "object" && typeof payload.error === "string"
+                  ? payload.error
+                  : text) || `IPaC request failed (${response.status})`
               throw new Error(errorMessage)
             }
-            const data =
-              payloadRecord && "data" in payloadRecord
-                ? payloadRecord["data"]
-                : payload
-            const meta =
-              payloadRecord && "meta" in payloadRecord
-                ? asRecord(payloadRecord["meta"])
-                : undefined
+            const data = payload && typeof payload === "object" && "data" in payload ? payload.data : payload
             setGeospatialResults((previous) => ({
               ...previous,
               ipac: {
                 status: "success",
                 summary: summarizeIpac(data),
                 raw: data,
-                meta
+                meta: payload?.meta
               }
+            }))
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "IPaC request failed."
+            setGeospatialResults((previous) => ({
+              ...previous,
+              ipac: { status: "error", error: message }
+            }))
+          }
+        })()
+      )
+    }
+
+    if (tasks.length === 0) {
+      return
+    }
+
+    await Promise.allSettled(tasks)
+  }, [formData.location_object])
+
+  const isGeospatialRunning =
+    geospatialResults.nepassist.status === "loading" || geospatialResults.ipac.status === "loading"
+
+  const hasGeometry = Boolean(formData.location_object)
+
+  return (
+    <CopilotSidebar
+      instructions={instructions}
+      defaultOpen
+      suggestions={sidebarSuggestions}
+      clickOutsideToClose={false}
+      labels={{ title: "Permitting Copilot" }}
+    >
+      <main className="app usa-prose">
+        <header className="app-header">
+          <div>
+            <h1>Project Portal</h1>
+            <p>
+              Start your project by filling out the forms below. The Copilot can translate unstructured notes into the schema or suggest
+              corrections as you work.
+            </p>
+          </div>
+          <div className="actions">
+            <RuntimeSelectionControl />
+            <button type="button" className="usa-button usa-button--outline secondary" onClick={handleReset}>
+              Reset form
+            </button>
+            {isSaving ? (
+              <span className="status" aria-live="polite">Saving…</span>
+            ) : saveError ? (
+              <span className="status status--error" role="alert">{saveError}</span>
+            ) : lastSaved ? (
+              <span className="status">Last saved {lastSaved}</span>
+            ) : null}
+          </div>
+        </header>
+
+        {projectLoadState.status === "loading" ? (
+          <div className="usa-alert usa-alert--info usa-alert--slim" role="status" aria-live="polite">
+            <div className="usa-alert__body">
+              <p className="usa-alert__text">Loading project data…</p>
+            </div>
+          </div>
+        ) : null}
+
+        {projectLoadState.status === "error" ? (
+          <div className="usa-alert usa-alert--error" role="alert">
+            <div className="usa-alert__body">
+              <h3 className="usa-alert__heading">Unable to load project data.</h3>
+              <p className="usa-alert__text">{projectLoadState.message ?? "Please try again."}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {showApiKeyWarning ? (
+          <div className="usa-alert usa-alert--warning usa-alert--slim" role="alert">
+            <div className="usa-alert__body">
+              <h3 className="usa-alert__heading">No Copilot Cloud key detected.</h3>
+              <p className="usa-alert__text">
+                Set <code>VITE_COPILOTKIT_PUBLIC_API_KEY</code> in a <code>.env</code> file to enable live Copilot
+                responses. The form will continue to work without it.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        <section className="content">
+          <ProjectSummary data={formData} />
+          {locationFieldDetail ? (
+            <LocationSection
+              title={locationFieldDetail.title}
+              description={locationFieldDetail.description}
+              placeholder={locationFieldDetail.placeholder}
+              rows={locationFieldDetail.rows}
+              locationText={formData.location_text}
+              geometry={formData.location_object}
+              onLocationTextChange={handleLocationTextChange}
+              onLocationGeometryChange={handleLocationGeometryChange}
+            />
+          ) : null}
+          <div className="form-panel">
+            <Form<ProjectFormData>
+              schema={projectSchema}
+              uiSchema={projectUiSchema}
+              validator={validator}
+              formData={formData}
+              onChange={handleChange}
+              onSubmit={handleSubmit}
+              liveValidate
             >
-              New Project Portal
-            </NavLink>
-          </nav>
-        </div>
-      </header>
-      <main className="site-main">
-        <Outlet />
               <div className="form-panel__actions">
                 <button type="submit" className="usa-button primary" disabled={isSaving}>
                   {isSaving ? "Saving…" : "Save project snapshot"}
@@ -946,28 +1101,38 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             onSubmitPreScreeningData={handleSubmitDecisionPayload}
             preScreeningSubmitState={decisionSubmitState}
             isProjectSaving={isSaving}
-            canSubmitPreScreening={hasSavedSnapshot}
           />
         </section>
       </main>
-    </div>
+    </CopilotSidebar>
   )
 }
 
-function App() {
+const publicApiKey = getPublicApiKey()
+const defaultRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
+
+function PortalPage() {
+  const [runtimeMode, setRuntimeMode] = useState<CopilotRuntimeMode>("default")
+
+  const runtimeContextValue = useMemo(
+    () => ({ runtimeMode, setRuntimeMode }),
+    [runtimeMode, setRuntimeMode]
+  )
+
+  const effectiveRuntimeUrl = runtimeMode === "custom" ? CUSTOM_ADK_PROXY_URL : defaultRuntimeUrl
+  const showApiKeyWarning = runtimeMode === "default" && !publicApiKey
+
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<Navigate to="/projects" replace />} />
-        <Route path="projects" element={<ProjectsPage />} />
-        <Route path="portal">
-          <Route index element={<PortalPage />} />
-          <Route path=":projectId" element={<PortalPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/projects" replace />} />
-      </Route>
-    </Routes>
+    <CopilotRuntimeContext.Provider value={runtimeContextValue}>
+      <CopilotKit
+        key={runtimeMode}
+        publicApiKey={publicApiKey || undefined}
+        runtimeUrl={effectiveRuntimeUrl || undefined}
+      >
+        <ProjectFormWithCopilot showApiKeyWarning={showApiKeyWarning} />
+      </CopilotKit>
+    </CopilotRuntimeContext.Provider>
   )
 }
 
-export default App
+export default PortalPage
