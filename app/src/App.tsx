@@ -135,6 +135,7 @@ type PersistedProjectFormState = {
   lastSaved?: string
   geospatialResults: GeospatialResultsState
   permittingChecklist: PermittingChecklistItem[]
+  hasSavedSnapshot: boolean
 }
 
 let persistedProjectFormState: PersistedProjectFormState | undefined
@@ -183,15 +184,19 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>(undefined)
   const [decisionSubmitState, setDecisionSubmitState] = useState<DecisionSubmitState>({ status: "idle" })
+  const [hasSavedSnapshot, setHasSavedSnapshot] = useState<boolean>(
+    () => persistedProjectFormState?.hasSavedSnapshot ?? false
+  )
 
   useEffect(() => {
     persistedProjectFormState = {
       formData: cloneValue(formData),
       lastSaved,
       geospatialResults: cloneValue(geospatialResults),
-      permittingChecklist: cloneValue(permittingChecklist)
+      permittingChecklist: cloneValue(permittingChecklist),
+      hasSavedSnapshot
     }
-  }, [formData, geospatialResults, lastSaved, permittingChecklist])
+  }, [formData, geospatialResults, lastSaved, permittingChecklist, hasSavedSnapshot])
 
   const locationFieldDetail = useMemo(
     () => projectFieldDetails.find((field) => field.key === "location_text"),
@@ -389,6 +394,14 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   }, [])
 
   const handleSubmitDecisionPayload = useCallback(async () => {
+    if (!hasSavedSnapshot) {
+      setDecisionSubmitState({
+        status: "error",
+        message: "Save the project snapshot before submitting pre-screening data."
+      })
+      return
+    }
+
     setDecisionSubmitState({ status: "saving" })
 
     let preparedFormData = formData
@@ -418,7 +431,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       }
       setDecisionSubmitState({ status: "error", message })
     }
-  }, [formData, geospatialResults, permittingChecklist, setFormData])
+  }, [formData, geospatialResults, permittingChecklist, setFormData, hasSavedSnapshot])
 
   useCopilotAction(
     {
@@ -625,6 +638,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setFormData((previous) =>
       applyGeneratedProjectId(event.formData ?? createEmptyProjectData(), previous?.id)
     )
+    setHasSavedSnapshot(false)
   }
 
   const handleSubmit = async (event: IChangeEvent<ProjectFormData>) => {
@@ -640,6 +654,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         geospatialResults
       })
       setLastSaved(new Date().toLocaleString())
+      setHasSavedSnapshot(true)
     } catch (error) {
       console.error("Failed to save project snapshot", error)
       setLastSaved(undefined)
@@ -663,6 +678,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setSaveError(undefined)
     setIsSaving(false)
     setDecisionSubmitState({ status: "idle" })
+    setHasSavedSnapshot(false)
   }
 
   const updateLocationFields = useCallback(
@@ -993,6 +1009,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             onSubmitPreScreeningData={handleSubmitDecisionPayload}
             preScreeningSubmitState={decisionSubmitState}
             isProjectSaving={isSaving}
+            canSubmitPreScreening={hasSavedSnapshot}
           />
         </section>
       </main>

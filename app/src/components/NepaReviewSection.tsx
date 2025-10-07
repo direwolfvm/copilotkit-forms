@@ -36,6 +36,7 @@ interface NepaReviewSectionProps {
   onSubmitPreScreeningData: () => void
   preScreeningSubmitState: { status: "idle" | "saving" | "success" | "error"; message?: string }
   isProjectSaving: boolean
+  canSubmitPreScreening: boolean
 }
 
 function NepassistSummaryTable({ items }: { items: NepassistSummaryItem[] }) {
@@ -181,7 +182,8 @@ export function NepaReviewSection({
   bufferMiles,
   onSubmitPreScreeningData,
   preScreeningSubmitState,
-  isProjectSaving
+  isProjectSaving,
+  canSubmitPreScreening
 }: NepaReviewSectionProps) {
   const categoricalId = useId()
   const conformanceId = useId()
@@ -212,6 +214,12 @@ export function NepaReviewSection({
         <span className="status" role="status">
           {preScreeningSubmitState.message ?? "Pre-screening data submitted."}
         </span>
+      </div>
+    )
+  } else if (!canSubmitPreScreening) {
+    submissionStatus = (
+      <div className="form-panel__status">
+        <span className="status" role="status">Save the project snapshot to enable submission.</span>
       </div>
     )
   }
@@ -322,7 +330,11 @@ export function NepaReviewSection({
           type="button"
           className="usa-button usa-button--outline secondary"
           onClick={onSubmitPreScreeningData}
-          disabled={isProjectSaving || preScreeningSubmitState.status === "saving"}
+          disabled={
+            isProjectSaving ||
+            preScreeningSubmitState.status === "saving" ||
+            !canSubmitPreScreening
+          }
         >
           {preScreeningSubmitState.status === "saving" ? "Submitting…" : "Submit pre-screening data"}
         </button>
