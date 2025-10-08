@@ -175,6 +175,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
     }
   }, [applyDefaultSymbolToGraphic, isReady, updateGeometryFromEsri])
 
+  // Process geometry synchronously when conditions are met
   useEffect(() => {
     console.log(`[${componentId.current}] Geometry effect triggered:`, { 
       isReady, 
@@ -185,13 +186,14 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       mapViewDestroyed: mapView?.destroyed
     })
     
-    if (!isMountedRef.current || !isReady || !mapView || !containerRef.current || mapView.destroyed) {
+    if (!isReady || !mapView || !containerRef.current || mapView.destroyed || !geometry) {
       console.log(`[${componentId.current}] Not ready for geometry processing:`, {
         mounted: isMountedRef.current,
         ready: isReady,
         hasMapView: !!mapView,
         hasContainer: !!containerRef.current,
-        mapViewDestroyed: mapView?.destroyed
+        mapViewDestroyed: mapView?.destroyed,
+        hasGeometry: !!geometry
       })
       return undefined
     }
@@ -210,17 +212,10 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       return undefined
     }
 
-    let zoomTimeoutId: number | null = null
-
-    // Process geometry immediately since all conditions are met
+    // Process immediately, don't wait for async operations
     requireFn(
       ["esri/Graphic", "esri/geometry/support/jsonUtils"],
       (Graphic: any, geometryJsonUtils: any) => {
-        if (!isMountedRef.current) {
-          console.log(`[${componentId.current}] Geometry processing cancelled after require - component unmounted`)
-          return
-        }
-
         const layer: any = sketchElement.layer
         if (!layer) {
           console.log(`[${componentId.current}] No layer found on sketch element`)
@@ -229,11 +224,6 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
         
         console.log(`[${componentId.current}] Clearing existing graphics`)
         layer.graphics.removeAll()
-        
-        if (!geometry) {
-          console.log(`[${componentId.current}] No geometry to process`)
-          return
-        }
         
         try {
           console.log(`[${componentId.current}] Processing geometry:`, geometry.slice(0, 100) + '...')
@@ -251,19 +241,19 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
           applyDefaultSymbolToGraphic(graphic)
           layer.graphics.add(graphic)
           
-          // Zoom immediately since we're ready
+          // Zoom immediately - don't check mounted state since we're processing synchronously
           console.log(`[${componentId.current}] Attempting immediate zoom to geometry`)
           if (mapView && mapView.ready && !mapView.destroyed) {
             console.log(`[${componentId.current}] Map view ready, calling focusMapViewOnGeometry`)
             focusMapViewOnGeometry(mapView, esriGeometry)
-          } else {
-            console.log(`[${componentId.current}] Map view not ready for zoom, using short delay`)
-            zoomTimeoutId = setTimeout(() => {
-              if (isMountedRef.current && mapView && esriGeometry && !mapView.destroyed) {
-                console.log(`[${componentId.current}] Delayed zoom attempt`)
-                focusMapViewOnGeometry(mapView, esriGeometry)
-              }
-            }, 100)
+          } else if (mapView && !mapView.destroyed) {
+            console.log(`[${componentId.current}] Map view not ready, using when() callback`)
+            mapView.when(() => {
+              console.log(`[${componentId.current}] Map view ready via when(), attempting zoom`)
+              focusMapViewOnGeometry(mapView, esriGeometry)
+            }).catch((error: any) => {
+              console.log(`[${componentId.current}] Map view when() failed:`, error)
+            })
           }
         } catch (error) {
           console.error(`[${componentId.current}] Error processing geometry:`, error)
@@ -271,12 +261,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       }
     )
 
-    return () => {
-      console.log(`[${componentId.current}] Cleaning up geometry effect`)
-      if (zoomTimeoutId) {
-        clearTimeout(zoomTimeoutId)
-      }
-    }
+    return undefined
   }, [applyDefaultSymbolToGraphic, focusMapViewOnGeometry, geometry, isReady, mapView])
 
   // Cleanup effect to ensure proper component unmounting
