@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useRef, useState } from "react"
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import {
   convertGeoJsonToEsri,
@@ -15,7 +15,16 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
-  const graphicsLayerRef = useRef<any>(null)
+
+  const applyDefaultSymbolToGraphic = useCallback((graphic: any) => {
+    if (!graphic?.geometry) {
+      return
+    }
+    const symbol = getDefaultSymbolForGeometry(graphic.geometry)
+    if (symbol) {
+      graphic.symbol = symbol
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -63,7 +72,12 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   }, [isReady])
 
   useEffect(() => {
-    if (!mapView) {
+    if (!isReady || !mapView || !containerRef.current) {
+      return undefined
+    }
+
+    const sketchElement = containerRef.current.querySelector("arcgis-sketch") as any
+    if (!sketchElement) {
       return undefined
     }
 
@@ -74,63 +88,60 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
 
     let isMounted = true
 
-    requireFn(
-      ["esri/Graphic", "esri/layers/GraphicsLayer", "esri/geometry/support/jsonUtils"],
-      (Graphic: any, GraphicsLayer: any, geometryJsonUtils: any) => {
-        if (!isMounted) {
-          return
-        }
-
-        if (!graphicsLayerRef.current) {
-          graphicsLayerRef.current = new (GraphicsLayer as any)()
-          mapView.map.add(graphicsLayerRef.current)
-        }
-
-        const layer = graphicsLayerRef.current
-        layer.removeAll()
-
-        if (!geometry) {
-          return
-        }
-
-        try {
-          const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
-          const esriGeometryJson = convertGeoJsonToEsri(parsed)
-          const esriGeometry = esriGeometryJson
-            ? geometryJsonUtils.fromJSON(esriGeometryJson)
-            : geometryJsonUtils.fromJSON(parsed)
-
-          if (!esriGeometry) {
-            return
-          }
-
-          const symbol = getDefaultSymbolForGeometry(esriGeometry)
-          const graphic = new (Graphic as any)({ geometry: esriGeometry })
-          if (symbol) {
-            graphic.symbol = symbol
-          }
-          layer.add(graphic)
-          focusMapViewOnGeometry(mapView, esriGeometry)
-        } catch {
-          // ignore malformed geometry
-        }
+    requireFn(["esri/Graphic", "esri/geometry/support/jsonUtils"], (Graphic: any, geometryJsonUtils: any) => {
+      if (!isMounted) {
+        return
       }
-    )
+
+      const layer: any = sketchElement.layer
+      if (!layer) {
+        return
+      }
+
+      layer.graphics.removeAll()
+
+      if (!geometry) {
+        return
+      }
+
+      try {
+        const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
+        const esriGeometryJson = convertGeoJsonToEsri(parsed)
+        const esriGeometry = esriGeometryJson
+          ? geometryJsonUtils.fromJSON(esriGeometryJson)
+          : geometryJsonUtils.fromJSON(parsed)
+
+        if (!esriGeometry) {
+          return
+        }
+
+        const graphic = new (Graphic as any)({ geometry: esriGeometry })
+        applyDefaultSymbolToGraphic(graphic)
+        layer.graphics.add(graphic)
+        focusMapViewOnGeometry(mapView, esriGeometry)
+      } catch {
+        // ignore malformed geometry
+      }
+    })
 
     return () => {
       isMounted = false
-      if (graphicsLayerRef.current && mapView?.map) {
-        mapView.map.remove(graphicsLayerRef.current)
-        graphicsLayerRef.current = null
+      const layer: any = sketchElement.layer
+      if (layer?.graphics) {
+        layer.graphics.removeAll()
       }
     }
-  }, [geometry, mapView])
+  }, [applyDefaultSymbolToGraphic, geometry, isReady, mapView])
 
   const map = useMemo(() => {
     if (!isReady) {
       return <div className="projects-map__loading">Loading map…</div>
     }
-    return createElement("arcgis-map", { basemap: "topo-vector", center: "-98,39", zoom: "4" })
+    return createElement(
+      "arcgis-map",
+      { basemap: "topo-vector", center: "-98,39", zoom: "4" },
+      createElement("arcgis-sketch", { key: "sketch", style: { display: "none" } })
+    )
   }, [isReady])
 
   return (
