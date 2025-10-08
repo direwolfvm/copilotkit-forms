@@ -242,12 +242,18 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
           layer.graphics.add(graphic)
           
           // Zoom immediately - don't check mounted state since we're processing synchronously
-          console.log(`[${componentId.current}] Attempting immediate zoom to geometry`)
-          if (mapView && mapView.ready && !mapView.destroyed) {
-            console.log(`[${componentId.current}] Map view ready, calling focusMapViewOnGeometry`)
+          console.log(`[${componentId.current}] Attempting immediate zoom to geometry`, {
+            hasMapView: !!mapView,
+            mapViewReady: mapView?.ready,
+            mapViewDestroyed: mapView?.destroyed
+          })
+          
+          // Try zoom regardless of ready state - let focusMapViewOnGeometry handle the validation
+          if (mapView && !mapView.destroyed) {
+            console.log(`[${componentId.current}] Map view exists, calling focusMapViewOnGeometry`)
             focusMapViewOnGeometry(mapView, esriGeometry)
           } else {
-            console.log(`[${componentId.current}] Map view not ready, skipping zoom`)
+            console.log(`[${componentId.current}] Map view missing or destroyed, skipping zoom`)
           }
         } catch (error) {
           console.error(`[${componentId.current}] Error processing geometry:`, error)
