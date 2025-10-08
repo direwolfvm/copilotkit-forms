@@ -1,9 +1,9 @@
 .app {
-  display: flex;
-  flex-direction: column;
-  gap: 2.5rem;
-  padding: 3rem 3.25rem 3.5rem;
+  display: block;
+  padding: 3rem 0 3.5rem;
   margin: 3rem auto;
+  margin-top: var(--layout-app-top-offset);
+  margin-bottom: var(--layout-app-top-offset);
   max-width: 1100px;
   width: min(1100px, calc(100% - 4rem));
   background: color-mix(in srgb, var(--surface) 95%, var(--surface-muted) 5%);
@@ -14,13 +14,18 @@
   position: relative;
 }
 
-@media (min-width: 1024px) {
-  .app {
-    padding-right: max(
-      3.25rem,
-      calc(var(--copilot-frame-width) + var(--copilot-frame-side-offset) + 1.5rem)
-    );
-  }
+.app__inner {
+  display: block;
+  padding: 0 3.25rem;
+  width: 100%;
+}
+
+.app__inner > * {
+  width: 100%;
+}
+
+.app__inner > * + * {
+  margin-top: 2.5rem;
 }
 
 .app::before {
@@ -746,8 +751,8 @@
 }
 
 .summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 1.25rem;
 }
 
@@ -761,6 +766,7 @@
   flex-direction: column;
   gap: 0.75rem;
   height: 100%;
+  width: 100%;
 }
 
 .summary-card h3 {
@@ -770,7 +776,7 @@
 }
 
 .summary-card--full {
-  grid-column: 1 / -1;
+  align-self: stretch;
 }
 
 .summary-row {
@@ -823,15 +829,27 @@
 @media (max-width: 1100px) {
   .app {
     margin: 2.5rem 2rem;
-    padding: 2.5rem 2.5rem 3rem;
+    padding: 2.5rem 0 3rem;
+  }
+
+  .app__inner {
+    padding: 0 2.5rem;
   }
 
 }
 
 @media (max-width: 720px) {
+  :root {
+    --layout-app-top-offset: 2rem;
+  }
+
   .app {
     margin: 2rem 1.5rem;
-    padding: 1.9rem 1.6rem 2.4rem;
+    padding: 1.9rem 0 2.4rem;
+  }
+
+  .app__inner {
+    padding: 0 1.6rem;
   }
 
   .app-header {
@@ -854,7 +872,20 @@
 }
 
 @media (max-width: 540px) {
-  .app,
+  :root {
+    --layout-app-top-offset: 1.5rem;
+  }
+
+  .app {
+    margin: 1.5rem 1rem;
+    padding: 1.75rem 0 2.2rem;
+    width: calc(100% - 2rem);
+  }
+
+  .app__inner {
+    padding: 0 1.4rem;
+  }
+
   .projects-page {
     margin: 1.5rem 1rem;
     padding: 1.75rem 1.4rem 2.2rem;
@@ -943,7 +974,7 @@
 
 .site-main {
   flex: 1;
-  padding: 2.5rem 0 4rem;
+  padding: var(--layout-site-main-padding-top) 0 var(--layout-site-main-padding-bottom);
 }
 
 .projects-page {
