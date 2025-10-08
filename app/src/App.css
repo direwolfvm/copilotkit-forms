@@ -1014,6 +1014,8 @@
   border-radius: 18px;
   padding: 0.75rem 1.25rem;
   box-shadow: var(--shadow-subtle);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .projects-tree details > summary {
@@ -1069,6 +1071,38 @@
   color: color-mix(in srgb, var(--color-text-muted) 75%, var(--color-text) 25%);
 }
 
+.projects-tree__map {
+  display: flex;
+  flex-direction: column;
+}
+
+.projects-map {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 90%, rgba(31, 79, 153, 0.12) 10%);
+}
+
+.projects-map arcgis-map {
+  display: block;
+  width: 100%;
+  height: 18rem;
+}
+
+.projects-map__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 0;
+  color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
+}
+
+.projects-map__empty {
+  margin: 0.75rem 0 0;
+  color: color-mix(in srgb, var(--color-text-muted) 85%, var(--color-text) 15%);
+}
+
 .projects-tree__processes,
 .projects-tree__events {
   list-style: none;
@@ -1087,6 +1121,10 @@
   margin: 0;
   font-style: italic;
   color: color-mix(in srgb, var(--color-text-muted) 88%, var(--color-text) 12%);
+}
+
+.projects-tree__map-empty {
+  margin: 0;
 }
 
 .projects-tree__event-title {

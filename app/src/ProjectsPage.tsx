@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import type { SyntheticEvent } from "react"
 import { Link } from "react-router-dom"
 import {
   ProjectPersistenceError,
@@ -7,6 +8,7 @@ import {
   type ProjectHierarchy,
   type ProjectProcessSummary
 } from "./utils/projectPersistence"
+import { ArcgisGeometryViewer } from "./components/ArcgisGeometryViewer"
 
 function formatTimestamp(value?: string | null): string | undefined {
   if (!value) {
@@ -84,6 +86,57 @@ function CaseEventTree({ event }: { event: CaseEventSummary }) {
   )
 }
 
+function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
+  const formattedUpdated = formatTimestamp(entry.project.lastUpdated)
+  const projectTitle = entry.project.title?.trim().length
+    ? entry.project.title
+    : `Project ${entry.project.id}`
+  const [isOpen, setIsOpen] = useState(false)
+  const handleToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
+    setIsOpen(event.currentTarget.open)
+  }, [])
+  const geometry = entry.project.geometry ?? undefined
+
+  return (
+    <li className="projects-tree__project">
+      <details onToggle={handleToggle}>
+        <summary>
+          <div className="projects-tree__project-summary">
+            <Link to={`/portal/${entry.project.id}`} className="projects-tree__project-link">
+              {projectTitle}
+            </Link>
+            {formattedUpdated ? (
+              <span className="projects-tree__summary-meta">Updated {formattedUpdated}</span>
+            ) : null}
+          </div>
+        </summary>
+        <div className="projects-tree__project-body">
+          {isOpen ? (
+            <div className="projects-tree__map">
+              <ArcgisGeometryViewer geometry={geometry} />
+            </div>
+          ) : null}
+          {isOpen && !geometry ? (
+            <p className="projects-tree__map-empty projects-tree__empty">No project geometry provided.</p>
+          ) : null}
+          {entry.project.description ? (
+            <p className="projects-tree__description">{entry.project.description}</p>
+          ) : null}
+          {entry.processes.length > 0 ? (
+            <ul className="projects-tree__processes">
+              {entry.processes.map((process) => (
+                <ProcessTree key={process.id} process={process} />
+              ))}
+            </ul>
+          ) : (
+            <p className="projects-tree__empty">No processes recorded for this project.</p>
+          )}
+        </div>
+      </details>
+    </li>
+  )
+}
+
 export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectHierarchy[]>([])
   const [status, setStatus] = useState<"idle" | "loading" | "error">("loading")
@@ -141,40 +194,9 @@ export function ProjectsPage() {
 
       {hasProjects ? (
         <ul className="projects-tree">
-          {projects.map((entry) => {
-            const formattedUpdated = formatTimestamp(entry.project.lastUpdated)
-            const projectTitle = entry.project.title?.trim().length ? entry.project.title : `Project ${entry.project.id}`
-            return (
-              <li key={entry.project.id} className="projects-tree__project">
-                <details>
-                  <summary>
-                    <div className="projects-tree__project-summary">
-                      <Link to={`/portal/${entry.project.id}`} className="projects-tree__project-link">
-                        {projectTitle}
-                      </Link>
-                      {formattedUpdated ? (
-                        <span className="projects-tree__summary-meta">Updated {formattedUpdated}</span>
-                      ) : null}
-                    </div>
-                  </summary>
-                  <div className="projects-tree__project-body">
-                    {entry.project.description ? (
-                      <p className="projects-tree__description">{entry.project.description}</p>
-                    ) : null}
-                    {entry.processes.length > 0 ? (
-                      <ul className="projects-tree__processes">
-                        {entry.processes.map((process) => (
-                          <ProcessTree key={process.id} process={process} />
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="projects-tree__empty">No processes recorded for this project.</p>
-                    )}
-                  </div>
-                </details>
-              </li>
-            )
-          })}
+          {projects.map((entry) => (
+            <ProjectTreeItem key={entry.project.id} entry={entry} />
+          ))}
         </ul>
       ) : null}
     </div>
