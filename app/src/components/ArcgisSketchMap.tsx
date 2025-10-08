@@ -116,14 +116,16 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
 
     const handleViewReady = (event: CustomEvent) => {
       console.log(`[${componentId.current}] Map view ready event:`, !!event.detail?.view)
-      if (event.detail?.view) {
-        setMapView(event.detail.view)
+      const view = event.detail?.view
+      if (view && typeof view.goTo === "function") {
+        setMapView(view)
       }
     }
 
-    if (mapElement.view) {
-      console.log(`[${componentId.current}] Map element already has view:`, !!mapElement.view)
-      setMapView(mapElement.view)
+    const existingView = mapElement.view
+    if (existingView && typeof existingView.goTo === "function") {
+      console.log(`[${componentId.current}] Map element already has ready view:`, !!existingView)
+      setMapView(existingView)
     }
 
     mapElement.addEventListener("arcgisViewReady", handleViewReady as EventListener)
