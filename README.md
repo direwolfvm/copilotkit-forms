@@ -17,8 +17,15 @@ cp .env.example .env            # add your CopilotKit public API key
 npm run dev
 ```
 
-Then open the development server URL printed in the terminal. Without an API key the form will
-still render, but the Copilot sidebar will show an in-app warning instead of live responses.
+The dev server prints a URL (defaults to `http://localhost:5173`). If you are running in a remote
+container or Codespace, append Vite flags so the preview is reachable from your browser:
+
+```bash
+npm run dev -- --host 0.0.0.0 --port 4173
+```
+
+No Copilot API key is required to test the UI—the sidebar simply displays an in-app warning instead
+of streaming AI responses.
 
 ## What’s included
 
