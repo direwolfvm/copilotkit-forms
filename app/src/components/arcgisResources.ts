@@ -2,6 +2,8 @@ const ARCGIS_JS_URL = "https://js.arcgis.com/4.33/"
 const ARCGIS_COMPONENTS_URL = "https://js.arcgis.com/4.32/map-components/"
 const ARCGIS_CSS_URL = "https://js.arcgis.com/4.33/esri/themes/light/main.css"
 
+type ArcgisSymbol = Record<string, any>
+
 let resourcePromise: Promise<void> | undefined
 
 function loadScript(
@@ -203,4 +205,79 @@ export function convertGeoJsonToEsri(geoJson: any) {
       break
   }
   return undefined
+}
+
+const POLYGON_SYMBOL: ArcgisSymbol = {
+  type: "simple-fill",
+  color: [56, 134, 196, 0.1],
+  outline: { color: [56, 134, 196, 1], width: 2 }
+}
+
+const POLYLINE_SYMBOL: ArcgisSymbol = {
+  type: "simple-line",
+  color: [56, 134, 196, 1],
+  width: 2
+}
+
+const POINT_SYMBOL: ArcgisSymbol = {
+  type: "simple-marker",
+  style: "circle",
+  color: [56, 134, 196, 1],
+  size: 10,
+  outline: { color: [255, 255, 255, 1], width: 1 }
+}
+
+function cloneSymbol(symbol: ArcgisSymbol): ArcgisSymbol {
+  const copy: ArcgisSymbol = { ...symbol }
+  if (symbol.outline && typeof symbol.outline === "object") {
+    copy.outline = { ...(symbol.outline as Record<string, unknown>) }
+  }
+  return copy
+}
+
+export function getDefaultSymbolForGeometry(geometry: any): ArcgisSymbol | undefined {
+  const type = geometry?.type
+  if (type === "polygon") {
+    return cloneSymbol(POLYGON_SYMBOL)
+  }
+  if (type === "polyline") {
+    return cloneSymbol(POLYLINE_SYMBOL)
+  }
+  if (type === "point") {
+    return cloneSymbol(POINT_SYMBOL)
+  }
+  return undefined
+}
+
+export function focusMapViewOnGeometry(view: any, geometry: any) {
+  if (!view || typeof view.goTo !== "function" || !geometry) {
+    return
+  }
+
+  const target = geometry.extent ?? geometry
+  const execute = () => {
+    try {
+      const promise = view.goTo(target)
+      if (promise && typeof promise.catch === "function") {
+        promise.catch(() => undefined)
+      }
+    } catch {
+      // ignore goTo errors
+    }
+  }
+
+  if (view.ready) {
+    execute()
+    return
+  }
+
+  if (typeof view.when === "function") {
+    const result = view.when(execute)
+    if (result && typeof result.catch === "function") {
+      result.catch(() => undefined)
+    }
+    return
+  }
+
+  execute()
 }

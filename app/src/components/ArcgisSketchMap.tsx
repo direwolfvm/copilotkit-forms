@@ -3,7 +3,9 @@ import { createElement, useCallback, useEffect, useMemo, useRef, useState } from
 import {
   convertGeoJsonToEsri,
   convertToGeoJsonGeometry,
-  ensureArcgisResources
+  ensureArcgisResources,
+  focusMapViewOnGeometry,
+  getDefaultSymbolForGeometry
 } from "./arcgisResources"
 
 type GeometryChange = {
@@ -21,6 +23,16 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
+
+  const applyDefaultSymbolToGraphic = useCallback((graphic: any) => {
+    if (!graphic?.geometry) {
+      return
+    }
+    const symbol = getDefaultSymbolForGeometry(graphic.geometry)
+    if (symbol) {
+      graphic.symbol = symbol
+    }
+  }, [])
 
   const updateGeometryFromEsri = useCallback(
     (incomingGeometry: any | undefined) => {
@@ -52,9 +64,10 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
           latitude: centroid?.latitude,
           longitude: centroid?.longitude
         })
+        focusMapViewOnGeometry(mapView, incomingGeometry)
       })
     },
-    [onGeometryChange]
+    [mapView, onGeometryChange]
   )
 
   useEffect(() => {
@@ -113,12 +126,18 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
 
     const handleCreate = (event: CustomEvent) => {
       if (event.detail?.state === "complete") {
+        if (event.detail?.graphic) {
+          applyDefaultSymbolToGraphic(event.detail.graphic)
+        }
         updateGeometryFromEsri(event.detail.graphic?.geometry)
       }
     }
 
     const handleUpdate = (event: CustomEvent) => {
       if (event.detail?.state === "complete" && event.detail.graphics?.[0]) {
+        event.detail.graphics.forEach((graphic: any) => {
+          applyDefaultSymbolToGraphic(graphic)
+        })
         updateGeometryFromEsri(event.detail.graphics[0].geometry)
       }
     }
@@ -136,7 +155,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       sketchElement.removeEventListener("arcgisUpdate", handleUpdate as EventListener)
       sketchElement.removeEventListener("arcgisDelete", handleDelete as EventListener)
     }
-  }, [isReady, updateGeometryFromEsri])
+  }, [applyDefaultSymbolToGraphic, isReady, updateGeometryFromEsri])
 
   useEffect(() => {
     if (!isReady || !mapView || !containerRef.current) {
@@ -173,8 +192,9 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
             return
           }
           const graphic = new (Graphic as any)({ geometry: esriGeometry })
+          applyDefaultSymbolToGraphic(graphic)
           layer.graphics.add(graphic)
-          mapView.goTo(esriGeometry).catch(() => {})
+          focusMapViewOnGeometry(mapView, esriGeometry)
         } catch {
           // ignore malformed geometry
         }
@@ -182,7 +202,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
     )
 
     return undefined
-  }, [geometry, isReady, mapView, onGeometryChange])
+  }, [applyDefaultSymbolToGraphic, focusMapViewOnGeometry, geometry, isReady, mapView])
 
   useEffect(() => {
     if (!isReady || !containerRef.current) {

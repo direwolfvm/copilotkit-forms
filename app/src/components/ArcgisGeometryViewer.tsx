@@ -1,6 +1,11 @@
 import { createElement, useEffect, useMemo, useRef, useState } from "react"
 
-import { convertGeoJsonToEsri, ensureArcgisResources } from "./arcgisResources"
+import {
+  convertGeoJsonToEsri,
+  ensureArcgisResources,
+  focusMapViewOnGeometry,
+  getDefaultSymbolForGeometry
+} from "./arcgisResources"
 
 type ArcgisGeometryViewerProps = {
   geometry?: string | null
@@ -99,9 +104,13 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
             return
           }
 
+          const symbol = getDefaultSymbolForGeometry(esriGeometry)
           const graphic = new (Graphic as any)({ geometry: esriGeometry })
+          if (symbol) {
+            graphic.symbol = symbol
+          }
           layer.add(graphic)
-          mapView.goTo(esriGeometry).catch(() => {})
+          focusMapViewOnGeometry(mapView, esriGeometry)
         } catch {
           // ignore malformed geometry
         }
