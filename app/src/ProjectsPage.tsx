@@ -121,7 +121,7 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
           {isOpen ? (
             <div className="projects-tree__map">
               <ArcgisSketchMap
-                key={`project-map-${entry.project.id}-${isOpen}`}
+                key={`project-map-${entry.project.id}`}
                 geometry={geometry}
                 onGeometryChange={handleGeometryChange}
               />

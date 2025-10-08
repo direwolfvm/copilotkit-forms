@@ -195,6 +195,8 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       })
       return undefined
     }
+
+    console.log(`[${componentId.current}] All conditions met - processing geometry immediately`)
     
     const sketchElement = containerRef.current.querySelector("arcgis-sketch") as any
     if (!sketchElement) {
@@ -210,85 +212,67 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
 
     let zoomTimeoutId: number | null = null
 
-    // Add a small delay to ensure the sketch element is fully initialized
-    const timeoutId = setTimeout(() => {
-      if (!isMountedRef.current) {
-        console.log(`[${componentId.current}] Geometry processing cancelled - component unmounted`)
-        return
-      }
-
-      requireFn(
-        ["esri/Graphic", "esri/geometry/support/jsonUtils"],
-        (Graphic: any, geometryJsonUtils: any) => {
-          if (!isMountedRef.current) {
-            console.log(`[${componentId.current}] Geometry processing cancelled after require - component unmounted`)
-            return
-          }
-
-          const layer: any = sketchElement.layer
-          if (!layer) {
-            console.log(`[${componentId.current}] No layer found on sketch element`)
-            return
-          }
-          
-          console.log(`[${componentId.current}] Clearing existing graphics`)
-          layer.graphics.removeAll()
-          
-          if (!geometry) {
-            console.log(`[${componentId.current}] No geometry to process`)
-            return
-          }
-          
-          try {
-            console.log(`[${componentId.current}] Processing geometry:`, geometry.slice(0, 100) + '...')
-            const parsed = JSON.parse(geometry)
-            const esriGeometryJson = convertGeoJsonToEsri(parsed)
-            const esriGeometry = esriGeometryJson
-              ? geometryJsonUtils.fromJSON(esriGeometryJson)
-              : geometryJsonUtils.fromJSON(parsed)
-            if (!esriGeometry) {
-              console.log(`[${componentId.current}] Failed to create Esri geometry`)
-              return
-            }
-            console.log(`[${componentId.current}] Adding graphic to layer`)
-            const graphic = new (Graphic as any)({ geometry: esriGeometry })
-            applyDefaultSymbolToGraphic(graphic)
-            layer.graphics.add(graphic)
-            
-            // Add a longer delay and ensure map is ready before zooming
-            zoomTimeoutId = setTimeout(() => {
-              if (!isMountedRef.current) {
-                console.log(`[${componentId.current}] Zoom cancelled - component unmounted`)
-                return
-              }
-              
-              console.log(`[${componentId.current}] Attempting zoom to geometry`)
-              // Validate all requirements before attempting zoom
-              if (mapView && mapView.ready && esriGeometry && !mapView.destroyed) {
-                console.log(`[${componentId.current}] Map view ready, calling focusMapViewOnGeometry`)
-                focusMapViewOnGeometry(mapView, esriGeometry)
-              } else {
-                console.log(`[${componentId.current}] Map view not ready for zoom, waiting...`)
-                if (mapView && typeof mapView.when === 'function' && !mapView.destroyed) {
-                  mapView.when(() => {
-                    if (isMountedRef.current && esriGeometry) {
-                      console.log(`[${componentId.current}] Map view now ready, attempting delayed zoom`)
-                      focusMapViewOnGeometry(mapView, esriGeometry)
-                    }
-                  })
-                }
-              }
-            }, 1000)
-          } catch (error) {
-            console.error(`[${componentId.current}] Error processing geometry:`, error)
-          }
+    // Process geometry immediately since all conditions are met
+    requireFn(
+      ["esri/Graphic", "esri/geometry/support/jsonUtils"],
+      (Graphic: any, geometryJsonUtils: any) => {
+        if (!isMountedRef.current) {
+          console.log(`[${componentId.current}] Geometry processing cancelled after require - component unmounted`)
+          return
         }
-      )
-    }, 200)
+
+        const layer: any = sketchElement.layer
+        if (!layer) {
+          console.log(`[${componentId.current}] No layer found on sketch element`)
+          return
+        }
+        
+        console.log(`[${componentId.current}] Clearing existing graphics`)
+        layer.graphics.removeAll()
+        
+        if (!geometry) {
+          console.log(`[${componentId.current}] No geometry to process`)
+          return
+        }
+        
+        try {
+          console.log(`[${componentId.current}] Processing geometry:`, geometry.slice(0, 100) + '...')
+          const parsed = JSON.parse(geometry)
+          const esriGeometryJson = convertGeoJsonToEsri(parsed)
+          const esriGeometry = esriGeometryJson
+            ? geometryJsonUtils.fromJSON(esriGeometryJson)
+            : geometryJsonUtils.fromJSON(parsed)
+          if (!esriGeometry) {
+            console.log(`[${componentId.current}] Failed to create Esri geometry`)
+            return
+          }
+          console.log(`[${componentId.current}] Adding graphic to layer`)
+          const graphic = new (Graphic as any)({ geometry: esriGeometry })
+          applyDefaultSymbolToGraphic(graphic)
+          layer.graphics.add(graphic)
+          
+          // Zoom immediately since we're ready
+          console.log(`[${componentId.current}] Attempting immediate zoom to geometry`)
+          if (mapView && mapView.ready && !mapView.destroyed) {
+            console.log(`[${componentId.current}] Map view ready, calling focusMapViewOnGeometry`)
+            focusMapViewOnGeometry(mapView, esriGeometry)
+          } else {
+            console.log(`[${componentId.current}] Map view not ready for zoom, using short delay`)
+            zoomTimeoutId = setTimeout(() => {
+              if (isMountedRef.current && mapView && esriGeometry && !mapView.destroyed) {
+                console.log(`[${componentId.current}] Delayed zoom attempt`)
+                focusMapViewOnGeometry(mapView, esriGeometry)
+              }
+            }, 100)
+          }
+        } catch (error) {
+          console.error(`[${componentId.current}] Error processing geometry:`, error)
+        }
+      }
+    )
 
     return () => {
       console.log(`[${componentId.current}] Cleaning up geometry effect`)
-      clearTimeout(timeoutId)
       if (zoomTimeoutId) {
         clearTimeout(zoomTimeoutId)
       }
