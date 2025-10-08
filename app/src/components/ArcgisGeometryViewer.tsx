@@ -84,68 +84,51 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
 
     let isMounted = true
 
-    requireFn(
-      ["esri/Graphic", "esri/geometry/support/jsonUtils", "esri/layers/GraphicsLayer"],
-      (Graphic: any, geometryJsonUtils: any, GraphicsLayer: any) => {
-        if (!isMounted) {
+    requireFn(["esri/Graphic", "esri/geometry/support/jsonUtils"], (Graphic: any, geometryJsonUtils: any) => {
+      if (!isMounted) {
+        return
+      }
+
+      const graphics = mapView.graphics
+      if (!graphics) {
+        return
+      }
+
+      if (typeof graphics.removeAll === "function") {
+        graphics.removeAll()
+      }
+
+      if (!geometry) {
+        return
+      }
+
+      try {
+        const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
+        const esriGeometryJson = convertGeoJsonToEsri(parsed)
+        const esriGeometry = esriGeometryJson
+          ? geometryJsonUtils.fromJSON(esriGeometryJson)
+          : geometryJsonUtils.fromJSON(parsed)
+
+        if (!esriGeometry) {
           return
         }
 
-        try {
-          if (!graphicsLayerRef.current) {
-            const layer = new (GraphicsLayer as any)()
-            graphicsLayerRef.current = layer
-            mapView.map?.add(layer)
-          }
-
-          const layer = graphicsLayerRef.current
-          if (!layer) {
-            return
-          }
-
-          if (typeof layer.removeAll === "function") {
-            layer.removeAll()
-          } else if (layer.graphics?.removeAll) {
-            layer.graphics.removeAll()
-          }
-
-          if (!geometry) {
-            return
-          }
-
-          const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
-          const esriGeometryJson = convertGeoJsonToEsri(parsed)
-          const esriGeometry = esriGeometryJson
-            ? geometryJsonUtils.fromJSON(esriGeometryJson)
-            : geometryJsonUtils.fromJSON(parsed)
-
-          if (!esriGeometry) {
-            return
-          }
-
-          const graphic = new (Graphic as any)({ geometry: esriGeometry })
-          applyDefaultSymbolToGraphic(graphic)
-          if (typeof layer.add === "function") {
-            layer.add(graphic)
-          } else {
-            layer.graphics?.add(graphic)
-          }
-          focusMapViewOnGeometry(mapView, esriGeometry)
-        } catch {
-          // ignore malformed geometry
+        const graphic = new (Graphic as any)({ geometry: esriGeometry })
+        applyDefaultSymbolToGraphic(graphic)
+        if (typeof graphics.add === "function") {
+          graphics.add(graphic)
         }
+        focusMapViewOnGeometry(mapView, esriGeometry)
+      } catch {
+        // ignore malformed geometry
       }
     )
 
     return () => {
       isMounted = false
-      const layer = graphicsLayerRef.current
-      if (layer) {
-        if (typeof layer.removeAll === "function") {
-          layer.removeAll()
-        } else {
-          layer.graphics?.removeAll?.()
-        }
+      const graphics = mapView.graphics
+      if (graphics && typeof graphics.removeAll === "function") {
+        graphics.removeAll()
       }
     }
   }, [applyDefaultSymbolToGraphic, geometry, isReady, mapView])
