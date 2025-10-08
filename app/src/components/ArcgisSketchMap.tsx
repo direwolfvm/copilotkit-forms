@@ -23,6 +23,18 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
+  const isMountedRef = useRef(true)
+  
+  // Debug: Track component state
+  const componentId = useRef(`sketch-${Math.random().toString(36).slice(2, 8)}`)
+  console.log(`[${componentId.current}] ArcgisSketchMap render:`, { 
+    geometry: !!geometry, 
+    geometryLength: geometry?.length,
+    isReady, 
+    hasMapView: !!mapView 
+  })
+
+
 
   const applyDefaultSymbolToGraphic = useCallback((graphic: any) => {
     if (!graphic?.geometry) {
@@ -72,19 +84,23 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
 
   useEffect(() => {
     let cancelled = false
+    console.log(`[${componentId.current}] Loading ArcGIS resources`)
     ensureArcgisResources()
       .then(() => {
         if (!cancelled) {
+          console.log(`[${componentId.current}] ArcGIS resources loaded`)
           setIsReady(true)
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          console.error(`[${componentId.current}] Failed to load ArcGIS resources:`, error)
           setIsReady(false)
         }
       })
     return () => {
       cancelled = true
+      console.log(`[${componentId.current}] Cleanup: ArcGIS resources loading cancelled`)
     }
   }, [])
 
@@ -99,12 +115,14 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
     }
 
     const handleViewReady = (event: CustomEvent) => {
+      console.log(`[${componentId.current}] Map view ready event:`, !!event.detail?.view)
       if (event.detail?.view) {
         setMapView(event.detail.view)
       }
     }
 
     if (mapElement.view) {
+      console.log(`[${componentId.current}] Map element already has view:`, !!mapElement.view)
       setMapView(mapElement.view)
     }
 
@@ -158,51 +176,136 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
   }, [applyDefaultSymbolToGraphic, isReady, updateGeometryFromEsri])
 
   useEffect(() => {
-    if (!isReady || !mapView || !containerRef.current) {
+    console.log(`[${componentId.current}] Geometry effect triggered:`, { 
+      isReady, 
+      hasMapView: !!mapView, 
+      hasContainer: !!containerRef.current,
+      hasGeometry: !!geometry,
+      mapViewReady: mapView?.ready,
+      mapViewDestroyed: mapView?.destroyed
+    })
+    
+    if (!isMountedRef.current || !isReady || !mapView || !containerRef.current || mapView.destroyed) {
+      console.log(`[${componentId.current}] Not ready for geometry processing`)
       return undefined
     }
+    
     const sketchElement = containerRef.current.querySelector("arcgis-sketch") as any
     if (!sketchElement) {
+      console.log(`[${componentId.current}] No sketch element found`)
       return undefined
     }
 
     const requireFn = (window as any).require
     if (!requireFn) {
+      console.log(`[${componentId.current}] No require function available`)
       return undefined
     }
 
-    requireFn(
-      ["esri/Graphic", "esri/geometry/support/jsonUtils"],
-      (Graphic: any, geometryJsonUtils: any) => {
-        const layer: any = sketchElement.layer
-        if (!layer) {
-          return
-        }
-        layer.graphics.removeAll()
-        if (!geometry) {
-          return
-        }
-        try {
-          const parsed = JSON.parse(geometry)
-          const esriGeometryJson = convertGeoJsonToEsri(parsed)
-          const esriGeometry = esriGeometryJson
-            ? geometryJsonUtils.fromJSON(esriGeometryJson)
-            : geometryJsonUtils.fromJSON(parsed)
-          if (!esriGeometry) {
+    let zoomTimeoutId: number | null = null
+
+    // Add a small delay to ensure the sketch element is fully initialized
+    const timeoutId = setTimeout(() => {
+      if (!isMountedRef.current) {
+        console.log(`[${componentId.current}] Geometry processing cancelled - component unmounted`)
+        return
+      }
+
+      requireFn(
+        ["esri/Graphic", "esri/geometry/support/jsonUtils"],
+        (Graphic: any, geometryJsonUtils: any) => {
+          if (!isMountedRef.current) {
+            console.log(`[${componentId.current}] Geometry processing cancelled after require - component unmounted`)
             return
           }
-          const graphic = new (Graphic as any)({ geometry: esriGeometry })
-          applyDefaultSymbolToGraphic(graphic)
-          layer.graphics.add(graphic)
-          focusMapViewOnGeometry(mapView, esriGeometry)
-        } catch {
-          // ignore malformed geometry
+
+          const layer: any = sketchElement.layer
+          if (!layer) {
+            console.log(`[${componentId.current}] No layer found on sketch element`)
+            return
+          }
+          
+          console.log(`[${componentId.current}] Clearing existing graphics`)
+          layer.graphics.removeAll()
+          
+          if (!geometry) {
+            console.log(`[${componentId.current}] No geometry to process`)
+            return
+          }
+          
+          try {
+            console.log(`[${componentId.current}] Processing geometry:`, geometry.slice(0, 100) + '...')
+            const parsed = JSON.parse(geometry)
+            const esriGeometryJson = convertGeoJsonToEsri(parsed)
+            const esriGeometry = esriGeometryJson
+              ? geometryJsonUtils.fromJSON(esriGeometryJson)
+              : geometryJsonUtils.fromJSON(parsed)
+            if (!esriGeometry) {
+              console.log(`[${componentId.current}] Failed to create Esri geometry`)
+              return
+            }
+            console.log(`[${componentId.current}] Adding graphic to layer`)
+            const graphic = new (Graphic as any)({ geometry: esriGeometry })
+            applyDefaultSymbolToGraphic(graphic)
+            layer.graphics.add(graphic)
+            
+            // Add a longer delay and ensure map is ready before zooming
+            zoomTimeoutId = setTimeout(() => {
+              if (!isMountedRef.current) {
+                console.log(`[${componentId.current}] Zoom cancelled - component unmounted`)
+                return
+              }
+              
+              console.log(`[${componentId.current}] Attempting zoom to geometry`)
+              // Validate all requirements before attempting zoom
+              if (mapView && mapView.ready && esriGeometry && !mapView.destroyed) {
+                console.log(`[${componentId.current}] Map view ready, calling focusMapViewOnGeometry`)
+                focusMapViewOnGeometry(mapView, esriGeometry)
+              } else {
+                console.log(`[${componentId.current}] Map view not ready for zoom, waiting...`)
+                if (mapView && typeof mapView.when === 'function' && !mapView.destroyed) {
+                  mapView.when(() => {
+                    if (isMountedRef.current && esriGeometry) {
+                      console.log(`[${componentId.current}] Map view now ready, attempting delayed zoom`)
+                      focusMapViewOnGeometry(mapView, esriGeometry)
+                    }
+                  })
+                }
+              }
+            }, 1000)
+          } catch (error) {
+            console.error(`[${componentId.current}] Error processing geometry:`, error)
+          }
+        }
+      )
+    }, 200)
+
+    return () => {
+      console.log(`[${componentId.current}] Cleaning up geometry effect`)
+      clearTimeout(timeoutId)
+      if (zoomTimeoutId) {
+        clearTimeout(zoomTimeoutId)
+      }
+    }
+  }, [applyDefaultSymbolToGraphic, focusMapViewOnGeometry, geometry, isReady, mapView])
+
+  // Cleanup effect to ensure proper component unmounting
+  useEffect(() => {
+    return () => {
+      console.log(`[${componentId.current}] Component unmounting`)
+      isMountedRef.current = false
+      if (mapView) {
+        try {
+          // Clear any pending operations
+          if (mapView.graphics) {
+            mapView.graphics.removeAll()
+          }
+        } catch (error) {
+          console.log(`[${componentId.current}] Cleanup error:`, error)
         }
       }
-    )
-
-    return undefined
-  }, [applyDefaultSymbolToGraphic, focusMapViewOnGeometry, geometry, isReady, mapView])
+    }
+  }, [mapView])
 
   useEffect(() => {
     if (!isReady || !containerRef.current) {

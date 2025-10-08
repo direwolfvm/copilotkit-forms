@@ -250,34 +250,55 @@ export function getDefaultSymbolForGeometry(geometry: any): ArcgisSymbol | undef
 }
 
 export function focusMapViewOnGeometry(view: any, geometry: any) {
+  console.log('focusMapViewOnGeometry called:', { 
+    hasView: !!view, 
+    hasGoTo: !!(view && typeof view.goTo === "function"), 
+    hasGeometry: !!geometry,
+    viewReady: view?.ready
+  })
+  
   if (!view || typeof view.goTo !== "function" || !geometry) {
+    console.log('focusMapViewOnGeometry: Missing requirements, aborting')
     return
   }
 
   const target = geometry.extent ?? geometry
+  console.log('focusMapViewOnGeometry: Target:', { hasExtent: !!geometry.extent, targetType: target?.type })
+  
   const execute = () => {
+    console.log('focusMapViewOnGeometry: Executing goTo')
     try {
-      const promise = view.goTo(target)
+      const promise = view.goTo(target, { duration: 1000 })
+      console.log('focusMapViewOnGeometry: goTo returned:', !!promise)
       if (promise && typeof promise.catch === "function") {
-        promise.catch(() => undefined)
+        promise.then(() => {
+          console.log('focusMapViewOnGeometry: goTo completed successfully')
+        }).catch((error: any) => {
+          console.log('focusMapViewOnGeometry: goTo failed:', error)
+        })
       }
-    } catch {
-      // ignore goTo errors
+    } catch (error) {
+      console.error('focusMapViewOnGeometry: goTo threw error:', error)
     }
   }
 
   if (view.ready) {
+    console.log('focusMapViewOnGeometry: View ready, executing immediately')
     execute()
     return
   }
 
   if (typeof view.when === "function") {
+    console.log('focusMapViewOnGeometry: View not ready, using view.when()')
     const result = view.when(execute)
     if (result && typeof result.catch === "function") {
-      result.catch(() => undefined)
+      result.catch((error: any) => {
+        console.log('focusMapViewOnGeometry: view.when() failed:', error)
+      })
     }
     return
   }
-
+  
+  console.log('focusMapViewOnGeometry: Fallback - executing anyway')
   execute()
 }

@@ -96,6 +96,9 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
     setIsOpen(event.currentTarget.open)
   }, [])
   const geometry = entry.project.geometry ?? undefined
+  
+
+  
   const handleGeometryChange = useCallback((_change: GeometryChange) => {
     // For read-only viewing, we don't need to handle changes
     // This component is just for viewing existing project geometry
@@ -118,7 +121,7 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
           {isOpen ? (
             <div className="projects-tree__map">
               <ArcgisSketchMap
-                key={`project-${entry.project.id}`}
+                key={`project-map-${entry.project.id}-${isOpen}`}
                 geometry={geometry}
                 onGeometryChange={handleGeometryChange}
               />
