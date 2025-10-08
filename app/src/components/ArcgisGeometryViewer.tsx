@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useRef, useState } from "react"
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import {
   convertGeoJsonToEsri,
@@ -16,6 +16,16 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
   const graphicsLayerRef = useRef<any>(null)
+
+  const applyDefaultSymbolToGraphic = useCallback((graphic: any) => {
+    if (!graphic?.geometry) {
+      return
+    }
+    const symbol = getDefaultSymbolForGeometry(graphic.geometry)
+    if (symbol) {
+      graphic.symbol = symbol
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -63,7 +73,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   }, [isReady])
 
   useEffect(() => {
-    if (!mapView) {
+    if (!isReady || !mapView) {
       return undefined
     }
 
@@ -74,57 +84,65 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
 
     let isMounted = true
 
-    requireFn(
-      ["esri/Graphic", "esri/layers/GraphicsLayer", "esri/geometry/support/jsonUtils"],
-      (Graphic: any, GraphicsLayer: any, geometryJsonUtils: any) => {
-        if (!isMounted) {
-          return
-        }
-
-        if (!graphicsLayerRef.current) {
-          graphicsLayerRef.current = new (GraphicsLayer as any)()
-          mapView.map.add(graphicsLayerRef.current)
-        }
-
-        const layer = graphicsLayerRef.current
-        layer.removeAll()
-
-        if (!geometry) {
-          return
-        }
-
-        try {
-          const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
-          const esriGeometryJson = convertGeoJsonToEsri(parsed)
-          const esriGeometry = esriGeometryJson
-            ? geometryJsonUtils.fromJSON(esriGeometryJson)
-            : geometryJsonUtils.fromJSON(parsed)
-
-          if (!esriGeometry) {
-            return
-          }
-
-          const symbol = getDefaultSymbolForGeometry(esriGeometry)
-          const graphic = new (Graphic as any)({ geometry: esriGeometry })
-          if (symbol) {
-            graphic.symbol = symbol
-          }
-          layer.add(graphic)
-          focusMapViewOnGeometry(mapView, esriGeometry)
-        } catch {
-          // ignore malformed geometry
-        }
+    requireFn(["esri/Graphic", "esri/geometry/support/jsonUtils"], (Graphic: any, geometryJsonUtils: any) => {
+      if (!isMounted) {
+        return
       }
-    )
+
+      const graphics = mapView.graphics
+      if (!graphics) {
+        return
+      }
+
+      if (typeof graphics.removeAll === "function") {
+        graphics.removeAll()
+      }
+
+      if (!geometry) {
+        return
+      }
+
+      try {
+        const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
+        const esriGeometryJson = convertGeoJsonToEsri(parsed)
+        const esriGeometry = esriGeometryJson
+          ? geometryJsonUtils.fromJSON(esriGeometryJson)
+          : geometryJsonUtils.fromJSON(parsed)
+
+        if (!esriGeometry) {
+          return
+        }
+
+        const graphic = new (Graphic as any)({ geometry: esriGeometry })
+        applyDefaultSymbolToGraphic(graphic)
+        if (typeof graphics.add === "function") {
+          graphics.add(graphic)
+        }
+        focusMapViewOnGeometry(mapView, esriGeometry)
+      } catch {
+        // ignore malformed geometry
+      }
+    })
 
     return () => {
       isMounted = false
-      if (graphicsLayerRef.current && mapView?.map) {
-        mapView.map.remove(graphicsLayerRef.current)
-        graphicsLayerRef.current = null
+      const graphics = mapView.graphics
+      if (graphics && typeof graphics.removeAll === "function") {
+        graphics.removeAll()
       }
     }
-  }, [geometry, mapView])
+  }, [applyDefaultSymbolToGraphic, geometry, isReady, mapView])
+
+  useEffect(() => {
+    const view = mapView
+    return () => {
+      const layer = graphicsLayerRef.current
+      if (layer && view?.map?.remove) {
+        view.map.remove(layer)
+      }
+      graphicsLayerRef.current = null
+    }
+  }, [mapView])
 
   const map = useMemo(() => {
     if (!isReady) {
