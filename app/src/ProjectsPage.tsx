@@ -32,38 +32,6 @@ function renderEventData(data: unknown): string {
   }
 }
 
-function normalizeProjectGeometry(value?: string | null): string | undefined {
-  if (typeof value !== "string") {
-    return undefined
-  }
-
-  let current = value.trim()
-  if (!current || current === "null" || current === "undefined") {
-    return undefined
-  }
-
-  for (let depth = 0; depth < 2; depth += 1) {
-    try {
-      const parsed = JSON.parse(current)
-      if (parsed && typeof parsed === "object") {
-        return JSON.stringify(parsed)
-      }
-      if (typeof parsed === "string") {
-        current = parsed.trim()
-        if (!current || current === "null" || current === "undefined") {
-          return undefined
-        }
-        continue
-      }
-      return undefined
-    } catch {
-      return undefined
-    }
-  }
-
-  return current
-}
-
 function ProcessTree({ process }: { process: ProjectProcessSummary }) {
   const formattedUpdated = useMemo(() => formatTimestamp(process.lastUpdated), [process.lastUpdated])
   const formattedCreated = useMemo(() => formatTimestamp(process.createdTimestamp), [process.createdTimestamp])
@@ -127,18 +95,11 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
   const handleToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
     setIsOpen(event.currentTarget.open)
   }, [])
-  const normalizedGeometry = useMemo(
-    () => normalizeProjectGeometry(entry.project.geometry),
-    [entry.project.geometry]
-  )
-  const [sketchGeometry, setSketchGeometry] = useState<string | undefined>(normalizedGeometry)
-  useEffect(() => {
-    setSketchGeometry(normalizedGeometry)
-  }, [normalizedGeometry])
-  const handleGeometryChange = useCallback((change: GeometryChange) => {
-    setSketchGeometry(change.geoJson ?? undefined)
+  const geometry = entry.project.geometry ?? undefined
+  const handleGeometryChange = useCallback((_change: GeometryChange) => {
+    // For read-only viewing, we don't need to handle changes
+    // This component is just for viewing existing project geometry
   }, [])
-  const mapKey = useMemo(() => `${entry.project.id}-${normalizedGeometry ?? "no-geometry"}`, [entry.project.id, normalizedGeometry])
 
   return (
     <li className="projects-tree__project">
@@ -157,13 +118,13 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
           {isOpen ? (
             <div className="projects-tree__map">
               <ArcgisSketchMap
-                key={mapKey}
-                geometry={sketchGeometry}
+                key={`project-${entry.project.id}`}
+                geometry={geometry}
                 onGeometryChange={handleGeometryChange}
               />
             </div>
           ) : null}
-          {isOpen && !sketchGeometry ? (
+          {isOpen && !geometry ? (
             <p className="projects-tree__map-empty projects-tree__empty">No project geometry provided.</p>
           ) : null}
           {entry.project.description ? (
