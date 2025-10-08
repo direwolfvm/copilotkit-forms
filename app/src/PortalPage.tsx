@@ -1014,63 +1014,64 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       clickOutsideToClose={false}
       labels={{ title: "Permitting Copilot" }}
     >
-      <main className="app usa-prose">
-        <header className="app-header">
-          <div>
-            <h1>Project Portal</h1>
-            <p>
-              Start your project by filling out the forms below. The Copilot can translate unstructured notes into the schema or suggest
-              corrections as you work.
-            </p>
-          </div>
-          <div className="actions">
-            <RuntimeSelectionControl />
-            <button type="button" className="usa-button usa-button--outline secondary" onClick={handleReset}>
-              Reset form
-            </button>
-            {isSaving ? (
-              <span className="status" aria-live="polite">Saving…</span>
-            ) : saveError ? (
-              <span className="status status--error" role="alert">{saveError}</span>
-            ) : lastSaved ? (
-              <span className="status">Last saved {lastSaved}</span>
-            ) : null}
-          </div>
-        </header>
-
-        {projectLoadState.status === "loading" ? (
-          <div className="usa-alert usa-alert--info usa-alert--slim" role="status" aria-live="polite">
-            <div className="usa-alert__body">
-              <p className="usa-alert__text">Loading project data…</p>
-            </div>
-          </div>
-        ) : null}
-
-        {projectLoadState.status === "error" ? (
-          <div className="usa-alert usa-alert--error" role="alert">
-            <div className="usa-alert__body">
-              <h3 className="usa-alert__heading">Unable to load project data.</h3>
-              <p className="usa-alert__text">{projectLoadState.message ?? "Please try again."}</p>
-            </div>
-          </div>
-        ) : null}
-
-        {showApiKeyWarning ? (
-          <div className="usa-alert usa-alert--warning usa-alert--slim" role="alert">
-            <div className="usa-alert__body">
-              <h3 className="usa-alert__heading">No Copilot Cloud key detected.</h3>
-              <p className="usa-alert__text">
-                Set <code>VITE_COPILOTKIT_PUBLIC_API_KEY</code> in a <code>.env</code> file to enable live Copilot
-                responses. The form will continue to work without it.
+      <main className="app">
+        <div className="app__inner">
+          <header className="app-header">
+            <div>
+              <h1>Project Portal</h1>
+              <p>
+                Start your project by filling out the forms below. The Copilot can translate unstructured notes into the schema or suggest
+                corrections as you work.
               </p>
             </div>
-          </div>
-        ) : null}
+            <div className="actions">
+              <RuntimeSelectionControl />
+              <button type="button" className="usa-button usa-button--outline secondary" onClick={handleReset}>
+                Reset form
+              </button>
+              {isSaving ? (
+                <span className="status" aria-live="polite">Saving…</span>
+              ) : saveError ? (
+                <span className="status status--error" role="alert">{saveError}</span>
+              ) : lastSaved ? (
+                <span className="status">Last saved {lastSaved}</span>
+              ) : null}
+            </div>
+          </header>
 
-        <section className="content">
-          <ProjectSummary data={formData} />
-          {locationFieldDetail ? (
-            <LocationSection
+          {projectLoadState.status === "loading" ? (
+            <div className="usa-alert usa-alert--info usa-alert--slim" role="status" aria-live="polite">
+              <div className="usa-alert__body">
+                <p className="usa-alert__text">Loading project data…</p>
+              </div>
+            </div>
+          ) : null}
+
+          {projectLoadState.status === "error" ? (
+            <div className="usa-alert usa-alert--error" role="alert">
+              <div className="usa-alert__body">
+                <h3 className="usa-alert__heading">Unable to load project data.</h3>
+                <p className="usa-alert__text">{projectLoadState.message ?? "Please try again."}</p>
+              </div>
+            </div>
+          ) : null}
+
+          {showApiKeyWarning ? (
+            <div className="usa-alert usa-alert--warning usa-alert--slim" role="alert">
+              <div className="usa-alert__body">
+                <h3 className="usa-alert__heading">No Copilot Cloud key detected.</h3>
+                <p className="usa-alert__text">
+                  Set <code>VITE_COPILOTKIT_PUBLIC_API_KEY</code> in a <code>.env</code> file to enable live Copilot
+                    responses. The form will continue to work without it.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          <section className="content">
+            <ProjectSummary data={formData} />
+            {locationFieldDetail ? (
+              <LocationSection
               title={locationFieldDetail.title}
               description={locationFieldDetail.description}
               placeholder={locationFieldDetail.placeholder}
@@ -1105,25 +1106,26 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             onRemoveItem={handleRemoveChecklistItem}
             onBulkAddFromSeed={handleBulkAddFromSeed}
           />
-          <NepaReviewSection
-            values={{
-              nepa_categorical_exclusion_code: formData.nepa_categorical_exclusion_code,
-              nepa_conformance_conditions: formData.nepa_conformance_conditions,
-              nepa_extraordinary_circumstances: formData.nepa_extraordinary_circumstances
-            }}
-            fieldConfigs={nepaFieldConfigs}
-            onFieldChange={handleNepaFieldChange}
-            geospatialResults={geospatialResults}
-            onRunGeospatialScreen={handleRunGeospatialScreen}
-            isRunningGeospatial={isGeospatialRunning}
-            hasGeometry={hasGeometry}
-            bufferMiles={DEFAULT_BUFFER_MILES}
-            onSubmitPreScreeningData={handleSubmitDecisionPayload}
-            preScreeningSubmitState={decisionSubmitState}
-            isProjectSaving={isSaving}
-            canSubmitPreScreening={hasSavedSnapshot}
-          />
-        </section>
+            <NepaReviewSection
+              values={{
+                nepa_categorical_exclusion_code: formData.nepa_categorical_exclusion_code,
+                nepa_conformance_conditions: formData.nepa_conformance_conditions,
+                nepa_extraordinary_circumstances: formData.nepa_extraordinary_circumstances
+              }}
+              fieldConfigs={nepaFieldConfigs}
+              onFieldChange={handleNepaFieldChange}
+              geospatialResults={geospatialResults}
+              onRunGeospatialScreen={handleRunGeospatialScreen}
+              isRunningGeospatial={isGeospatialRunning}
+              hasGeometry={hasGeometry}
+              bufferMiles={DEFAULT_BUFFER_MILES}
+              onSubmitPreScreeningData={handleSubmitDecisionPayload}
+              preScreeningSubmitState={decisionSubmitState}
+              isProjectSaving={isSaving}
+              canSubmitPreScreening={hasSavedSnapshot}
+            />
+          </section>
+        </div>
       </main>
     </CopilotSidebar>
   )

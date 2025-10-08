@@ -13,10 +13,10 @@
   --copilot-kit-shadow-md: var(--shadow);
   --copilot-kit-shadow-lg: 0 60px 120px -68px rgba(3, 20, 48, 0.42);
   --copilot-sidebar-top-offset: calc(
-    var(--layout-site-main-padding-top) + var(--layout-app-top-offset)
+    var(--site-header-height) + var(--layout-site-main-padding-top) + var(--layout-app-top-offset)
   );
   --copilot-sidebar-side-offset: var(--copilot-frame-side-offset);
-  --copilot-sidebar-bottom-offset: var(--layout-app-top-offset);
+  --copilot-sidebar-bottom-offset: 0rem;
   --copilot-sidebar-width: var(--copilot-frame-width);
 }
 
