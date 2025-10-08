@@ -15,7 +15,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
-  const graphicsLayerRef = useRef<any>(null)
+  const hasGraphicsRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -75,19 +75,19 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
     let isMounted = true
 
     requireFn(
-      ["esri/Graphic", "esri/layers/GraphicsLayer", "esri/geometry/support/jsonUtils"],
-      (Graphic: any, GraphicsLayer: any, geometryJsonUtils: any) => {
+      ["esri/Graphic", "esri/geometry/support/jsonUtils"],
+      (Graphic: any, geometryJsonUtils: any) => {
         if (!isMounted) {
           return
         }
 
-        if (!graphicsLayerRef.current) {
-          graphicsLayerRef.current = new (GraphicsLayer as any)()
-          mapView.map.add(graphicsLayerRef.current)
+        const graphics = mapView.graphics
+        if (!graphics) {
+          return
         }
 
-        const layer = graphicsLayerRef.current
-        layer.removeAll()
+        graphics.removeAll()
+        hasGraphicsRef.current = false
 
         if (!geometry) {
           return
@@ -109,7 +109,8 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
           if (symbol) {
             graphic.symbol = symbol
           }
-          layer.add(graphic)
+          graphics.add(graphic)
+          hasGraphicsRef.current = true
           focusMapViewOnGeometry(mapView, esriGeometry)
         } catch {
           // ignore malformed geometry
@@ -119,9 +120,9 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
 
     return () => {
       isMounted = false
-      if (graphicsLayerRef.current && mapView?.map) {
-        mapView.map.remove(graphicsLayerRef.current)
-        graphicsLayerRef.current = null
+      if (hasGraphicsRef.current && mapView?.graphics) {
+        mapView.graphics.removeAll()
+        hasGraphicsRef.current = false
       }
     }
   }, [geometry, mapView])
