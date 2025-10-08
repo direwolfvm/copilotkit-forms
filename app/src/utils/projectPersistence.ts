@@ -115,6 +115,7 @@ export type ProjectSummary = {
   title?: string | null
   description?: string | null
   lastUpdated?: string | null
+  geometry?: string | null
 }
 
 export type ProjectHierarchy = {
@@ -2319,7 +2320,7 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
     "/rest/v1/project",
     "projects",
     (endpoint) => {
-      endpoint.searchParams.set("select", "id,title,description,last_updated")
+      endpoint.searchParams.set("select", "id,title,description,last_updated,location_object")
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
       endpoint.searchParams.append("order", "last_updated.desc.nullslast")
     }
@@ -2424,11 +2425,13 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
     if (typeof projectId !== "number") {
       continue
     }
+    const geometry = safeStringifyJson(row.location_object) ?? null
     const projectSummary: ProjectSummary = {
       id: projectId,
       title: typeof row.title === "string" ? row.title : null,
       description: typeof row.description === "string" ? row.description : null,
-      lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null
+      lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
+      geometry
     }
     const projectProcesses = processesByProject.get(projectId) ?? []
     projectProcesses.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
