@@ -14,6 +14,15 @@
   position: relative;
 }
 
+@media (min-width: 1024px) {
+  .app {
+    padding-right: max(
+      3.25rem,
+      calc(var(--copilot-frame-width) + var(--copilot-frame-side-offset) + 1.5rem)
+    );
+  }
+}
+
 .app::before {
   content: "";
   position: absolute;
