@@ -32,6 +32,38 @@ function renderEventData(data: unknown): string {
   }
 }
 
+function normalizeProjectGeometry(value?: string | null): string | undefined {
+  if (typeof value !== "string") {
+    return undefined
+  }
+
+  let current = value.trim()
+  if (!current || current === "null" || current === "undefined") {
+    return undefined
+  }
+
+  for (let depth = 0; depth < 2; depth += 1) {
+    try {
+      const parsed = JSON.parse(current)
+      if (parsed && typeof parsed === "object") {
+        return JSON.stringify(parsed)
+      }
+      if (typeof parsed === "string") {
+        current = parsed.trim()
+        if (!current || current === "null" || current === "undefined") {
+          return undefined
+        }
+        continue
+      }
+      return undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  return current
+}
+
 function ProcessTree({ process }: { process: ProjectProcessSummary }) {
   const formattedUpdated = useMemo(() => formatTimestamp(process.lastUpdated), [process.lastUpdated])
   const formattedCreated = useMemo(() => formatTimestamp(process.createdTimestamp), [process.createdTimestamp])
@@ -95,13 +127,18 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
   const handleToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
     setIsOpen(event.currentTarget.open)
   }, [])
-  const [sketchGeometry, setSketchGeometry] = useState<string | undefined>(entry.project.geometry ?? undefined)
+  const normalizedGeometry = useMemo(
+    () => normalizeProjectGeometry(entry.project.geometry),
+    [entry.project.geometry]
+  )
+  const [sketchGeometry, setSketchGeometry] = useState<string | undefined>(normalizedGeometry)
   useEffect(() => {
-    setSketchGeometry(entry.project.geometry ?? undefined)
-  }, [entry.project.geometry])
+    setSketchGeometry(normalizedGeometry)
+  }, [normalizedGeometry])
   const handleGeometryChange = useCallback((change: GeometryChange) => {
     setSketchGeometry(change.geoJson ?? undefined)
   }, [])
+  const mapKey = useMemo(() => `${entry.project.id}-${normalizedGeometry ?? "no-geometry"}`, [entry.project.id, normalizedGeometry])
 
   return (
     <li className="projects-tree__project">
@@ -119,7 +156,11 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
         <div className="projects-tree__project-body">
           {isOpen ? (
             <div className="projects-tree__map">
-              <ArcgisSketchMap geometry={sketchGeometry} onGeometryChange={handleGeometryChange} />
+              <ArcgisSketchMap
+                key={mapKey}
+                geometry={sketchGeometry}
+                onGeometryChange={handleGeometryChange}
+              />
             </div>
           ) : null}
           {isOpen && !sketchGeometry ? (
