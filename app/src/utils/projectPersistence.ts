@@ -2270,7 +2270,7 @@ async function fetchProcessDecisionPayloadRows({
     "decision payloads",
     (endpoint) => {
       endpoint.searchParams.set("select", "process_decision_element,evaluation_data,last_updated")
-      endpoint.searchParams.set("process_instance", `eq.${processInstanceId}`)
+      endpoint.searchParams.set("process", `eq.${processInstanceId}`)
     }
   )
 }
