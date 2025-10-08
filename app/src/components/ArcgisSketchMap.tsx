@@ -212,17 +212,11 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       return undefined
     }
 
-    // Add a small delay to ensure the map is fully stable before processing geometry
-    setTimeout(() => {
-      if (!isMountedRef.current) {
-        console.log(`[${componentId.current}] Geometry processing cancelled - component unmounted during delay`)
-        return
-      }
-
-      requireFn(
-        ["esri/Graphic", "esri/geometry/support/jsonUtils"],
-        (Graphic: any, geometryJsonUtils: any) => {
-          const layer: any = sketchElement.layer
+    // Process immediately, don't wait for async operations
+    requireFn(
+      ["esri/Graphic", "esri/geometry/support/jsonUtils"],
+      (Graphic: any, geometryJsonUtils: any) => {
+        const layer: any = sketchElement.layer
         if (!layer) {
           console.log(`[${componentId.current}] No layer found on sketch element`)
           return
@@ -266,7 +260,6 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
         }
       }
     )
-    }, 50) // Small delay to ensure map stability
 
     return undefined
   }, [applyDefaultSymbolToGraphic, focusMapViewOnGeometry, geometry, isReady, mapView])
