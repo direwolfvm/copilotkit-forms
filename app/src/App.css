@@ -4,6 +4,8 @@
   gap: 2.5rem;
   padding: 3rem 3.25rem 3.5rem;
   margin: 3rem auto;
+  margin-top: var(--layout-app-top-offset);
+  margin-bottom: var(--layout-app-top-offset);
   max-width: 1100px;
   width: min(1100px, calc(100% - 4rem));
   background: color-mix(in srgb, var(--surface) 95%, var(--surface-muted) 5%);
@@ -746,8 +748,8 @@
 }
 
 .summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 1.25rem;
 }
 
@@ -761,6 +763,7 @@
   flex-direction: column;
   gap: 0.75rem;
   height: 100%;
+  width: 100%;
 }
 
 .summary-card h3 {
@@ -770,7 +773,7 @@
 }
 
 .summary-card--full {
-  grid-column: 1 / -1;
+  align-self: stretch;
 }
 
 .summary-row {
@@ -829,6 +832,10 @@
 }
 
 @media (max-width: 720px) {
+  :root {
+    --layout-app-top-offset: 2rem;
+  }
+
   .app {
     margin: 2rem 1.5rem;
     padding: 1.9rem 1.6rem 2.4rem;
@@ -854,6 +861,10 @@
 }
 
 @media (max-width: 540px) {
+  :root {
+    --layout-app-top-offset: 1.5rem;
+  }
+
   .app,
   .projects-page {
     margin: 1.5rem 1rem;
@@ -943,7 +954,7 @@
 
 .site-main {
   flex: 1;
-  padding: 2.5rem 0 4rem;
+  padding: var(--layout-site-main-padding-top) 0 var(--layout-site-main-padding-bottom);
 }
 
 .projects-page {
