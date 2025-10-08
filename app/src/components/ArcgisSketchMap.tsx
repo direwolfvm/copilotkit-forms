@@ -186,7 +186,13 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
     })
     
     if (!isMountedRef.current || !isReady || !mapView || !containerRef.current || mapView.destroyed) {
-      console.log(`[${componentId.current}] Not ready for geometry processing`)
+      console.log(`[${componentId.current}] Not ready for geometry processing:`, {
+        mounted: isMountedRef.current,
+        ready: isReady,
+        hasMapView: !!mapView,
+        hasContainer: !!containerRef.current,
+        mapViewDestroyed: mapView?.destroyed
+      })
       return undefined
     }
     
