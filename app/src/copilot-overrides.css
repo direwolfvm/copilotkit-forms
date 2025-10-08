@@ -13,8 +13,9 @@
   --copilot-kit-shadow-md: var(--shadow);
   --copilot-kit-shadow-lg: 0 60px 120px -68px rgba(3, 20, 48, 0.42);
   --copilot-sidebar-top-offset: clamp(5.25rem, 4vw + 3.5rem, 7.25rem);
-  --copilot-sidebar-side-offset: clamp(1.35rem, 3vw, 3rem);
+  --copilot-sidebar-side-offset: var(--copilot-frame-side-offset);
   --copilot-sidebar-bottom-offset: clamp(1.75rem, 6vh, 3.5rem);
+  --copilot-sidebar-width: var(--copilot-frame-width);
 }
 
 .copilotKitSidebar svg {
@@ -34,7 +35,10 @@
     right: var(--copilot-sidebar-side-offset);
     bottom: var(--copilot-sidebar-bottom-offset);
     left: auto;
-    width: min(30rem, calc(100vw - (var(--copilot-sidebar-side-offset) * 2) - 2rem));
+    width: min(
+      var(--copilot-sidebar-width),
+      calc(100vw - (var(--copilot-sidebar-side-offset) * 2) - 2rem)
+    );
     min-height: 0;
     max-height: calc(100vh - (var(--copilot-sidebar-top-offset) + var(--copilot-sidebar-bottom-offset)));
   }

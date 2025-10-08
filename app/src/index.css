@@ -30,6 +30,8 @@
   --callout-border: rgba(31, 79, 153, 0.35);
   --shadow: 0 40px 80px -45px rgba(3, 20, 48, 0.5);
   --shadow-subtle: 0 24px 48px -40px rgba(3, 20, 48, 0.35);
+  --copilot-frame-side-offset: clamp(1.35rem, 3vw, 3rem);
+  --copilot-frame-width: clamp(22rem, 28vw, 30rem);
 }
 
 a {
