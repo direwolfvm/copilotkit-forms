@@ -15,6 +15,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
+  const graphicsLayerRef = useRef<any>(null)
 
   const applyDefaultSymbolToGraphic = useCallback((graphic: any) => {
     if (!graphic?.geometry) {
@@ -72,12 +73,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   }, [isReady])
 
   useEffect(() => {
-    if (!isReady || !mapView || !containerRef.current) {
-      return undefined
-    }
-
-    const sketchElement = containerRef.current.querySelector("arcgis-sketch") as any
-    if (!sketchElement) {
+    if (!isReady || !mapView) {
       return undefined
     }
 
@@ -88,60 +84,88 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
 
     let isMounted = true
 
-    requireFn(["esri/Graphic", "esri/geometry/support/jsonUtils"], (Graphic: any, geometryJsonUtils: any) => {
-      if (!isMounted) {
-        return
-      }
-
-      const layer: any = sketchElement.layer
-      if (!layer) {
-        return
-      }
-
-      layer.graphics.removeAll()
-
-      if (!geometry) {
-        return
-      }
-
-      try {
-        const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
-        const esriGeometryJson = convertGeoJsonToEsri(parsed)
-        const esriGeometry = esriGeometryJson
-          ? geometryJsonUtils.fromJSON(esriGeometryJson)
-          : geometryJsonUtils.fromJSON(parsed)
-
-        if (!esriGeometry) {
+    requireFn(
+      ["esri/Graphic", "esri/geometry/support/jsonUtils", "esri/layers/GraphicsLayer"],
+      (Graphic: any, geometryJsonUtils: any, GraphicsLayer: any) => {
+        if (!isMounted) {
           return
         }
 
-        const graphic = new (Graphic as any)({ geometry: esriGeometry })
-        applyDefaultSymbolToGraphic(graphic)
-        layer.graphics.add(graphic)
-        focusMapViewOnGeometry(mapView, esriGeometry)
-      } catch {
-        // ignore malformed geometry
+        try {
+          if (!graphicsLayerRef.current) {
+            const layer = new (GraphicsLayer as any)()
+            graphicsLayerRef.current = layer
+            mapView.map?.add(layer)
+          }
+
+          const layer = graphicsLayerRef.current
+          if (!layer) {
+            return
+          }
+
+          if (typeof layer.removeAll === "function") {
+            layer.removeAll()
+          } else if (layer.graphics?.removeAll) {
+            layer.graphics.removeAll()
+          }
+
+          if (!geometry) {
+            return
+          }
+
+          const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
+          const esriGeometryJson = convertGeoJsonToEsri(parsed)
+          const esriGeometry = esriGeometryJson
+            ? geometryJsonUtils.fromJSON(esriGeometryJson)
+            : geometryJsonUtils.fromJSON(parsed)
+
+          if (!esriGeometry) {
+            return
+          }
+
+          const graphic = new (Graphic as any)({ geometry: esriGeometry })
+          applyDefaultSymbolToGraphic(graphic)
+          if (typeof layer.add === "function") {
+            layer.add(graphic)
+          } else {
+            layer.graphics?.add(graphic)
+          }
+          focusMapViewOnGeometry(mapView, esriGeometry)
+        } catch {
+          // ignore malformed geometry
+        }
       }
-    })
+    )
 
     return () => {
       isMounted = false
-      const layer: any = sketchElement.layer
-      if (layer?.graphics) {
-        layer.graphics.removeAll()
+      const layer = graphicsLayerRef.current
+      if (layer) {
+        if (typeof layer.removeAll === "function") {
+          layer.removeAll()
+        } else {
+          layer.graphics?.removeAll?.()
+        }
       }
     }
   }, [applyDefaultSymbolToGraphic, geometry, isReady, mapView])
+
+  useEffect(() => {
+    const view = mapView
+    return () => {
+      const layer = graphicsLayerRef.current
+      if (layer && view?.map?.remove) {
+        view.map.remove(layer)
+      }
+      graphicsLayerRef.current = null
+    }
+  }, [mapView])
 
   const map = useMemo(() => {
     if (!isReady) {
       return <div className="projects-map__loading">Loading map…</div>
     }
-    return createElement(
-      "arcgis-map",
-      { basemap: "topo-vector", center: "-98,39", zoom: "4" },
-      createElement("arcgis-sketch", { key: "sketch", style: { display: "none" } })
-    )
+    return createElement("arcgis-map", { basemap: "topo-vector", center: "-98,39", zoom: "4" })
   }, [isReady])
 
   return (
