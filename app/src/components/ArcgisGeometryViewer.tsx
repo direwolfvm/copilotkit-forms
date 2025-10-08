@@ -72,12 +72,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   }, [isReady])
 
   useEffect(() => {
-    if (!isReady || !mapView || !containerRef.current) {
-      return undefined
-    }
-
-    const sketchElement = containerRef.current.querySelector("arcgis-sketch") as any
-    if (!sketchElement) {
+    if (!isReady || !mapView) {
       return undefined
     }
 
@@ -93,12 +88,14 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
         return
       }
 
-      const layer: any = sketchElement.layer
-      if (!layer) {
+      const graphics = mapView.graphics
+      if (!graphics) {
         return
       }
 
-      layer.graphics.removeAll()
+      if (typeof graphics.removeAll === "function") {
+        graphics.removeAll()
+      }
 
       if (!geometry) {
         return
@@ -117,7 +114,9 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
 
         const graphic = new (Graphic as any)({ geometry: esriGeometry })
         applyDefaultSymbolToGraphic(graphic)
-        layer.graphics.add(graphic)
+        if (typeof graphics.add === "function") {
+          graphics.add(graphic)
+        }
         focusMapViewOnGeometry(mapView, esriGeometry)
       } catch {
         // ignore malformed geometry
@@ -126,9 +125,9 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
 
     return () => {
       isMounted = false
-      const layer: any = sketchElement.layer
-      if (layer?.graphics) {
-        layer.graphics.removeAll()
+      const graphics = mapView.graphics
+      if (graphics && typeof graphics.removeAll === "function") {
+        graphics.removeAll()
       }
     }
   }, [applyDefaultSymbolToGraphic, geometry, isReady, mapView])
@@ -137,11 +136,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
     if (!isReady) {
       return <div className="projects-map__loading">Loading map…</div>
     }
-    return createElement(
-      "arcgis-map",
-      { basemap: "topo-vector", center: "-98,39", zoom: "4" },
-      createElement("arcgis-sketch", { key: "sketch", style: { display: "none" } })
-    )
+    return createElement("arcgis-map", { basemap: "topo-vector", center: "-98,39", zoom: "4" })
   }, [isReady])
 
   return (
