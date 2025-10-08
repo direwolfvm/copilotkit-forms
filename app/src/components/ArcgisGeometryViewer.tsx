@@ -15,6 +15,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
+  const graphicsLayerRef = useRef<any>(null)
 
   const applyDefaultSymbolToGraphic = useCallback((graphic: any) => {
     if (!graphic?.geometry) {
@@ -121,7 +122,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
       } catch {
         // ignore malformed geometry
       }
-    })
+    )
 
     return () => {
       isMounted = false
@@ -131,6 +132,17 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
       }
     }
   }, [applyDefaultSymbolToGraphic, geometry, isReady, mapView])
+
+  useEffect(() => {
+    const view = mapView
+    return () => {
+      const layer = graphicsLayerRef.current
+      if (layer && view?.map?.remove) {
+        view.map.remove(layer)
+      }
+      graphicsLayerRef.current = null
+    }
+  }, [mapView])
 
   const map = useMemo(() => {
     if (!isReady) {
