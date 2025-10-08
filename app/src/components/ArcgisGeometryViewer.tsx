@@ -16,6 +16,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
   const graphicsLayerRef = useRef<any>(null)
+  const [geometryError, setGeometryError] = useState<string | null>(null)
 
   const applyDefaultSymbolToGraphic = useCallback((graphic: any) => {
     if (!graphic?.geometry) {
@@ -83,52 +84,89 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
     }
 
     let isMounted = true
+    setGeometryError(null)
 
-    requireFn(["esri/Graphic", "esri/geometry/support/jsonUtils"], (Graphic: any, geometryJsonUtils: any) => {
-      if (!isMounted) {
-        return
-      }
-
-      const graphics = mapView.graphics
-      if (!graphics) {
-        return
-      }
-
-      if (typeof graphics.removeAll === "function") {
-        graphics.removeAll()
-      }
-
-      if (!geometry) {
-        return
-      }
-
-      try {
-        const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
-        const esriGeometryJson = convertGeoJsonToEsri(parsed)
-        const esriGeometry = esriGeometryJson
-          ? geometryJsonUtils.fromJSON(esriGeometryJson)
-          : geometryJsonUtils.fromJSON(parsed)
-
-        if (!esriGeometry) {
+    requireFn(
+      ["esri/Graphic", "esri/geometry/support/jsonUtils", "esri/layers/GraphicsLayer"],
+      (Graphic: any, geometryJsonUtils: any, GraphicsLayer: any) => {
+        if (!isMounted) {
           return
         }
 
-        const graphic = new (Graphic as any)({ geometry: esriGeometry })
-        applyDefaultSymbolToGraphic(graphic)
-        if (typeof graphics.add === "function") {
-          graphics.add(graphic)
+        let layer = graphicsLayerRef.current
+        if (!layer && GraphicsLayer) {
+          try {
+            layer = new (GraphicsLayer as any)()
+            graphicsLayerRef.current = layer
+            const map = mapView.map
+            if (map && typeof map.add === "function") {
+              const layers = map.layers
+              const alreadyAdded = layers?.includes ? layers.includes(layer) : false
+              if (!alreadyAdded) {
+                map.add(layer)
+              }
+            }
+          } catch {
+            layer = null
+          }
         }
-        focusMapViewOnGeometry(mapView, esriGeometry)
-      } catch {
-        // ignore malformed geometry
+
+        const target =
+          layer && typeof layer.removeAll === "function" ? layer : mapView.graphics ?? null
+
+        if (!target) {
+          if (isMounted) {
+            setGeometryError("Unable to render project geometry.")
+          }
+          return
+        }
+
+        if (typeof target.removeAll === "function") {
+          target.removeAll()
+        }
+
+        if (!geometry) {
+          return
+        }
+
+        try {
+          const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
+          const esriGeometryJson = convertGeoJsonToEsri(parsed)
+          const esriGeometry = esriGeometryJson
+            ? geometryJsonUtils.fromJSON(esriGeometryJson)
+            : geometryJsonUtils.fromJSON(parsed)
+
+          if (!esriGeometry) {
+            if (isMounted) {
+              setGeometryError("Project geometry could not be parsed.")
+            }
+            return
+          }
+
+          const graphic = new (Graphic as any)({ geometry: esriGeometry })
+          applyDefaultSymbolToGraphic(graphic)
+          if (typeof target.add === "function") {
+            target.add(graphic)
+            if (isMounted) {
+              setGeometryError(null)
+            }
+          }
+          focusMapViewOnGeometry(mapView, esriGeometry)
+        } catch {
+          if (isMounted) {
+            setGeometryError("Project geometry could not be parsed.")
+          }
+        }
       }
-    })
+    )
 
     return () => {
       isMounted = false
-      const graphics = mapView.graphics
-      if (graphics && typeof graphics.removeAll === "function") {
-        graphics.removeAll()
+      const layer = graphicsLayerRef.current
+      if (layer && typeof layer.removeAll === "function") {
+        layer.removeAll()
+      } else if (mapView.graphics && typeof mapView.graphics.removeAll === "function") {
+        mapView.graphics.removeAll()
       }
     }
   }, [applyDefaultSymbolToGraphic, geometry, isReady, mapView])
@@ -154,7 +192,10 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   return (
     <div className="projects-map" ref={containerRef}>
       {map}
-      {!geometry ? <p className="projects-map__empty">No project geometry available.</p> : null}
+      {!geometry && !geometryError ? (
+        <p className="projects-map__empty">No project geometry available.</p>
+      ) : null}
+      {geometryError ? <p className="projects-map__empty">{geometryError}</p> : null}
     </div>
   )
 }
