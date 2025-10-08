@@ -8,7 +8,7 @@ import {
   type ProjectHierarchy,
   type ProjectProcessSummary
 } from "./utils/projectPersistence"
-import { ArcgisGeometryViewer } from "./components/ArcgisGeometryViewer"
+import { ArcgisSketchMap, type GeometryChange } from "./components/ArcgisSketchMap"
 
 function formatTimestamp(value?: string | null): string | undefined {
   if (!value) {
@@ -95,7 +95,13 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
   const handleToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
     setIsOpen(event.currentTarget.open)
   }, [])
-  const geometry = entry.project.geometry ?? undefined
+  const [sketchGeometry, setSketchGeometry] = useState<string | undefined>(entry.project.geometry ?? undefined)
+  useEffect(() => {
+    setSketchGeometry(entry.project.geometry ?? undefined)
+  }, [entry.project.geometry])
+  const handleGeometryChange = useCallback((change: GeometryChange) => {
+    setSketchGeometry(change.geoJson ?? undefined)
+  }, [])
 
   return (
     <li className="projects-tree__project">
@@ -113,10 +119,10 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
         <div className="projects-tree__project-body">
           {isOpen ? (
             <div className="projects-tree__map">
-              <ArcgisGeometryViewer geometry={geometry} />
+              <ArcgisSketchMap geometry={sketchGeometry} onGeometryChange={handleGeometryChange} />
             </div>
           ) : null}
-          {isOpen && !geometry ? (
+          {isOpen && !sketchGeometry ? (
             <p className="projects-tree__map-empty projects-tree__empty">No project geometry provided.</p>
           ) : null}
           {entry.project.description ? (
