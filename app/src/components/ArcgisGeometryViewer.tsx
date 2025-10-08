@@ -83,82 +83,128 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
       return undefined
     }
 
+    let isCancelled = false
+
+    requireFn(["esri/layers/GraphicsLayer"], (GraphicsLayer: any) => {
+      if (isCancelled) {
+        return
+      }
+
+      let layer = graphicsLayerRef.current
+      if (!layer && GraphicsLayer) {
+        try {
+          const LayerCtor = (GraphicsLayer as any)?.default ?? GraphicsLayer
+          layer = new LayerCtor()
+          graphicsLayerRef.current = layer
+        } catch {
+          layer = null
+        }
+      }
+
+      if (!layer) {
+        return
+      }
+
+      const map = mapView.map
+      if (map && typeof map.add === "function") {
+        const layers = map.layers
+        const alreadyAdded =
+          layers?.includes?.(layer) ??
+          (layers?.some ? layers.some((existing: any) => existing === layer) : false)
+        if (!alreadyAdded) {
+          map.add(layer)
+        }
+      }
+    })
+
+    return () => {
+      isCancelled = true
+      const layer = graphicsLayerRef.current
+      if (layer && mapView?.map?.remove) {
+        try {
+          mapView.map.remove(layer)
+        } catch {
+          // ignore failures when tearing down the view
+        }
+      }
+      if (graphicsLayerRef.current === layer) {
+        graphicsLayerRef.current = null
+      }
+    }
+  }, [isReady, mapView])
+
+  useEffect(() => {
+    if (!isReady || !mapView) {
+      return undefined
+    }
+
+    const requireFn = (window as any).require
+    if (!requireFn) {
+      return undefined
+    }
+
     let isMounted = true
     setGeometryError(null)
 
-    requireFn(
-      ["esri/Graphic", "esri/geometry/support/jsonUtils", "esri/layers/GraphicsLayer"],
-      (Graphic: any, geometryJsonUtils: any, GraphicsLayer: any) => {
-        if (!isMounted) {
-          return
+    requireFn(["esri/Graphic", "esri/geometry/support/jsonUtils"], (Graphic: any, geometryJsonUtils: any) => {
+      if (!isMounted) {
+        return
+      }
+
+      const layer = graphicsLayerRef.current
+      const target =
+        layer && typeof layer.removeAll === "function" && typeof layer.add === "function"
+          ? layer
+          : mapView.graphics &&
+              typeof mapView.graphics.removeAll === "function" &&
+              typeof mapView.graphics.add === "function"
+            ? mapView.graphics
+            : null
+
+      if (!target) {
+        if (isMounted) {
+          setGeometryError("Unable to render project geometry.")
         }
+        return
+      }
 
-        let layer = graphicsLayerRef.current
-        if (!layer && GraphicsLayer) {
-          try {
-            layer = new (GraphicsLayer as any)()
-            graphicsLayerRef.current = layer
-            const map = mapView.map
-            if (map && typeof map.add === "function") {
-              const layers = map.layers
-              const alreadyAdded = layers?.includes ? layers.includes(layer) : false
-              if (!alreadyAdded) {
-                map.add(layer)
-              }
-            }
-          } catch {
-            layer = null
-          }
-        }
+      if (typeof target.removeAll === "function") {
+        target.removeAll()
+      }
 
-        const target =
-          layer && typeof layer.removeAll === "function" ? layer : mapView.graphics ?? null
+      if (!geometry) {
+        return
+      }
 
-        if (!target) {
-          if (isMounted) {
-            setGeometryError("Unable to render project geometry.")
-          }
-          return
-        }
+      try {
+        const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
+        const esriGeometryJson = convertGeoJsonToEsri(parsed)
+        const esriGeometry = esriGeometryJson
+          ? geometryJsonUtils.fromJSON(esriGeometryJson)
+          : geometryJsonUtils.fromJSON(parsed)
 
-        if (typeof target.removeAll === "function") {
-          target.removeAll()
-        }
-
-        if (!geometry) {
-          return
-        }
-
-        try {
-          const parsed = typeof geometry === "string" ? JSON.parse(geometry) : geometry
-          const esriGeometryJson = convertGeoJsonToEsri(parsed)
-          const esriGeometry = esriGeometryJson
-            ? geometryJsonUtils.fromJSON(esriGeometryJson)
-            : geometryJsonUtils.fromJSON(parsed)
-
-          if (!esriGeometry) {
-            if (isMounted) {
-              setGeometryError("Project geometry could not be parsed.")
-            }
-            return
-          }
-
-          const graphic = new (Graphic as any)({ geometry: esriGeometry })
-          applyDefaultSymbolToGraphic(graphic)
-          if (typeof target.add === "function") {
-            target.add(graphic)
-            if (isMounted) {
-              setGeometryError(null)
-            }
-          }
-          focusMapViewOnGeometry(mapView, esriGeometry)
-        } catch {
+        if (!esriGeometry) {
           if (isMounted) {
             setGeometryError("Project geometry could not be parsed.")
           }
+          return
+        }
+
+        const graphic = new (Graphic as any)({ geometry: esriGeometry })
+        applyDefaultSymbolToGraphic(graphic)
+        if (typeof target.add === "function") {
+          target.add(graphic)
+          if (isMounted) {
+            setGeometryError(null)
+          }
+        }
+        focusMapViewOnGeometry(mapView, esriGeometry)
+      } catch {
+        if (isMounted) {
+          setGeometryError("Project geometry could not be parsed.")
         }
       }
-    )
+    })
 
     return () => {
       isMounted = false
@@ -170,17 +216,6 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
       }
     }
   }, [applyDefaultSymbolToGraphic, geometry, isReady, mapView])
-
-  useEffect(() => {
-    const view = mapView
-    return () => {
-      const layer = graphicsLayerRef.current
-      if (layer && view?.map?.remove) {
-        view.map.remove(layer)
-      }
-      graphicsLayerRef.current = null
-    }
-  }, [mapView])
 
   const map = useMemo(() => {
     if (!isReady) {
