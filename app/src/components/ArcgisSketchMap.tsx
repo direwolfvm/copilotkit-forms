@@ -246,14 +246,8 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
           if (mapView && mapView.ready && !mapView.destroyed) {
             console.log(`[${componentId.current}] Map view ready, calling focusMapViewOnGeometry`)
             focusMapViewOnGeometry(mapView, esriGeometry)
-          } else if (mapView && !mapView.destroyed) {
-            console.log(`[${componentId.current}] Map view not ready, using when() callback`)
-            mapView.when(() => {
-              console.log(`[${componentId.current}] Map view ready via when(), attempting zoom`)
-              focusMapViewOnGeometry(mapView, esriGeometry)
-            }).catch((error: any) => {
-              console.log(`[${componentId.current}] Map view when() failed:`, error)
-            })
+          } else {
+            console.log(`[${componentId.current}] Map view not ready, skipping zoom`)
           }
         } catch (error) {
           console.error(`[${componentId.current}] Error processing geometry:`, error)
