@@ -122,7 +122,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
       } catch {
         // ignore malformed geometry
       }
-    )
+    })
 
     return () => {
       isMounted = false
