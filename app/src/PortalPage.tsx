@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
 import type { ChangeEvent } from "react"
 import Form from "@rjsf/core"
@@ -138,6 +138,10 @@ function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function createInitialGeospatialResults(): GeospatialResultsState {
+  return { nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] }
+}
+
 type PersistedProjectFormState = {
   formData: ProjectFormData
   lastSaved?: string
@@ -177,35 +181,70 @@ function RuntimeSelectionControl() {
 }
 
 function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotProps) {
-  const [formData, setFormData] = useState<ProjectFormData>(() =>
-    persistedProjectFormState ? cloneValue(persistedProjectFormState.formData) : createEmptyProjectData()
+  const { projectId } = useParams<{ projectId?: string }>()
+  const [formData, setFormData] = useState<ProjectFormData>(() => {
+    if (!projectId) {
+      return createEmptyProjectData()
+    }
+    return persistedProjectFormState
+      ? cloneValue(persistedProjectFormState.formData)
+      : createEmptyProjectData()
+  })
+  const [lastSaved, setLastSaved] = useState<string | undefined>(() =>
+    projectId && persistedProjectFormState ? persistedProjectFormState.lastSaved : undefined
   )
-  const [lastSaved, setLastSaved] = useState<string | undefined>(() => persistedProjectFormState?.lastSaved)
   const [geospatialResults, setGeospatialResults] = useState<GeospatialResultsState>(() =>
-    persistedProjectFormState
+    projectId && persistedProjectFormState
       ? cloneValue(persistedProjectFormState.geospatialResults)
-      : { nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] }
+      : createInitialGeospatialResults()
   )
   const [permittingChecklist, setPermittingChecklist] = useState<PermittingChecklistItem[]>(() =>
-    persistedProjectFormState ? cloneValue(persistedProjectFormState.permittingChecklist) : []
+    projectId && persistedProjectFormState ? cloneValue(persistedProjectFormState.permittingChecklist) : []
   )
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>(undefined)
   const [decisionSubmitState, setDecisionSubmitState] = useState<DecisionSubmitState>({ status: "idle" })
-  const [hasSavedSnapshot, setHasSavedSnapshot] = useState<boolean>(
-    () => persistedProjectFormState?.hasSavedSnapshot ?? false
+  const [hasSavedSnapshot, setHasSavedSnapshot] = useState<boolean>(() =>
+    projectId && persistedProjectFormState ? persistedProjectFormState.hasSavedSnapshot : false
   )
-  const { projectId } = useParams<{ projectId?: string }>()
+  const previousProjectIdRef = useRef<string | undefined>(projectId)
   const [projectLoadState, setProjectLoadState] = useState<{
     status: "idle" | "loading" | "error"
     message?: string
   }>({ status: "idle" })
 
+  const resetPortalState = useCallback(() => {
+    persistedProjectFormState = undefined
+    setFormData(createEmptyProjectData())
+    setLastSaved(undefined)
+    setGeospatialResults(createInitialGeospatialResults())
+    setPermittingChecklist([])
+    setSaveError(undefined)
+    setIsSaving(false)
+    setDecisionSubmitState({ status: "idle" })
+    setHasSavedSnapshot(false)
+  }, [
+    setFormData,
+    setLastSaved,
+    setGeospatialResults,
+    setPermittingChecklist,
+    setSaveError,
+    setIsSaving,
+    setDecisionSubmitState,
+    setHasSavedSnapshot
+  ])
+
   useEffect(() => {
     if (!projectId) {
+      if (previousProjectIdRef.current !== projectId) {
+        resetPortalState()
+      }
+      previousProjectIdRef.current = projectId
       setProjectLoadState((previous) => (previous.status === "idle" ? previous : { status: "idle" }))
       return
     }
+
+    previousProjectIdRef.current = projectId
 
     const trimmed = projectId.trim()
     const parsedId = Number.parseInt(trimmed, 10)
@@ -274,13 +313,16 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     }
   }, [
     projectId,
+    resetPortalState,
     setFormData,
     setGeospatialResults,
     setPermittingChecklist,
     setLastSaved,
     setSaveError,
     setIsSaving,
-    setDecisionSubmitState
+    setDecisionSubmitState,
+    setHasSavedSnapshot,
+    setProjectLoadState
   ])
 
   useEffect(() => {
@@ -766,14 +808,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   }
 
   const handleReset = () => {
-    setFormData(createEmptyProjectData())
-    setLastSaved(undefined)
-    setGeospatialResults({ nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] })
-    setPermittingChecklist([])
-    setSaveError(undefined)
-    setIsSaving(false)
-    setDecisionSubmitState({ status: "idle" })
-    setHasSavedSnapshot(false)
+    resetPortalState()
   }
 
   const updateLocationFields = useCallback(
