@@ -918,7 +918,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             if (text) {
               try {
                 payload = JSON.parse(text)
-              } catch (error) {
+              } catch {
                 payload = { data: text }
               }
             }
@@ -972,7 +972,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             if (text) {
               try {
                 payload = JSON.parse(text)
-              } catch (error) {
+              } catch {
                 payload = { data: text }
               }
             }

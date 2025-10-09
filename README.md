@@ -10,10 +10,15 @@ CopilotKit actions.
 
 ## Getting started
 
+> **Prerequisite:** Use Node.js 18 or newer. The refreshed Vite, ESLint, and TypeScript toolchain
+> relies on modern Node features and will refuse to install under older runtimes.
+
 ```bash
 cd app
 npm install
 cp .env.example .env            # add your CopilotKit public API key
+npm run lint                    # optional but recommended to confirm a clean install
+npm run build                   # validates the type checker before starting dev mode
 npm run dev
 ```
 
@@ -21,11 +26,18 @@ The dev server prints a URL (defaults to `http://localhost:5173`). If you are ru
 container or Codespace, append Vite flags so the preview is reachable from your browser:
 
 ```bash
-npm run dev -- --host 0.0.0.0 --port 4173
+npm run dev -- --host 0.0.0.0 --port 4173 --clearScreen false
 ```
 
 No Copilot API key is required to test the UI—the sidebar simply displays an in-app warning instead
 of streaming AI responses.
+
+If `npm run dev` fails after upgrading dependencies, clear any cached artifacts and reinstall:
+
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
 
 ## What’s included
 
