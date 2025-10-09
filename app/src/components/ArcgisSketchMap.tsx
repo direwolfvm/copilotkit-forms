@@ -8,6 +8,9 @@ import {
   getDefaultSymbolForGeometry
 } from "./arcgisResources"
 
+const DEFAULT_VIEW_CENTER: [number, number] = [-98, 39]
+const DEFAULT_VIEW_ZOOM = 4
+
 type GeometryChange = {
   geoJson?: string
   latitude?: number
@@ -47,6 +50,33 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
       graphic.symbol = symbol
     }
   }, [])
+
+  const resetMapView = useCallback(() => {
+    if (!mapView || mapView.destroyed) {
+      return
+    }
+
+    try {
+      if (mapView.graphics && typeof mapView.graphics.removeAll === "function") {
+        mapView.graphics.removeAll()
+      }
+    } catch (error) {
+      console.log(`[${componentId.current}] Failed to clear view graphics:`, error)
+    }
+
+    try {
+      const promise = mapView.goTo({ center: DEFAULT_VIEW_CENTER, zoom: DEFAULT_VIEW_ZOOM })
+      if (promise && typeof promise.catch === "function") {
+        promise.catch((error: any) => {
+          if (error?.name !== "AbortError") {
+            console.log(`[${componentId.current}] Map view reset failed:`, error)
+          }
+        })
+      }
+    } catch (error) {
+      console.log(`[${componentId.current}] Map view reset threw error:`, error)
+    }
+  }, [mapView])
 
   const updateGeometryFromEsri = useCallback(
     (incomingGeometry: any | undefined) => {
@@ -207,23 +237,35 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
       mapViewDestroyed: mapView?.destroyed
     })
     
-    if (!isReady || !mapView || !containerRef.current || mapView.destroyed || !geometry) {
-      console.log(`[${componentId.current}] Not ready for geometry processing:`, {
-        mounted: isMountedRef.current,
-        ready: isReady,
-        hasMapView: !!mapView,
-        hasContainer: !!containerRef.current,
-        mapViewDestroyed: mapView?.destroyed,
-        hasGeometry: !!geometry
-      })
+    if (!isReady || !containerRef.current) {
+      console.log(`[${componentId.current}] Geometry effect skipped - map not ready`)
       return undefined
     }
 
-    console.log(`[${componentId.current}] All conditions met - processing geometry immediately`)
-    
     const sketchElement = containerRef.current.querySelector("arcgis-sketch") as any
     if (!sketchElement) {
-      console.log(`[${componentId.current}] No sketch element found`)
+      console.log(`[${componentId.current}] Geometry effect skipped - no sketch element`)
+      return undefined
+    }
+
+    const layer: any = sketchElement.layer
+
+    if (!geometry) {
+      console.log(`[${componentId.current}] Geometry cleared - resetting map`)
+      try {
+        layer?.graphics?.removeAll?.()
+      } catch (error) {
+        console.log(`[${componentId.current}] Failed to clear sketch graphics:`, error)
+      }
+      resetMapView()
+      return undefined
+    }
+
+    if (!mapView || mapView.destroyed) {
+      console.log(`[${componentId.current}] Geometry effect waiting for map view`, {
+        hasMapView: !!mapView,
+        destroyed: mapView?.destroyed
+      })
       return undefined
     }
 
@@ -233,21 +275,21 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
       return undefined
     }
 
-    // Process immediately, don't wait for async operations
+    console.log(`[${componentId.current}] Processing incoming geometry`)
+
     requireFn(
       ["esri/Graphic", "esri/geometry/support/jsonUtils"],
       (Graphic: any, geometryJsonUtils: any) => {
-        const layer: any = sketchElement.layer
         if (!layer) {
           console.log(`[${componentId.current}] No layer found on sketch element`)
           return
         }
-        
+
         console.log(`[${componentId.current}] Clearing existing graphics`)
         layer.graphics.removeAll()
-        
+
         try {
-          console.log(`[${componentId.current}] Processing geometry:`, geometry.slice(0, 100) + '...')
+          console.log(`[${componentId.current}] Processing geometry:`, geometry.slice(0, 100) + "...")
           const parsed = JSON.parse(geometry)
           const esriGeometryJson = convertGeoJsonToEsri(parsed)
           const esriGeometry = esriGeometryJson
@@ -261,21 +303,9 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
           const graphic = new (Graphic as any)({ geometry: esriGeometry })
           applyDefaultSymbolToGraphic(graphic)
           layer.graphics.add(graphic)
-          
-          // Zoom immediately - don't check mounted state since we're processing synchronously
-          console.log(`[${componentId.current}] Attempting immediate zoom to geometry`, {
-            hasMapView: !!mapView,
-            mapViewReady: mapView?.ready,
-            mapViewDestroyed: mapView?.destroyed
-          })
-          
-          // Try zoom regardless of ready state - let focusMapViewOnGeometry handle the validation
-          if (mapView && !mapView.destroyed) {
-            console.log(`[${componentId.current}] Map view exists, calling focusMapViewOnGeometry`)
-            focusMapViewOnGeometry(mapView, esriGeometry)
-          } else {
-            console.log(`[${componentId.current}] Map view missing or destroyed, skipping zoom`)
-          }
+
+          console.log(`[${componentId.current}] Focusing map on geometry`)
+          focusMapViewOnGeometry(mapView, esriGeometry)
         } catch (error) {
           console.error(`[${componentId.current}] Error processing geometry:`, error)
         }
@@ -283,7 +313,14 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
     )
 
     return undefined
-  }, [applyDefaultSymbolToGraphic, focusMapViewOnGeometry, geometry, isReady, mapView])
+  }, [
+    applyDefaultSymbolToGraphic,
+    focusMapViewOnGeometry,
+    geometry,
+    isReady,
+    mapView,
+    resetMapView
+  ])
 
   // Cleanup effect to ensure proper component unmounting
   useEffect(() => {
