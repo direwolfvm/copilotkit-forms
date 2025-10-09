@@ -21,9 +21,15 @@ type ArcgisSketchMapProps = {
   geometry?: string
   onGeometryChange: (change: GeometryChange) => void
   isVisible?: boolean
+  hideSketchWidget?: boolean
 }
 
-export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }: ArcgisSketchMapProps) {
+export function ArcgisSketchMap({
+  geometry,
+  onGeometryChange,
+  isVisible = true,
+  hideSketchWidget = false
+}: ArcgisSketchMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
@@ -193,6 +199,20 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
       return undefined
     }
 
+    if (hideSketchWidget) {
+      try {
+        if (sketchElement.visible !== false) {
+          sketchElement.visible = false
+        }
+        const widget = sketchElement.widget
+        if (widget && widget.visible !== false) {
+          widget.visible = false
+        }
+      } catch (error) {
+        console.log(`[${componentId.current}] Failed to hide sketch widget:`, error)
+      }
+    }
+
     const handleCreate = (event: CustomEvent) => {
       if (event.detail?.state === "complete") {
         if (event.detail?.graphic) {
@@ -224,7 +244,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
       sketchElement.removeEventListener("arcgisUpdate", handleUpdate as EventListener)
       sketchElement.removeEventListener("arcgisDelete", handleDelete as EventListener)
     }
-  }, [applyDefaultSymbolToGraphic, isReady, updateGeometryFromEsri])
+  }, [applyDefaultSymbolToGraphic, hideSketchWidget, isReady, updateGeometryFromEsri])
 
   // Process geometry synchronously when conditions are met
   useEffect(() => {
