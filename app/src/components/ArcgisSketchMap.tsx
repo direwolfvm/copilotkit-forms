@@ -9,7 +9,7 @@ import {
 } from "./arcgisResources"
 
 const DEFAULT_VIEW_CENTER: [number, number] = [-98, 39]
-const DEFAULT_VIEW_ZOOM = 4
+const DEFAULT_VIEW_ZOOM = 3
 
 type GeometryChange = {
   geoJson?: string
