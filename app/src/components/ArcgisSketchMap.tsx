@@ -8,6 +8,9 @@ import {
   getDefaultSymbolForGeometry
 } from "./arcgisResources"
 
+const DEFAULT_MAP_CENTER = [-98, 39] as const
+const DEFAULT_MAP_ZOOM = 4
+
 type GeometryChange = {
   geoJson?: string
   latitude?: number
@@ -28,6 +31,8 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
 
   // Debug: Track component state
   const componentId = useRef(`sketch-${Math.random().toString(36).slice(2, 8)}`)
+  const previousGeometryRef = useRef<string | undefined>(geometry)
+  const pendingResetRef = useRef(false)
   console.log(`[${componentId.current}] ArcgisSketchMap render:`, {
     geometry: !!geometry,
     geometryLength: geometry?.length,
@@ -196,11 +201,24 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
     }
   }, [applyDefaultSymbolToGraphic, isReady, updateGeometryFromEsri])
 
+  useEffect(() => {
+    const hadGeometry = Boolean(previousGeometryRef.current)
+    const hasGeometry = Boolean(geometry)
+
+    if (hadGeometry && !hasGeometry) {
+      pendingResetRef.current = true
+    } else if (hasGeometry) {
+      pendingResetRef.current = false
+    }
+
+    previousGeometryRef.current = geometry
+  }, [geometry])
+
   // Process geometry synchronously when conditions are met
   useEffect(() => {
-    console.log(`[${componentId.current}] Geometry effect triggered:`, { 
-      isReady, 
-      hasMapView: !!mapView, 
+    console.log(`[${componentId.current}] Geometry effect triggered:`, {
+      isReady,
+      hasMapView: !!mapView,
       hasContainer: !!containerRef.current,
       hasGeometry: !!geometry,
       mapViewReady: mapView?.ready,
@@ -285,6 +303,62 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
     return undefined
   }, [applyDefaultSymbolToGraphic, focusMapViewOnGeometry, geometry, isReady, mapView])
 
+  useEffect(() => {
+    if (!pendingResetRef.current) {
+      return
+    }
+
+    console.log(`[${componentId.current}] Reset requested after geometry cleared`, {
+      hasMapView: !!mapView,
+      mapViewDestroyed: mapView?.destroyed
+    })
+
+    const sketchElement = containerRef.current?.querySelector("arcgis-sketch") as any
+    const layer = sketchElement?.layer
+
+    if (layer?.graphics?.removeAll) {
+      try {
+        layer.graphics.removeAll()
+      } catch (error) {
+        console.log(`[${componentId.current}] Error clearing sketch layer:`, error)
+      }
+    }
+
+    if (!mapView || mapView.destroyed) {
+      return
+    }
+
+    pendingResetRef.current = false
+
+    try {
+      mapView.graphics?.removeAll?.()
+    } catch (error) {
+      console.log(`[${componentId.current}] Error clearing map view graphics:`, error)
+    }
+
+    if (typeof mapView.popup?.close === "function") {
+      try {
+        mapView.popup.close()
+      } catch (error) {
+        console.log(`[${componentId.current}] Error closing popup during reset:`, error)
+      }
+    }
+
+    const target = { center: DEFAULT_MAP_CENTER, zoom: DEFAULT_MAP_ZOOM }
+    if (typeof mapView.goTo === "function") {
+      Promise.resolve(mapView.goTo(target)).catch((error: unknown) => {
+        console.log(`[${componentId.current}] Failed to reset map view:`, error)
+      })
+    } else {
+      try {
+        mapView.center = DEFAULT_MAP_CENTER
+        mapView.zoom = DEFAULT_MAP_ZOOM
+      } catch (error) {
+        console.log(`[${componentId.current}] Error setting map view defaults:`, error)
+      }
+    }
+  }, [geometry, mapView])
+
   // Cleanup effect to ensure proper component unmounting
   useEffect(() => {
     return () => {
@@ -342,7 +416,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
     }
     return createElement(
       "arcgis-map",
-      { basemap: "topo-vector", center: "-98,39", zoom: "4" },
+      { basemap: "topo-vector", center: DEFAULT_MAP_CENTER.join(","), zoom: String(DEFAULT_MAP_ZOOM) },
       createElement("arcgis-search", { slot: "widgets", position: "top-left", key: "search" }),
       createElement("arcgis-sketch", {
         key: "sketch",

@@ -148,6 +148,10 @@ type PersistedProjectFormState = {
 
 let persistedProjectFormState: PersistedProjectFormState | undefined
 
+function createInitialGeospatialResults(): GeospatialResultsState {
+  return { nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] }
+}
+
 type ProjectFormWithCopilotProps = {
   showApiKeyWarning: boolean
 }
@@ -184,7 +188,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const [geospatialResults, setGeospatialResults] = useState<GeospatialResultsState>(() =>
     persistedProjectFormState
       ? cloneValue(persistedProjectFormState.geospatialResults)
-      : { nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] }
+      : createInitialGeospatialResults()
   )
   const [permittingChecklist, setPermittingChecklist] = useState<PermittingChecklistItem[]>(() =>
     persistedProjectFormState ? cloneValue(persistedProjectFormState.permittingChecklist) : []
@@ -332,6 +336,26 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       ;(target as Record<SimpleProjectField, ProjectFormData[SimpleProjectField]>)[field] = value
     }
   }
+
+  const resetProjectState = useCallback(() => {
+    setFormData(() => createEmptyProjectData())
+    setLastSaved(undefined)
+    setGeospatialResults(createInitialGeospatialResults())
+    setPermittingChecklist([])
+    setSaveError(undefined)
+    setIsSaving(false)
+    setDecisionSubmitState({ status: "idle" })
+    setHasSavedSnapshot(false)
+  }, [
+    setDecisionSubmitState,
+    setFormData,
+    setGeospatialResults,
+    setHasSavedSnapshot,
+    setIsSaving,
+    setLastSaved,
+    setPermittingChecklist,
+    setSaveError
+  ])
 
   useCopilotReadable(
     {
@@ -630,11 +654,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       name: "resetProjectForm",
       description: "Clear the CEQ Project form back to its initial state.",
       handler: async () => {
-        setFormData(createEmptyProjectData())
-        setLastSaved(undefined)
+        resetProjectState()
       }
     },
-    [setFormData]
+    [resetProjectState]
   )
 
   useCopilotAction(
@@ -766,14 +789,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   }
 
   const handleReset = () => {
-    setFormData(createEmptyProjectData())
-    setLastSaved(undefined)
-    setGeospatialResults({ nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] })
-    setPermittingChecklist([])
-    setSaveError(undefined)
-    setIsSaving(false)
-    setDecisionSubmitState({ status: "idle" })
-    setHasSavedSnapshot(false)
+    resetProjectState()
   }
 
   const updateLocationFields = useCallback(
@@ -832,7 +848,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       updates: Partial<Pick<ProjectFormData, "location_lat" | "location_lon" | "location_object">>
     ) => {
       if (Object.prototype.hasOwnProperty.call(updates, "location_object") && !updates.location_object) {
-        setGeospatialResults({ nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] })
+        setGeospatialResults(createInitialGeospatialResults())
       }
       updateLocationFields(updates)
     },
