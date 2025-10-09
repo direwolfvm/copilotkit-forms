@@ -64,7 +64,7 @@ export function prepareGeospatialPayload(geometryJson?: string | null): Prepared
   let geometry: any
   try {
     geometry = JSON.parse(geometryJson)
-  } catch (error) {
+  } catch {
     result.errors.push('The stored geometry is not valid JSON.')
     return result
   }
