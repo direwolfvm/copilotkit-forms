@@ -265,10 +265,29 @@ export function focusMapViewOnGeometry(view: any, geometry: any) {
   const target = geometry.extent ?? geometry
   console.log('focusMapViewOnGeometry: Target:', { hasExtent: !!geometry.extent, targetType: target?.type })
 
-  const ZOOM_DELTA = 2
+  const EXTENT_BUFFER_RATIO = 1.8
+  const hasExtentTransformSupport =
+    target && typeof target.clone === 'function' && typeof target.expand === 'function'
+  const goToTarget = (() => {
+    if (!hasExtentTransformSupport) {
+      return target
+    }
+    try {
+      const cloned = target.clone()
+      const expanded = cloned.expand(EXTENT_BUFFER_RATIO)
+      console.log('focusMapViewOnGeometry: Applying buffered extent target', {
+        extentBufferRatio: EXTENT_BUFFER_RATIO
+      })
+      return expanded ?? cloned
+    } catch (error) {
+      console.log('focusMapViewOnGeometry: Failed to buffer extent, falling back to target', error)
+      return target
+    }
+  })()
+
+  const ZOOM_DELTA = -1
   const MAX_ZOOM_LEVEL = 18
   const MIN_TARGET_ZOOM = 8
-  const EXTENT_CONTRACT_RATIO = 0.75
 
   const applyZoomBoost = () => {
     if (!view || view.destroyed) {
@@ -279,18 +298,8 @@ export function focusMapViewOnGeometry(view: any, geometry: any) {
     try {
       const geometryType = geometry?.type ?? geometry?.geometryType
 
-      if (target && typeof target.clone === 'function' && typeof target.expand === 'function') {
-        console.log('focusMapViewOnGeometry: Applying extent zoom boost')
-        const cloned = target.clone()
-        const contracted = cloned.expand(EXTENT_CONTRACT_RATIO)
-        const extentPromise = view.goTo(contracted, { duration: 600 })
-        if (extentPromise && typeof extentPromise.catch === 'function') {
-          extentPromise.catch((error: any) => {
-            if (error?.name !== 'AbortError') {
-              console.log('focusMapViewOnGeometry: Extent zoom boost failed:', error)
-            }
-          })
-        }
+      if (hasExtentTransformSupport) {
+        console.log('focusMapViewOnGeometry: Extent already buffered, skipping zoom boost')
         return
       }
 
@@ -320,7 +329,7 @@ export function focusMapViewOnGeometry(view: any, geometry: any) {
   const execute = () => {
     console.log('focusMapViewOnGeometry: Executing goTo')
     try {
-      const promise = view.goTo(target, { duration: 1000 })
+      const promise = view.goTo(goToTarget, { duration: 1000 })
       console.log('focusMapViewOnGeometry: goTo returned:', !!promise)
       if (promise && typeof promise.catch === "function") {
         promise
