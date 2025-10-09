@@ -250,8 +250,8 @@ export function getDefaultSymbolForGeometry(geometry: any): ArcgisSymbol | undef
 }
 
 export function focusMapViewOnGeometry(view: any, geometry: any) {
-  console.log('focusMapViewOnGeometry called:', { 
-    hasView: !!view, 
+  console.log('focusMapViewOnGeometry called:', {
+    hasView: !!view,
     hasGoTo: !!(view && typeof view.goTo === "function"), 
     hasGeometry: !!geometry,
     viewReady: view?.ready
@@ -264,19 +264,76 @@ export function focusMapViewOnGeometry(view: any, geometry: any) {
 
   const target = geometry.extent ?? geometry
   console.log('focusMapViewOnGeometry: Target:', { hasExtent: !!geometry.extent, targetType: target?.type })
-  
+
+  const ZOOM_DELTA = 2
+  const MAX_ZOOM_LEVEL = 18
+  const MIN_TARGET_ZOOM = 8
+  const EXTENT_CONTRACT_RATIO = 0.75
+
+  const applyZoomBoost = () => {
+    if (!view || view.destroyed) {
+      console.log('focusMapViewOnGeometry: View destroyed before zoom boost')
+      return
+    }
+
+    try {
+      const geometryType = geometry?.type ?? geometry?.geometryType
+
+      if (target && typeof target.clone === 'function' && typeof target.expand === 'function') {
+        console.log('focusMapViewOnGeometry: Applying extent zoom boost')
+        const cloned = target.clone()
+        const contracted = cloned.expand(EXTENT_CONTRACT_RATIO)
+        const extentPromise = view.goTo(contracted, { duration: 600 })
+        if (extentPromise && typeof extentPromise.catch === 'function') {
+          extentPromise.catch((error: any) => {
+            if (error?.name !== 'AbortError') {
+              console.log('focusMapViewOnGeometry: Extent zoom boost failed:', error)
+            }
+          })
+        }
+        return
+      }
+
+      const currentZoom = typeof view.zoom === 'number' ? view.zoom : undefined
+      const desiredZoom = Math.min(
+        Math.max(currentZoom ? currentZoom + ZOOM_DELTA : MIN_TARGET_ZOOM, MIN_TARGET_ZOOM),
+        MAX_ZOOM_LEVEL
+      )
+
+      const center = geometryType === 'point' || geometryType === 'multipoint' ? geometry : view.center
+      if (center) {
+        console.log('focusMapViewOnGeometry: Applying center zoom boost', { geometryType, desiredZoom })
+        const zoomPromise = view.goTo({ center, zoom: desiredZoom }, { duration: 600 })
+        if (zoomPromise && typeof zoomPromise.catch === 'function') {
+          zoomPromise.catch((error: any) => {
+            if (error?.name !== 'AbortError') {
+              console.log('focusMapViewOnGeometry: Center zoom boost failed:', error)
+            }
+          })
+        }
+      }
+    } catch (error) {
+      console.log('focusMapViewOnGeometry: Zoom boost threw error:', error)
+    }
+  }
+
   const execute = () => {
     console.log('focusMapViewOnGeometry: Executing goTo')
     try {
       const promise = view.goTo(target, { duration: 1000 })
       console.log('focusMapViewOnGeometry: goTo returned:', !!promise)
       if (promise && typeof promise.catch === "function") {
-        promise.then(() => {
-          console.log('focusMapViewOnGeometry: goTo completed successfully')
-        }).catch((error: any) => {
-          console.log('focusMapViewOnGeometry: goTo failed:', error)
-        })
+        promise
+          .then(() => {
+            console.log('focusMapViewOnGeometry: goTo completed successfully')
+            applyZoomBoost()
+          })
+          .catch((error: any) => {
+            console.log('focusMapViewOnGeometry: goTo failed:', error)
+          })
+        return
       }
+      applyZoomBoost()
     } catch (error) {
       console.error('focusMapViewOnGeometry: goTo threw error:', error)
     }
@@ -290,7 +347,9 @@ export function focusMapViewOnGeometry(view: any, geometry: any) {
 
   if (typeof view.when === "function") {
     console.log('focusMapViewOnGeometry: View not ready, using view.when()')
-    const result = view.when(execute)
+    const result = view.when(() => {
+      execute()
+    })
     if (result && typeof result.catch === "function") {
       result.catch((error: any) => {
         console.log('focusMapViewOnGeometry: view.when() failed:', error)
@@ -298,7 +357,8 @@ export function focusMapViewOnGeometry(view: any, geometry: any) {
     }
     return
   }
-  
+
   console.log('focusMapViewOnGeometry: Fallback - executing anyway')
   execute()
+  applyZoomBoost()
 }
