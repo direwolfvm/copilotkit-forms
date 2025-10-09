@@ -17,21 +17,23 @@ type GeometryChange = {
 type ArcgisSketchMapProps = {
   geometry?: string
   onGeometryChange: (change: GeometryChange) => void
+  isVisible?: boolean
 }
 
-export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapProps) {
+export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }: ArcgisSketchMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
   const isMountedRef = useRef(true)
-  
+
   // Debug: Track component state
   const componentId = useRef(`sketch-${Math.random().toString(36).slice(2, 8)}`)
-  console.log(`[${componentId.current}] ArcgisSketchMap render:`, { 
-    geometry: !!geometry, 
+  console.log(`[${componentId.current}] ArcgisSketchMap render:`, {
+    geometry: !!geometry,
     geometryLength: geometry?.length,
-    isReady, 
-    hasMapView: !!mapView 
+    isReady,
+    hasMapView: !!mapView,
+    isVisible
   })
 
 
@@ -134,6 +136,23 @@ export function ArcgisSketchMap({ geometry, onGeometryChange }: ArcgisSketchMapP
       mapElement.removeEventListener("arcgisViewReady", handleViewReady as EventListener)
     }
   }, [isReady])
+
+  useEffect(() => {
+    if (!mapView || mapView.destroyed || !isVisible) {
+      return
+    }
+
+    if (typeof mapView.resize === "function") {
+      requestAnimationFrame(() => {
+        try {
+          mapView.resize()
+          console.log(`[${componentId.current}] Map view resized after visibility change`)
+        } catch (error) {
+          console.log(`[${componentId.current}] Map view resize error:`, error)
+        }
+      })
+    }
+  }, [isVisible, mapView])
 
   useEffect(() => {
     if (!isReady || !containerRef.current) {
