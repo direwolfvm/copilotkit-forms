@@ -8,7 +8,7 @@ import {
   type ProjectHierarchy,
   type ProjectProcessSummary
 } from "./utils/projectPersistence"
-import { ArcgisSketchMap, type GeometryChange } from "./components/ArcgisSketchMap"
+import { ProjectsOverviewMap } from "./components/ProjectsOverviewMap"
 
 function formatTimestamp(value?: string | null): string | undefined {
   if (!value) {
@@ -86,25 +86,24 @@ function CaseEventTree({ event }: { event: CaseEventSummary }) {
   )
 }
 
-function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
+function ProjectTreeItem({
+  entry,
+  onToggle
+}: {
+  entry: ProjectHierarchy
+  onToggle?: (id: number, open: boolean) => void
+}) {
   const formattedUpdated = formatTimestamp(entry.project.lastUpdated)
   const projectTitle = entry.project.title?.trim().length
     ? entry.project.title
     : `Project ${entry.project.id}`
   const [isOpen, setIsOpen] = useState(false)
   const handleToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
-    setIsOpen(event.currentTarget.open)
-  }, [])
+    const open = event.currentTarget.open
+    setIsOpen(open)
+    onToggle?.(entry.project.id, open)
+  }, [entry.project.id, onToggle])
   const geometry = entry.project.geometry ?? undefined
-  
-
-  
-  const handleGeometryChange = useCallback((_change: GeometryChange) => {
-    // For read-only viewing, we don't need to handle changes
-    // This component is just for viewing existing project geometry
-  }, [])
-
-  const geometryToRender = isOpen ? geometry : undefined
 
   return (
     <li className="projects-tree__project">
@@ -120,19 +119,6 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
           </div>
         </summary>
         <div className="projects-tree__project-body">
-          <div className="projects-tree__map-wrapper">
-            <div
-              className={`projects-tree__map ${isOpen ? "projects-tree__map--visible" : "projects-tree__map--preload"}`}
-              aria-hidden={!isOpen}
-            >
-              <ArcgisSketchMap
-                key={`project-map-${entry.project.id}`}
-                geometry={geometryToRender}
-                isVisible={isOpen}
-                onGeometryChange={handleGeometryChange}
-              />
-            </div>
-          </div>
           {isOpen && !geometry ? (
             <p className="projects-tree__map-empty projects-tree__empty">No project geometry provided.</p>
           ) : null}
@@ -158,6 +144,7 @@ export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectHierarchy[]>([])
   const [status, setStatus] = useState<"idle" | "loading" | "error">("loading")
   const [error, setError] = useState<string | undefined>()
+  const [activeProjectId, setActiveProjectId] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     let isMounted = true
@@ -186,6 +173,15 @@ export function ProjectsPage() {
 
   const hasProjects = projects.length > 0
 
+  const handleProjectToggle = useCallback((projectId: number, open: boolean) => {
+    setActiveProjectId((current) => {
+      if (open) {
+        return projectId
+      }
+      return current === projectId ? undefined : current
+    })
+  }, [])
+
   return (
     <div className="projects-page usa-prose">
       <header className="projects-page__header">
@@ -210,11 +206,18 @@ export function ProjectsPage() {
       ) : null}
 
       {hasProjects ? (
-        <ul className="projects-tree">
-          {projects.map((entry) => (
-            <ProjectTreeItem key={entry.project.id} entry={entry} />
-          ))}
-        </ul>
+        <div className="projects-page__layout">
+          <div className="projects-page__list" role="region" aria-label="Project list">
+            <ul className="projects-tree">
+              {projects.map((entry) => (
+                <ProjectTreeItem key={entry.project.id} entry={entry} onToggle={handleProjectToggle} />
+              ))}
+            </ul>
+          </div>
+          <aside className="projects-page__map" aria-label="Projects map">
+            <ProjectsOverviewMap projects={projects} activeProjectId={activeProjectId} />
+          </aside>
+        </div>
       ) : null}
     </div>
   )
