@@ -920,28 +920,44 @@
 }
 
 .site-header__inner {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 1.25rem 1.5rem;
-  width: min(1100px, calc(100% - 3rem));
+  width: 100%;
+  margin: 0;
+  padding: 1.25rem clamp(1.5rem, 10vw, 12rem);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 1.5rem;
+  flex-wrap: wrap;
+  box-sizing: border-box;
 }
 
 .site-header__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.site-header__title {
   font-weight: 700;
-  font-size: 1.3rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: clamp(1.35rem, 1.2vw + 1.05rem, 1.85rem);
+  letter-spacing: -0.01em;
+  text-transform: none;
   color: var(--color-heading);
+}
+
+.site-header__tagline {
+  font-size: 0.9rem;
+  color: color-mix(in srgb, var(--color-text-muted) 85%, var(--color-text) 15%);
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
 
 .site-nav {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  margin-left: auto;
+  flex-wrap: wrap;
 }
 
 .site-nav__link {
