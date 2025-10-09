@@ -121,6 +121,11 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
         </summary>
         <div className="projects-tree__project-body">
           <div className="projects-tree__overview">
+            {entry.project.description ? (
+              <div className="projects-tree__description-section">
+                <p className="projects-tree__description">{entry.project.description}</p>
+              </div>
+            ) : null}
             <div className="projects-tree__map-section">
               <div className="projects-tree__map-wrapper">
                 <div
@@ -139,11 +144,6 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
                 <p className="projects-tree__map-empty projects-tree__empty">No project geometry provided.</p>
               ) : null}
             </div>
-            {entry.project.description ? (
-              <div className="projects-tree__description-section">
-                <p className="projects-tree__description">{entry.project.description}</p>
-              </div>
-            ) : null}
           </div>
           {entry.processes.length > 0 ? (
             <ul className="projects-tree__processes">
