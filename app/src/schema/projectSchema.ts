@@ -136,10 +136,12 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
   },
   {
     key: "nepa_categorical_exclusion_code",
-    title: "Categorical Exclusion Code",
-    description: "Reference code for the categorical exclusion applied to this project.",
+    title: "Categorical Exclusion",
+    description: "Describe the categorical exclusion applied to this project.",
     jsonType: "string",
-    placeholder: "516 DM 14.5(B)(1)",
+    widget: "textarea",
+    rows: 3,
+    placeholder: "Briefly describe the categorical exclusion determination.",
     includeInForm: false
   },
   {
