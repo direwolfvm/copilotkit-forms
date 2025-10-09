@@ -8,7 +8,7 @@ import {
   type ProjectHierarchy,
   type ProjectProcessSummary
 } from "./utils/projectPersistence"
-import { LeafletGeometryViewer } from "./components/LeafletGeometryViewer"
+import { ArcgisSketchMap, type GeometryChange } from "./components/ArcgisSketchMap"
 
 function formatTimestamp(value?: string | null): string | undefined {
   if (!value) {
@@ -96,6 +96,13 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
     setIsOpen(event.currentTarget.open)
   }, [])
   const geometry = entry.project.geometry ?? undefined
+  
+
+  
+  const handleGeometryChange = useCallback((_change: GeometryChange) => {
+    // For read-only viewing, we don't need to handle changes
+    // This component is just for viewing existing project geometry
+  }, [])
 
   return (
     <li className="projects-tree__project">
@@ -113,8 +120,15 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
         <div className="projects-tree__project-body">
           {isOpen ? (
             <div className="projects-tree__map">
-              <LeafletGeometryViewer key={`project-map-${entry.project.id}`} geometry={geometry} />
+              <ArcgisSketchMap
+                key={`project-map-${entry.project.id}`}
+                geometry={geometry}
+                onGeometryChange={handleGeometryChange}
+              />
             </div>
+          ) : null}
+          {isOpen && !geometry ? (
+            <p className="projects-tree__map-empty projects-tree__empty">No project geometry provided.</p>
           ) : null}
           {entry.project.description ? (
             <p className="projects-tree__description">{entry.project.description}</p>
