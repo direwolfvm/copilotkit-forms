@@ -1130,6 +1130,17 @@
   height: 18rem;
 }
 
+.projects-map__viewport {
+  position: relative;
+  width: 100%;
+  height: 18rem;
+}
+
+.projects-map .leaflet-container {
+  width: 100%;
+  height: 100%;
+}
+
 .projects-map__loading {
   display: flex;
   align-items: center;
@@ -1161,10 +1172,6 @@
   margin: 0;
   font-style: italic;
   color: color-mix(in srgb, var(--color-text-muted) 88%, var(--color-text) 12%);
-}
-
-.projects-tree__map-empty {
-  margin: 0;
 }
 
 .projects-tree__event-title {
