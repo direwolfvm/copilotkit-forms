@@ -746,31 +746,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     []
   )
 
-  const sidebarSuggestions = useMemo(
-    () => [
-      {
-        title: "Check for missing details",
-        message:
-          "Review the project form and let me know what information is still missing or inconsistent."
-      },
-      {
-        title: "Write a public summary",
-        message: "Draft a public-friendly project summary using the structured fields we have so far."
-      },
-      {
-        title: "Validate location data",
-        message:
-          "Confirm that the location description, coordinates, and GeoJSON tell a consistent story."
-      },
-      {
-        title: "Draft permitting roadmap",
-        message:
-          "Review the project details and populate the permitting checklist with likely federal, state, and local approvals."
-      }
-    ],
-    []
-  )
-
   const handleChange = (event: IChangeEvent<ProjectFormData>) => {
     setFormData((previous) =>
       applyGeneratedProjectId(event.formData ?? createEmptyProjectData(), previous?.id)
@@ -1045,7 +1020,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     <CopilotSidebar
       instructions={instructions}
       defaultOpen
-      suggestions={sidebarSuggestions}
       clickOutsideToClose={false}
       labels={{ title: "Permitting Copilot" }}
     >
