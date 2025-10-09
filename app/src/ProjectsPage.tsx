@@ -131,6 +131,7 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
                     key={`project-map-${entry.project.id}`}
                     geometry={geometryToRender}
                     isVisible={isOpen}
+                    hideSketchWidget
                     onGeometryChange={handleGeometryChange}
                   />
                 </div>
