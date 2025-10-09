@@ -7,6 +7,7 @@ import {
   focusMapViewOnGeometry,
   getDefaultSymbolForGeometry
 } from "./arcgisResources"
+import { getArcgisApiKey } from "../runtimeConfig"
 
 type GeometryChange = {
   geoJson?: string
@@ -25,6 +26,7 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
   const isMountedRef = useRef(true)
+  const arcgisApiKey = useMemo(() => getArcgisApiKey(), [])
 
   // Debug: Track component state
   const componentId = useRef(`sketch-${Math.random().toString(36).slice(2, 8)}`)
@@ -340,17 +342,31 @@ export function ArcgisSketchMap({ geometry, onGeometryChange, isVisible = true }
     if (!isReady) {
       return <div className="location-map__loading">Loading map…</div>
     }
+    const mapProps: Record<string, any> = { basemap: "topo-vector", center: "-98,39", zoom: "4" }
+    if (arcgisApiKey) {
+      mapProps["api-key"] = arcgisApiKey
+    }
+
+    const searchProps: Record<string, any> = {
+      slot: "widgets",
+      position: "top-left",
+      key: "search"
+    }
+    if (arcgisApiKey) {
+      searchProps["api-key"] = arcgisApiKey
+    }
+
     return createElement(
       "arcgis-map",
-      { basemap: "topo-vector", center: "-98,39", zoom: "4" },
-      createElement("arcgis-search", { slot: "widgets", position: "top-left", key: "search" }),
+      mapProps,
+      createElement("arcgis-search", searchProps),
       createElement("arcgis-sketch", {
         key: "sketch",
         "creation-mode": "single",
         position: "top-right"
       })
     )
-  }, [isReady])
+  }, [arcgisApiKey, isReady])
 
   return (
     <div className="location-map" ref={containerRef}>

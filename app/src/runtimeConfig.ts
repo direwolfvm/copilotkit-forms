@@ -3,6 +3,7 @@ interface CopilotRuntimeConfig {
   runtimeUrl?: string | null
   supabaseUrl?: string | null
   supabaseAnonKey?: string | null
+  arcgisApiKey?: string | null
 }
 
 declare global {
@@ -57,5 +58,13 @@ export function getSupabaseAnonKey(): string | undefined {
     normalize(envVars.VITE_SUPABASE_ANON_KEY) ??
     normalize(envVars.NEXT_PUBLIC_SUPABASE_ANON_KEY) ??
     normalize(readRuntimeConfigFromWindow()?.supabaseAnonKey ?? undefined)
+  )
+}
+
+export function getArcgisApiKey(): string | undefined {
+  return (
+    normalize(envVars.VITE_ARCGIS_API_KEY) ??
+    normalize(envVars.NEXT_PUBLIC_ARCGIS_API_KEY) ??
+    normalize(readRuntimeConfigFromWindow()?.arcgisApiKey ?? undefined)
   )
 }

@@ -6,6 +6,7 @@ import {
   focusMapViewOnGeometry,
   getDefaultSymbolForGeometry
 } from "./arcgisResources"
+import { getArcgisApiKey } from "../runtimeConfig"
 
 type ArcgisGeometryViewerProps = {
   geometry?: string | null
@@ -17,6 +18,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
   const [mapView, setMapView] = useState<any>(null)
   const graphicsLayerRef = useRef<any>(null)
   const [geometryError, setGeometryError] = useState<string | null>(null)
+  const arcgisApiKey = useMemo(() => getArcgisApiKey(), [])
 
   const applyDefaultSymbolToGraphic = useCallback((graphic: any) => {
     if (!graphic?.geometry) {
@@ -221,8 +223,12 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
     if (!isReady) {
       return <div className="projects-map__loading">Loading map…</div>
     }
-    return createElement("arcgis-map", { basemap: "topo-vector", center: "-98,39", zoom: "4" })
-  }, [isReady])
+    const mapProps: Record<string, any> = { basemap: "topo-vector", center: "-98,39", zoom: "4" }
+    if (arcgisApiKey) {
+      mapProps["api-key"] = arcgisApiKey
+    }
+    return createElement("arcgis-map", mapProps)
+  }, [arcgisApiKey, isReady])
 
   return (
     <div className="projects-map" ref={containerRef}>

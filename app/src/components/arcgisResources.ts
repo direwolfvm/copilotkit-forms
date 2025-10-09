@@ -1,3 +1,5 @@
+import { getArcgisApiKey } from "../runtimeConfig"
+
 const ARCGIS_JS_URL = "https://js.arcgis.com/4.33/"
 const ARCGIS_COMPONENTS_URL = "https://js.arcgis.com/4.32/map-components/"
 const ARCGIS_CSS_URL = "https://js.arcgis.com/4.33/esri/themes/light/main.css"
@@ -5,6 +7,8 @@ const ARCGIS_CSS_URL = "https://js.arcgis.com/4.33/esri/themes/light/main.css"
 type ArcgisSymbol = Record<string, any>
 
 let resourcePromise: Promise<void> | undefined
+let appliedArcgisApiKey: string | undefined
+let loggedApiKeyError = false
 
 function loadScript(
   id: string,
@@ -44,6 +48,45 @@ function loadStyle(id: string, url: string) {
     link.onload = () => resolve()
     link.onerror = () => reject(new Error(`Failed to load stylesheet ${url}`))
     document.head.appendChild(link)
+  })
+}
+
+function logArcgisApiKeyWarning(error: unknown) {
+  if (loggedApiKeyError) {
+    return
+  }
+  console.warn("ArcGIS API key could not be applied to esri/config.", error)
+  loggedApiKeyError = true
+}
+
+function applyArcgisApiKey() {
+  const apiKey = getArcgisApiKey()
+  if (!apiKey || appliedArcgisApiKey === apiKey) {
+    return Promise.resolve()
+  }
+
+  const requireFn = (window as any).require
+  if (typeof requireFn !== "function") {
+    return Promise.resolve()
+  }
+
+  return new Promise<void>((resolve) => {
+    try {
+      requireFn(["esri/config"], (esriConfig: any) => {
+        try {
+          esriConfig.apiKey = apiKey
+          appliedArcgisApiKey = apiKey
+        } catch (error) {
+          appliedArcgisApiKey = undefined
+          logArcgisApiKeyWarning(error)
+        }
+        resolve()
+      })
+    } catch (error) {
+      appliedArcgisApiKey = undefined
+      logArcgisApiKeyWarning(error)
+      resolve()
+    }
   })
 }
 
@@ -118,6 +161,7 @@ export function ensureArcgisResources() {
       loadScript("arcgis-js", ARCGIS_JS_URL)
     ])
       .then(() => loadScript("arcgis-components", ARCGIS_COMPONENTS_URL, { type: "module" }))
+      .then(() => applyArcgisApiKey())
       .then(() => undefined)
   }
   return resourcePromise

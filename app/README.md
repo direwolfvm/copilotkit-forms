@@ -27,6 +27,8 @@ Create a `.env` file (there is a starter `.env.example`) with the following valu
   [Copilot Cloud](https://cloud.copilotkit.ai/).
 - `VITE_COPILOTKIT_RUNTIME_URL` – optional URL for a self-hosted Copilot Runtime. Leave unset to use
   the default Copilot Cloud runtime.
+- `VITE_ARCGIS_API_KEY` – optional ArcGIS Developer API key used to display the Esri basemaps and
+  enable location search within the project maps.
 
 Restart `npm run dev` after editing environment variables.
 
