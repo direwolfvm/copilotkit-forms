@@ -993,6 +993,26 @@
   color: var(--color-text);
 }
 
+.projects-page.usa-prose {
+  max-width: 1100px;
+}
+
+.projects-page.usa-prose > * {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.projects-page.usa-prose h1,
+.projects-page.usa-prose h2,
+.projects-page.usa-prose h3,
+.projects-page.usa-prose p,
+.projects-page.usa-prose ul,
+.projects-page.usa-prose ol,
+.projects-page.usa-prose li {
+  max-width: none;
+}
+
 .projects-page::before {
   content: "";
   position: absolute;
