@@ -14,7 +14,7 @@ the underlying JSON data through CopilotKit actions.
 
 ```bash
 npm install
-cp .env.example .env   # add your CopilotKit public API key
+cp .env.example .env   # add your CopilotKit key and Supabase credentials
 npm run lint           # ensure the workspace installs cleanly
 npm run build          # confirm the type checker passes before starting dev mode
 npm run dev
@@ -33,6 +33,15 @@ Create a `.env` file (there is a starter `.env.example`) with the following valu
   [Copilot Cloud](https://cloud.copilotkit.ai/).
 - `VITE_COPILOTKIT_RUNTIME_URL` – optional URL for a self-hosted Copilot Runtime. Leave unset to use
   the default Copilot Cloud runtime.
+- `VITE_SUPABASE_URL` – the URL of your Supabase project. Required to enable project persistence
+  and checklist storage from the form.
+- `VITE_SUPABASE_ANON_KEY` – the anonymous public key for your Supabase project.
+
+The development server also honors `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
+their non-Vite counterparts (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_PUBLIC_ANON_KEY`) so you
+can reuse existing environment files. Regardless of which variables are present, the Express server
+proxies Supabase requests through `/api/supabase` and injects the resolved credentials so the browser
+never stores the raw keys.
 
 Restart `npm run dev` after editing environment variables.
 

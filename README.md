@@ -16,7 +16,7 @@ CopilotKit actions.
 ```bash
 cd app
 npm install
-cp .env.example .env            # add your CopilotKit public API key
+cp .env.example .env            # add your CopilotKit key and Supabase credentials
 npm run lint                    # optional but recommended to confirm a clean install
 npm run build                   # validates the type checker before starting dev mode
 npm run dev
@@ -30,7 +30,23 @@ npm run dev -- --host 0.0.0.0 --port 4173 --clearScreen false
 ```
 
 No Copilot API key is required to test the UI—the sidebar simply displays an in-app warning instead
-of streaming AI responses.
+of streaming AI responses. Supabase credentials are required if you want to exercise the persistence
+APIs that save projects back to the hosted database.
+
+### Supabase configuration
+
+The application can persist project snapshots, geospatial results, and permitting checklist details
+to Supabase when the following environment variables are present in `.env`:
+
+- `VITE_SUPABASE_URL` – the base URL of your Supabase project
+- `VITE_SUPABASE_ANON_KEY` – the project's anonymous public key
+
+For teams already using Next.js conventions, `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` are also accepted. The Express server in `app/server.mjs` resolves
+these variables (as well as `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_PUBLIC_ANON_KEY`) and
+exposes a `/api/supabase` proxy so the browser never stores the raw credentials. When the variables
+are absent, Supabase-dependent UI features will surface descriptive errors explaining that
+credentials need to be configured.
 
 If `npm run dev` fails after upgrading dependencies, clear any cached artifacts and reinstall:
 
@@ -85,7 +101,9 @@ gcloud run deploy copilotkit-forms \
   --platform managed \
   --region <REGION> \
   --allow-unauthenticated \
-  --set-env-vars VITE_COPILOTKIT_PUBLIC_API_KEY=<YOUR_PUBLIC_KEY>
+  --set-env-vars VITE_COPILOTKIT_PUBLIC_API_KEY=<YOUR_PUBLIC_KEY>,\\
+VITE_SUPABASE_URL=<YOUR_SUPABASE_URL>,\\
+VITE_SUPABASE_ANON_KEY=<YOUR_SUPABASE_ANON_KEY>
 ```
 
 Cloud Run automatically provisions HTTPS for the service URL. Additional environment variables can
