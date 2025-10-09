@@ -1144,17 +1144,10 @@
   background: color-mix(in srgb, var(--surface) 90%, rgba(31, 79, 153, 0.12) 10%);
 }
 
-.projects-map arcgis-map,
-.projects-map__leaflet {
+.projects-map arcgis-map {
   display: block;
   width: 100%;
   height: 18rem;
-}
-
-.projects-map .leaflet-container {
-  width: 100%;
-  height: 100%;
-  font-family: inherit;
 }
 
 .projects-map__loading {
