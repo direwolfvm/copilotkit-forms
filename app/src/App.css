@@ -1147,6 +1147,30 @@
   color: color-mix(in srgb, var(--color-text-muted) 75%, var(--color-text) 25%);
 }
 
+.projects-tree__overview {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.projects-tree__map-section,
+.projects-tree__description-section {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.projects-tree__map-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.projects-tree__description-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .projects-tree__map {
   display: flex;
   flex-direction: column;
@@ -1181,6 +1205,13 @@
 
 .projects-tree__map--visible .location-map arcgis-map {
   height: 18rem;
+}
+
+@media (min-width: 48rem) {
+  .projects-tree__overview {
+    flex-direction: row;
+    align-items: stretch;
+  }
 }
 
 .projects-map {
