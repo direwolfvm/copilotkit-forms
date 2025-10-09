@@ -9,7 +9,7 @@ function Layout() {
     <div className="site-shell">
       <header className="site-header">
         <div className="site-header__inner">
-          <span className="site-header__brand">Project Portal</span>
+          <span className="site-header__brand">HelpPermit.me (an unofficial demo)</span>
           <nav className="site-nav" aria-label="Primary">
             <NavLink
               to="/projects"
