@@ -9,15 +9,21 @@ the underlying JSON data through CopilotKit actions.
 
 ## Quick start
 
+> **Prerequisite:** Install Node.js 18 or newer to satisfy the updated Vite, ESLint, and TypeScript
+> requirements.
+
 ```bash
 npm install
 cp .env.example .env   # add your CopilotKit public API key
+npm run lint           # ensure the workspace installs cleanly
+npm run build          # confirm the type checker passes before starting dev mode
 npm run dev
 ```
 
 Open the URL printed in the console (defaults to `http://localhost:5173`). Without a CopilotKit
 public API key the application will still load, but the sidebar will display a warning instead of
-producing AI responses.
+producing AI responses. For remote containers or Codespaces run `npm run dev -- --host 0.0.0.0 \
+  --port 4173 --clearScreen false` so the preview is reachable from your browser.
 
 ### Environment variables
 
@@ -35,6 +41,13 @@ environment values through `/env.js`. This allows platforms such as Google Cloud
 Secret Manager integration to provide the Copilot API key at runtime without rebuilding the static
 bundle. The client automatically reads from that endpoint and falls back to the `.env` file when it
 is available.
+
+### Troubleshooting local installs
+
+- Delete `node_modules/` and `package-lock.json` if you previously installed dependencies with an
+  older Node version, then run `npm install` again.
+- Run `npm run lint` to verify the refreshed ESLint config loads, and `npm run build` to catch any
+  type errors introduced by local edits before starting the dev server.
 
 ## Features
 
