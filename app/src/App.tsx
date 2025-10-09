@@ -44,13 +44,13 @@ function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to="/projects" replace />} />
+        <Route index element={<Navigate to="/portal" replace />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="portal">
           <Route index element={<PortalPage />} />
           <Route path=":projectId" element={<PortalPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/projects" replace />} />
+        <Route path="*" element={<Navigate to="/portal" replace />} />
       </Route>
     </Routes>
   )
