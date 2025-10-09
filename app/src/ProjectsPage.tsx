@@ -120,25 +120,31 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
           </div>
         </summary>
         <div className="projects-tree__project-body">
-          <div className="projects-tree__map-wrapper">
-            <div
-              className={`projects-tree__map ${isOpen ? "projects-tree__map--visible" : "projects-tree__map--preload"}`}
-              aria-hidden={!isOpen}
-            >
-              <ArcgisSketchMap
-                key={`project-map-${entry.project.id}`}
-                geometry={geometryToRender}
-                isVisible={isOpen}
-                onGeometryChange={handleGeometryChange}
-              />
+          <div className="projects-tree__overview">
+            <div className="projects-tree__map-section">
+              <div className="projects-tree__map-wrapper">
+                <div
+                  className={`projects-tree__map ${isOpen ? "projects-tree__map--visible" : "projects-tree__map--preload"}`}
+                  aria-hidden={!isOpen}
+                >
+                  <ArcgisSketchMap
+                    key={`project-map-${entry.project.id}`}
+                    geometry={geometryToRender}
+                    isVisible={isOpen}
+                    onGeometryChange={handleGeometryChange}
+                  />
+                </div>
+              </div>
+              {isOpen && !geometry ? (
+                <p className="projects-tree__map-empty projects-tree__empty">No project geometry provided.</p>
+              ) : null}
             </div>
+            {entry.project.description ? (
+              <div className="projects-tree__description-section">
+                <p className="projects-tree__description">{entry.project.description}</p>
+              </div>
+            ) : null}
           </div>
-          {isOpen && !geometry ? (
-            <p className="projects-tree__map-empty projects-tree__empty">No project geometry provided.</p>
-          ) : null}
-          {entry.project.description ? (
-            <p className="projects-tree__description">{entry.project.description}</p>
-          ) : null}
           {entry.processes.length > 0 ? (
             <ul className="projects-tree__processes">
               {entry.processes.map((process) => (
