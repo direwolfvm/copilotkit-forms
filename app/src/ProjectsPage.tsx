@@ -104,6 +104,8 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
     // This component is just for viewing existing project geometry
   }, [])
 
+  const geometryToRender = isOpen ? geometry : undefined
+
   return (
     <li className="projects-tree__project">
       <details onToggle={handleToggle}>
@@ -118,15 +120,19 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
           </div>
         </summary>
         <div className="projects-tree__project-body">
-          {isOpen ? (
-            <div className="projects-tree__map">
+          <div className="projects-tree__map-wrapper">
+            <div
+              className={`projects-tree__map ${isOpen ? "projects-tree__map--visible" : "projects-tree__map--preload"}`}
+              aria-hidden={!isOpen}
+            >
               <ArcgisSketchMap
                 key={`project-map-${entry.project.id}`}
-                geometry={geometry}
+                geometry={geometryToRender}
+                isVisible={isOpen}
                 onGeometryChange={handleGeometryChange}
               />
             </div>
-          ) : null}
+          </div>
           {isOpen && !geometry ? (
             <p className="projects-tree__map-empty projects-tree__empty">No project geometry provided.</p>
           ) : null}

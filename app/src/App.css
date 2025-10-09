@@ -1136,6 +1136,37 @@
   flex-direction: column;
 }
 
+.projects-tree__map-wrapper {
+  position: relative;
+}
+
+.projects-tree__map--preload {
+  position: absolute;
+  inset: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.projects-tree__map--preload .location-map {
+  border: 0;
+}
+
+.projects-tree__map--preload .location-map arcgis-map {
+  height: 1px;
+  min-height: 1px;
+}
+
+.projects-tree__map--visible {
+  position: relative;
+}
+
+.projects-tree__map--visible .location-map arcgis-map {
+  height: 18rem;
+}
+
 .projects-map {
   position: relative;
   border: 1px solid var(--border);
