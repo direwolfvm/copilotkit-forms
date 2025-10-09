@@ -234,13 +234,13 @@ export function NepaReviewSection({
       </header>
       <div className="form-panel__body">
         <div className="form-field">
-          <label htmlFor={categoricalId}>{categoricalConfig?.title ?? "Categorical Exclusion Code"}</label>
+          <label htmlFor={categoricalId}>{categoricalConfig?.title ?? "Categorical Exclusion"}</label>
           {categoricalConfig?.description ? <p className="help-block">{categoricalConfig.description}</p> : null}
-          <input
+          <textarea
             id={categoricalId}
-            type="text"
             value={values.nepa_categorical_exclusion_code ?? ""}
             placeholder={categoricalConfig?.placeholder}
+            rows={categoricalConfig?.rows ?? 3}
             onChange={(event) =>
               onFieldChange("nepa_categorical_exclusion_code", event.target.value || undefined)
             }
