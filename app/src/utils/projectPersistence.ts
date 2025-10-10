@@ -1301,16 +1301,6 @@ const DECISION_ELEMENT_TITLES = {
   RESOURCE_NOTES: DECISION_ELEMENT_BUILDERS[6]?.title ?? "Provide resource-by-resource notes"
 } as const
 
-const DECISION_ELEMENT_FALLBACK_IDS: Record<string, number> = {
-  [DECISION_ELEMENT_TITLES.PROJECT_DETAILS]: 1,
-  [DECISION_ELEMENT_TITLES.NEPA_ASSIST]: 2,
-  [DECISION_ELEMENT_TITLES.IPAC]: 3,
-  [DECISION_ELEMENT_TITLES.PERMIT_NOTES]: 4,
-  [DECISION_ELEMENT_TITLES.CE_REFERENCES]: 5,
-  [DECISION_ELEMENT_TITLES.CONDITIONS]: 6,
-  [DECISION_ELEMENT_TITLES.RESOURCE_NOTES]: 7
-}
-
 const CEQ_PROJECT_FIELDS = [
   "id",
   "created_at",
@@ -1389,8 +1379,7 @@ function buildDecisionPayloadRecords({
     records.push(
       stripUndefined({
         process: processInstanceId,
-        process_decision_element:
-          element?.id ?? DECISION_ELEMENT_FALLBACK_IDS[builder.title] ?? undefined,
+        process_decision_element: element?.id ?? null,
         data_source_system: DATA_SOURCE_SYSTEM,
         last_updated: timestamp,
         retrieved_timestamp: timestamp,
@@ -1407,11 +1396,51 @@ function pickCeqProjectDetails(record: Record<string, unknown>): Record<string, 
 
   for (const field of CEQ_PROJECT_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(record, field)) {
+      if (field === "other") {
+        const sanitizedOther = sanitizeProjectOtherForDecisionPayload(
+          (record as Record<string, unknown>)[field]
+        )
+        if (typeof sanitizedOther !== "undefined") {
+          selected.other = sanitizedOther
+        }
+        continue
+      }
       selected[field] = (record as Record<string, unknown>)[field]
     }
   }
 
   return stripUndefined(selected)
+}
+
+function sanitizeProjectOtherForDecisionPayload(
+  value: unknown
+): Record<string, unknown> | null | undefined {
+  if (typeof value === "undefined") {
+    return undefined
+  }
+
+  if (value === null) {
+    return null
+  }
+
+  if (typeof value === "string") {
+    const normalized = normalizeString(value)
+    return normalized ? { notes: normalized } : null
+  }
+
+  if (typeof value !== "object") {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  const sanitized: Record<string, unknown> = {}
+
+  const notes = normalizeString(record.notes as string | null | undefined)
+  if (notes) {
+    sanitized.notes = notes
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : null
 }
 
 function buildProjectDetailsPayload({
