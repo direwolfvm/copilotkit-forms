@@ -9,6 +9,7 @@ import type {
 import type { PermittingChecklistItem } from "../components/PermittingChecklistSection"
 import { getSupabaseAnonKey, getSupabaseUrl } from "../runtimeConfig"
 import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "../types/gis"
+import { summarizeNepassist, summarizeIpac } from "./geospatial"
 
 const DATA_SOURCE_SYSTEM = "project-portal"
 const PRE_SCREENING_PROCESS_MODEL_ID = 1
@@ -1519,26 +1520,27 @@ function buildConditionsPayload({
   formData
 }: DecisionPayloadBuilderContext): Record<string, unknown> {
   const conditions = parseDelimitedList(formData.nepa_conformance_conditions)
-  const notes = normalizeString(formData.nepa_extraordinary_circumstances)
 
   return stripUndefined({
     id: typeof elementId === "number" ? elementId : undefined,
-    conditions: conditions.length > 0 ? conditions : null,
-    notes
+    conditions: conditions.length > 0 ? conditions : null
   })
 }
 
 function buildResourceNotesPayload({
   elementId,
-  geospatialResults
+  geospatialResults,
+  formData
 }: DecisionPayloadBuilderContext): Record<string, unknown> {
   const resources = buildResourceEntries(geospatialResults)
   const summary = buildResourceSummary(geospatialResults)
+  const notes = normalizeString(formData.nepa_extraordinary_circumstances)
 
   return stripUndefined({
     id: typeof elementId === "number" ? elementId : undefined,
     resources: resources.length > 0 ? resources : null,
-    summary
+    summary,
+    notes
   })
 }
 
@@ -2367,6 +2369,7 @@ function applyDecisionPayloadToState({
       const nextService: GeospatialServiceState<NepassistSummaryItem[]> = {
         ...geospatialResults.nepassist
       }
+      let derivedSummary: NepassistSummaryItem[] | undefined
       if (Array.isArray(evaluation.nepa_assist_summary)) {
         nextService.summary = evaluation.nepa_assist_summary as NepassistSummaryItem[]
       } else if (
@@ -2377,6 +2380,12 @@ function applyDecisionPayloadToState({
       }
       if (Object.prototype.hasOwnProperty.call(evaluation, "nepa_assist_raw")) {
         nextService.raw = evaluation.nepa_assist_raw
+        if (nextService.raw && typeof nextService.raw === "object") {
+          derivedSummary = summarizeNepassist(nextService.raw)
+        }
+      }
+      if (derivedSummary) {
+        nextService.summary = derivedSummary
       }
       if (
         nextService.status === "idle" &&
@@ -2391,6 +2400,7 @@ function applyDecisionPayloadToState({
       const nextService: GeospatialServiceState<IpacSummary> = {
         ...geospatialResults.ipac
       }
+      let derivedSummary: IpacSummary | undefined
       if (evaluation.ipac_summary && typeof evaluation.ipac_summary === "object") {
         nextService.summary = evaluation.ipac_summary as IpacSummary
       } else if (
@@ -2401,6 +2411,12 @@ function applyDecisionPayloadToState({
       }
       if (Object.prototype.hasOwnProperty.call(evaluation, "ipac_raw")) {
         nextService.raw = evaluation.ipac_raw
+        if (nextService.raw && typeof nextService.raw === "object") {
+          derivedSummary = summarizeIpac(nextService.raw)
+        }
+      }
+      if (derivedSummary) {
+        nextService.summary = derivedSummary
       }
       if (
         nextService.status === "idle" &&
@@ -2436,6 +2452,18 @@ function applyDecisionPayloadToState({
       }
       if (typeof evaluation.notes === "string" && evaluation.notes.trim().length > 0) {
         formData.nepa_extraordinary_circumstances = evaluation.notes
+      }
+      break
+    }
+    case DECISION_ELEMENT_TITLES.RESOURCE_NOTES: {
+      if (typeof evaluation.notes === "string" && evaluation.notes.trim().length > 0) {
+        formData.nepa_extraordinary_circumstances = evaluation.notes
+      } else if (
+        Object.prototype.hasOwnProperty.call(evaluation, "notes") &&
+        evaluation.notes === null &&
+        Object.prototype.hasOwnProperty.call(formData, "nepa_extraordinary_circumstances")
+      ) {
+        delete formData.nepa_extraordinary_circumstances
       }
       break
     }
