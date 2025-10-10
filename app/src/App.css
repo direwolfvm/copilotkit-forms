@@ -634,6 +634,16 @@
   z-index: 1000;
 }
 
+.location-map--hide-sketch arcgis-sketch,
+.location-map--hide-sketch .esri-sketch {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+.location-map--hide-sketch .esri-ui-top-right {
+  pointer-events: none;
+}
+
 .location-map__loading {
   display: flex;
   align-items: center;
