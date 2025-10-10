@@ -110,16 +110,16 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
   },
   {
     key: "location_lat",
-    title: "Representative Latitude",
-    description: "Latitude in decimal degrees for a representative project location.",
+    title: "Project Centroid Latitude",
+    description: "Latitude in decimal degrees for the project centroid.",
     jsonType: "number",
     placeholder: "41.2405",
     includeInForm: false
   },
   {
     key: "location_lon",
-    title: "Representative Longitude",
-    description: "Longitude in decimal degrees for a representative project location.",
+    title: "Project Centroid Longitude",
+    description: "Longitude in decimal degrees for the project centroid.",
     jsonType: "number",
     placeholder: "-101.0169",
     includeInForm: false
@@ -328,7 +328,7 @@ export function formatProjectSummary(data: ProjectFormData): string {
     summaryLines.push(`Location: ${data.location_text}`)
   }
   if (typeof data.location_lat === "number" && typeof data.location_lon === "number") {
-    summaryLines.push(`Representative coordinates: ${data.location_lat}, ${data.location_lon}`)
+    summaryLines.push(`Project centroid coordinates: ${data.location_lat}, ${data.location_lon}`)
   }
   if (data.description) {
     summaryLines.push(`Summary: ${data.description}`)

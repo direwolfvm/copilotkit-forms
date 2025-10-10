@@ -35,6 +35,7 @@ export function ArcgisSketchMap({
   const [mapView, setMapView] = useState<any>(null)
   const isMountedRef = useRef(true)
   const containerClassName = hideSketchWidget ? "location-map location-map--hide-sketch" : "location-map"
+  const lastFocusedGeometryRef = useRef<any>(null)
 
   // Debug: Track component state
   const componentId = useRef(`sketch-${Math.random().toString(36).slice(2, 8)}`)
@@ -83,6 +84,8 @@ export function ArcgisSketchMap({
     } catch (error) {
       console.log(`[${componentId.current}] Map view reset threw error:`, error)
     }
+
+    lastFocusedGeometryRef.current = null
   }, [mapView])
 
   const updateGeometryFromEsri = useCallback(
@@ -115,6 +118,7 @@ export function ArcgisSketchMap({
           latitude: centroid?.latitude,
           longitude: centroid?.longitude
         })
+        lastFocusedGeometryRef.current = incomingGeometry
         focusMapViewOnGeometry(mapView, incomingGeometry)
       })
     },
@@ -179,6 +183,19 @@ export function ArcgisSketchMap({
       return
     }
 
+    const applyFocus = () => {
+      const geometry = lastFocusedGeometryRef.current
+      if (!geometry) {
+        return
+      }
+      try {
+        focusMapViewOnGeometry(mapView, geometry)
+        console.log(`[${componentId.current}] Map view refocused after visibility change`)
+      } catch (error) {
+        console.log(`[${componentId.current}] Map view refocus error:`, error)
+      }
+    }
+
     if (typeof mapView.resize === "function") {
       requestAnimationFrame(() => {
         try {
@@ -187,9 +204,13 @@ export function ArcgisSketchMap({
         } catch (error) {
           console.log(`[${componentId.current}] Map view resize error:`, error)
         }
+        applyFocus()
       })
+      return
     }
-  }, [isVisible, mapView])
+
+    applyFocus()
+  }, [focusMapViewOnGeometry, isVisible, mapView])
 
   useEffect(() => {
     if (!isReady || !containerRef.current) {
@@ -335,6 +356,7 @@ export function ArcgisSketchMap({
           layer.graphics.add(graphic)
 
           console.log(`[${componentId.current}] Focusing map on geometry`)
+          lastFocusedGeometryRef.current = esriGeometry
           focusMapViewOnGeometry(mapView, esriGeometry)
         } catch (error) {
           console.error(`[${componentId.current}] Error processing geometry:`, error)
