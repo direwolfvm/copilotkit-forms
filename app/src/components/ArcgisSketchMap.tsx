@@ -34,6 +34,7 @@ export function ArcgisSketchMap({
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
   const isMountedRef = useRef(true)
+  const containerClassName = hideSketchWidget ? "location-map location-map--hide-sketch" : "location-map"
 
   // Debug: Track component state
   const componentId = useRef(`sketch-${Math.random().toString(36).slice(2, 8)}`)
@@ -204,9 +205,18 @@ export function ArcgisSketchMap({
         if (sketchElement.visible !== false) {
           sketchElement.visible = false
         }
+        if (sketchElement.style) {
+          sketchElement.style.setProperty("display", "none")
+          sketchElement.style.setProperty("visibility", "hidden")
+        }
         const widget = sketchElement.widget
         if (widget && widget.visible !== false) {
           widget.visible = false
+        }
+        const widgetContainer = widget?.container as HTMLElement | undefined
+        if (widgetContainer) {
+          widgetContainer.style.setProperty("display", "none")
+          widgetContainer.style.setProperty("visibility", "hidden")
         }
       } catch (error) {
         console.log(`[${componentId.current}] Failed to hide sketch widget:`, error)
@@ -244,7 +254,7 @@ export function ArcgisSketchMap({
       sketchElement.removeEventListener("arcgisUpdate", handleUpdate as EventListener)
       sketchElement.removeEventListener("arcgisDelete", handleDelete as EventListener)
     }
-  }, [applyDefaultSymbolToGraphic, hideSketchWidget, isReady, updateGeometryFromEsri])
+  }, [applyDefaultSymbolToGraphic, hideSketchWidget, isReady, mapView, updateGeometryFromEsri])
 
   // Process geometry synchronously when conditions are met
   useEffect(() => {
@@ -410,7 +420,7 @@ export function ArcgisSketchMap({
   }, [isReady])
 
   return (
-    <div className="location-map" ref={containerRef}>
+    <div className={containerClassName} ref={containerRef}>
       {map}
     </div>
   )
