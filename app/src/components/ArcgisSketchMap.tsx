@@ -47,20 +47,6 @@ export function ArcgisSketchMap({
     geoJsonOverride?: string
   }
 
-  // Debug: Track component state
-  const componentId = useRef(`sketch-${Math.random().toString(36).slice(2, 8)}`)
-  console.log(`[${componentId.current}] ArcgisSketchMap render:`, {
-    geometry: !!geometry,
-    geometryLength: geometry?.length,
-    isReady,
-    hasMapView: !!mapView,
-    isVisible,
-    enableFileUpload,
-    activeUploadFileName
-  })
-
-
-
   const applyDefaultSymbolToGraphic = useCallback((graphic: any) => {
     if (!graphic?.geometry) {
       return
@@ -81,7 +67,7 @@ export function ArcgisSketchMap({
         mapView.graphics.removeAll()
       }
     } catch (error) {
-      console.log(`[${componentId.current}] Failed to clear view graphics:`, error)
+      console.error("ArcgisSketchMap: Failed to clear view graphics", error)
     }
 
     try {
@@ -89,12 +75,12 @@ export function ArcgisSketchMap({
       if (promise && typeof promise.catch === "function") {
         promise.catch((error: any) => {
           if (error?.name !== "AbortError") {
-            console.log(`[${componentId.current}] Map view reset failed:`, error)
+            console.error("ArcgisSketchMap: Map view reset failed", error)
           }
         })
       }
     } catch (error) {
-      console.log(`[${componentId.current}] Map view reset threw error:`, error)
+      console.error("ArcgisSketchMap: Map view reset threw error", error)
     }
 
     lastFocusedGeometryRef.current = null
@@ -122,7 +108,7 @@ export function ArcgisSketchMap({
 
       const requireFn = (window as any).require
       if (!requireFn) {
-        console.log(`[${componentId.current}] updateGeometryFromEsri aborted - require function missing`)
+        console.error("ArcgisSketchMap: updateGeometryFromEsri aborted - require function missing")
         return
       }
 
@@ -146,7 +132,7 @@ export function ArcgisSketchMap({
             try {
               arcgisObject = geometryJsonUtils.toJSON(geographic ?? incomingGeometry)
             } catch (error) {
-              console.log(`[${componentId.current}] Failed to serialize ArcGIS geometry:`, error)
+              console.error("ArcgisSketchMap: Failed to serialize ArcGIS geometry", error)
               arcgisObject = undefined
             }
           }
@@ -176,23 +162,20 @@ export function ArcgisSketchMap({
 
   useEffect(() => {
     let cancelled = false
-    console.log(`[${componentId.current}] Loading ArcGIS resources`)
     ensureArcgisResources()
       .then(() => {
         if (!cancelled) {
-          console.log(`[${componentId.current}] ArcGIS resources loaded`)
           setIsReady(true)
         }
       })
       .catch((error) => {
         if (!cancelled) {
-          console.error(`[${componentId.current}] Failed to load ArcGIS resources:`, error)
+          console.error("ArcgisSketchMap: Failed to load ArcGIS resources", error)
           setIsReady(false)
         }
       })
     return () => {
       cancelled = true
-      console.log(`[${componentId.current}] Cleanup: ArcGIS resources loading cancelled`)
     }
   }, [])
 
@@ -207,7 +190,6 @@ export function ArcgisSketchMap({
     }
 
     const handleViewReady = (event: CustomEvent) => {
-      console.log(`[${componentId.current}] Map view ready event:`, !!event.detail?.view)
       const view = event.detail?.view
       if (view && typeof view.goTo === "function") {
         setMapView(view)
@@ -216,7 +198,6 @@ export function ArcgisSketchMap({
 
     const existingView = mapElement.view
     if (existingView && typeof existingView.goTo === "function") {
-      console.log(`[${componentId.current}] Map element already has ready view:`, !!existingView)
       setMapView(existingView)
     }
 
@@ -239,9 +220,8 @@ export function ArcgisSketchMap({
       }
       try {
         focusMapViewOnGeometry(mapView, geometry)
-        console.log(`[${componentId.current}] Map view refocused after visibility change`)
       } catch (error) {
-        console.log(`[${componentId.current}] Map view refocus error:`, error)
+        console.error("ArcgisSketchMap: Map view refocus error", error)
       }
     }
 
@@ -249,9 +229,8 @@ export function ArcgisSketchMap({
       requestAnimationFrame(() => {
         try {
           mapView.resize()
-          console.log(`[${componentId.current}] Map view resized after visibility change`)
         } catch (error) {
-          console.log(`[${componentId.current}] Map view resize error:`, error)
+          console.error("ArcgisSketchMap: Map view resize error", error)
         }
         applyFocus()
       })
@@ -289,7 +268,7 @@ export function ArcgisSketchMap({
           widgetContainer.style.setProperty("visibility", "hidden")
         }
       } catch (error) {
-        console.log(`[${componentId.current}] Failed to hide sketch widget:`, error)
+        console.error("ArcgisSketchMap: Failed to hide sketch widget", error)
       }
     }
 
@@ -328,34 +307,22 @@ export function ArcgisSketchMap({
 
   // Process geometry synchronously when conditions are met
   useEffect(() => {
-    console.log(`[${componentId.current}] Geometry effect triggered:`, { 
-      isReady, 
-      hasMapView: !!mapView, 
-      hasContainer: !!containerRef.current,
-      hasGeometry: !!geometry,
-      mapViewReady: mapView?.ready,
-      mapViewDestroyed: mapView?.destroyed
-    })
-    
     if (!isReady || !containerRef.current) {
-      console.log(`[${componentId.current}] Geometry effect skipped - map not ready`)
       return undefined
     }
 
     const sketchElement = containerRef.current.querySelector("arcgis-sketch") as any
     if (!sketchElement) {
-      console.log(`[${componentId.current}] Geometry effect skipped - no sketch element`)
       return undefined
     }
 
     const layer: any = sketchElement.layer
 
     if (!geometry) {
-      console.log(`[${componentId.current}] Geometry cleared - resetting map`)
       try {
         layer?.graphics?.removeAll?.()
       } catch (error) {
-        console.log(`[${componentId.current}] Failed to clear sketch graphics:`, error)
+        console.error("ArcgisSketchMap: Failed to clear sketch graphics", error)
       }
       resetMapView()
       if (uploadStatus.message || uploadStatus.error || activeUploadFileName) {
@@ -365,53 +332,51 @@ export function ArcgisSketchMap({
     }
 
     if (!mapView || mapView.destroyed) {
-      console.log(`[${componentId.current}] Geometry effect waiting for map view`, {
-        hasMapView: !!mapView,
-        destroyed: mapView?.destroyed
-      })
       return undefined
     }
 
     const requireFn = (window as any).require
     if (!requireFn) {
-      console.log(`[${componentId.current}] No require function available`)
       return undefined
     }
-
-    console.log(`[${componentId.current}] Processing incoming geometry`)
 
     requireFn(
       ["esri/Graphic", "esri/geometry/support/jsonUtils"],
       (Graphic: any, geometryJsonUtils: any) => {
         if (!layer) {
-          console.log(`[${componentId.current}] No layer found on sketch element`)
           return
         }
 
-        console.log(`[${componentId.current}] Clearing existing graphics`)
-        layer.graphics.removeAll()
+        if (typeof layer.removeAll === "function") {
+          try {
+            layer.removeAll()
+          } catch (error) {
+            console.error("ArcgisSketchMap: Failed to clear existing sketch graphics", error)
+            return
+          }
+        }
 
         try {
-          console.log(`[${componentId.current}] Processing geometry:`, geometry.slice(0, 100) + "...")
           const parsed = JSON.parse(geometry)
+          if (!parsed) {
+            return
+          }
+
           const esriGeometryJson = convertGeoJsonToEsri(parsed)
           const esriGeometry = esriGeometryJson
             ? geometryJsonUtils.fromJSON(esriGeometryJson)
             : geometryJsonUtils.fromJSON(parsed)
           if (!esriGeometry) {
-            console.log(`[${componentId.current}] Failed to create Esri geometry`)
             return
           }
-          console.log(`[${componentId.current}] Adding graphic to layer`)
           const graphic = new (Graphic as any)({ geometry: esriGeometry })
           applyDefaultSymbolToGraphic(graphic)
           layer.graphics.add(graphic)
 
-          console.log(`[${componentId.current}] Focusing map on geometry`)
           lastFocusedGeometryRef.current = esriGeometry
           focusMapViewOnGeometry(mapView, esriGeometry)
         } catch (error) {
-          console.error(`[${componentId.current}] Error processing geometry:`, error)
+          console.error("ArcgisSketchMap: Error processing geometry", error)
         }
       }
     )
@@ -433,7 +398,6 @@ export function ArcgisSketchMap({
   // Cleanup effect to ensure proper component unmounting
   useEffect(() => {
     return () => {
-      console.log(`[${componentId.current}] Component unmounting`)
       isMountedRef.current = false
       if (mapView) {
         try {
@@ -442,7 +406,7 @@ export function ArcgisSketchMap({
             mapView.graphics.removeAll()
           }
         } catch (error) {
-          console.log(`[${componentId.current}] Cleanup error:`, error)
+          console.error("ArcgisSketchMap: Cleanup error", error)
         }
       }
     }
@@ -539,7 +503,7 @@ export function ArcgisSketchMap({
 
             setUploadStatus({ message: `Uploaded ${file.name}` })
           } catch (callbackError) {
-            console.error(`[${componentId.current}] Failed to apply uploaded geometry:`, callbackError)
+            console.error("ArcgisSketchMap: Failed to apply uploaded geometry", callbackError)
             const message =
               callbackError instanceof Error
                 ? callbackError.message
@@ -548,7 +512,7 @@ export function ArcgisSketchMap({
           }
         })
       } catch (error) {
-        console.error(`[${componentId.current}] Failed to process uploaded file:`, error)
+        console.error("ArcgisSketchMap: Failed to process uploaded file", error)
         const message = error instanceof Error ? error.message : "Unable to process the uploaded file."
         setUploadStatus({ error: message })
       } finally {
