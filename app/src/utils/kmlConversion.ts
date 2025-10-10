@@ -57,6 +57,55 @@ function parseKmlText(kmlText: string) {
   return geoJson
 }
 
+function toFeatureCollectionFromGeoJson(input: any): any {
+  if (!input || typeof input !== "object") {
+    throw new Error("The uploaded GeoJSON file did not contain any map features.")
+  }
+
+  const type = typeof input.type === "string" ? input.type.toLowerCase() : ""
+
+  if (type === "featurecollection") {
+    return input
+  }
+
+  if (type === "feature") {
+    return {
+      type: "FeatureCollection",
+      features: [input]
+    }
+  }
+
+  if (type === "geometrycollection") {
+    const geometries = Array.isArray((input as any).geometries) ? (input as any).geometries : []
+    if (geometries.length === 0) {
+      throw new Error("The uploaded GeoJSON file did not contain any map features.")
+    }
+    return {
+      type: "FeatureCollection",
+      features: geometries.map((geometry: any) => ({
+        type: "Feature",
+        properties: {},
+        geometry
+      }))
+    }
+  }
+
+  if (type) {
+    return {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: input
+        }
+      ]
+    }
+  }
+
+  throw new Error("The uploaded GeoJSON file is not a supported GeoJSON structure.")
+}
+
 function combineFeatureCollection(featureCollection: any): any {
   const polygons: any[] = []
   const polylines: any[] = []
@@ -155,18 +204,47 @@ export type ParsedGisUpload = {
 export async function parseUploadedGisFile(file: File): Promise<ParsedGisUpload> {
   const extensionMatch = file.name.toLowerCase().match(/\.([a-z0-9]+)$/)
   const extension = extensionMatch ? extensionMatch[1] : undefined
-  const format: UploadedGisFile["format"] = extension === "kmz" ? "kmz" : "kml"
+  const mimeType = file.type ? file.type.toLowerCase() : undefined
+  let format: UploadedGisFile["format"] = "kml"
+  if (extension === "kmz") {
+    format = "kmz"
+  } else if (extension === "geojson" || extension === "json") {
+    format = "geojson"
+  } else if (mimeType === "application/geo+json" || mimeType === "application/vnd.geo+json") {
+    format = "geojson"
+  }
 
   const buffer = await file.arrayBuffer()
   const base64Data = arrayBufferToBase64(buffer)
 
-  const kmlText =
-    format === "kmz"
-      ? await readKmlFromKmz(buffer)
-      : decodeArrayBuffer(buffer)
+  let geometry: any
 
-  const featureCollection = parseKmlText(kmlText)
-  const geometry = combineFeatureCollection(featureCollection)
+  if (format === "geojson") {
+    let geoJsonText: string
+    try {
+      geoJsonText = decodeArrayBuffer(buffer)
+    } catch (error) {
+      throw new Error("Unable to read the uploaded GeoJSON file.")
+    }
+
+    let parsedGeoJson: any
+    try {
+      parsedGeoJson = JSON.parse(geoJsonText)
+    } catch (error) {
+      throw new Error("The uploaded GeoJSON file is not valid JSON.")
+    }
+
+    const featureCollection = toFeatureCollectionFromGeoJson(parsedGeoJson)
+    geometry = combineFeatureCollection(featureCollection)
+  } else {
+    const kmlText =
+      format === "kmz"
+        ? await readKmlFromKmz(buffer)
+        : decodeArrayBuffer(buffer)
+
+    const featureCollection = parseKmlText(kmlText)
+    geometry = combineFeatureCollection(featureCollection)
+  }
 
   const arcgisGeometryJson = convertGeoJsonToEsri(geometry)
   if (!arcgisGeometryJson) {

@@ -1,7 +1,7 @@
 export type GeometrySource = "draw" | "search" | "upload"
 
 export type UploadedGisFile = {
-  format: "kml" | "kmz"
+  format: "kml" | "kmz" | "geojson"
   fileName: string
   fileSize: number
   fileType?: string

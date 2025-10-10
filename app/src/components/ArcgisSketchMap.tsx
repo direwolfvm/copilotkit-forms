@@ -564,10 +564,10 @@ export function ArcgisSketchMap({
       {enableFileUpload ? (
         <div className="location-map__controls" aria-live="polite">
           <label className={`location-map__upload-button${isUploading ? " location-map__upload-button--loading" : ""}`}>
-            <span>{isUploading ? "Processing…" : "Upload KML/KMZ"}</span>
+            <span>{isUploading ? "Processing…" : "Upload KML/KMZ/GeoJSON"}</span>
             <input
               type="file"
-              accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+              accept=".kml,.kmz,.geojson,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/geo+json,application/json"
               onChange={handleFileChange}
               disabled={isUploading}
             />
