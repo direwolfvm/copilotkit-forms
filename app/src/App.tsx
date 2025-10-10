@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from "react-router-dom"
 
 import "./App.css"
+import HomePage from "./HomePage"
 import PortalPage from "./PortalPage"
 import { ProjectsPage } from "./ProjectsPage"
 import ResourceCheckPage from "./ResourceCheckPage"
@@ -11,8 +12,18 @@ function Layout() {
       <header className="site-header">
         <div className="site-header__inner">
           <div className="site-header__brand">
-            <span className="site-header__title">HelpPermit.me</span>
-            <span className="site-header__tagline">(an unofficial demo)</span>
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                isActive
+                  ? "site-header__brand-link site-header__brand-link--active"
+                  : "site-header__brand-link"
+              }
+            >
+              <span className="site-header__title">HelpPermit.me</span>
+              <span className="site-header__tagline">(an unofficial demo)</span>
+            </NavLink>
           </div>
           <nav className="site-nav" aria-label="Primary">
             <NavLink
@@ -53,14 +64,14 @@ function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to="/portal" replace />} />
+        <Route index element={<HomePage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="portal">
           <Route index element={<PortalPage />} />
           <Route path=":projectId" element={<PortalPage />} />
         </Route>
         <Route path="resource-check" element={<ResourceCheckPage />} />
-        <Route path="*" element={<Navigate to="/portal" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   )
