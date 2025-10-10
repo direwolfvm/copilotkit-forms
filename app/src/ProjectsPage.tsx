@@ -194,14 +194,14 @@ export function ProjectsPage() {
       isMounted = false
     }
   }, [])
-
+s
   const hasProjects = projects.length > 0
 
   return (
     <div className="projects-page usa-prose">
       <header className="projects-page__header">
         <h1>Projects</h1>
-        <p>Browse saved projects and inspect their processes and case events.</p>
+        <p>Browse saved projects and their pre-screening milestones.</p>
       </header>
 
       {status === "loading" ? (
