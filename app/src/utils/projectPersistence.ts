@@ -2612,9 +2612,21 @@ async function fetchDecisionElementTitleMap({
 }): Promise<Map<number, string>> {
   const elements = await fetchDecisionElements({ supabaseUrl, supabaseAnonKey })
   const map = new Map<number, string>()
-  for (const element of elements.values()) {
-    map.set(element.id, element.title)
+
+  for (const builder of DECISION_ELEMENT_BUILDERS) {
+    const element = elements.get(builder.title)
+    if (!element) {
+      continue
+    }
+
+    const numericId = parseNumericId(element.id)
+    if (typeof numericId !== "number") {
+      continue
+    }
+
+    map.set(numericId, builder.title)
   }
+
   return map
 }
 
