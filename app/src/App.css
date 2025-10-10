@@ -295,6 +295,34 @@
   grid-template-columns: 1fr;
 }
 
+.resource-implications {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.resource-implications h4 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--color-heading);
+}
+
+.resource-implications ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  color: var(--color-text);
+}
+
+.resource-implications li {
+  line-height: 1.5;
+}
+
 .geospatial-results__card {
   border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
   border-radius: 16px;
