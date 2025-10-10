@@ -261,7 +261,7 @@ export function NepaReviewSection({
         </div>
         <div className="form-field">
           <label htmlFor={extraordinaryId}>
-            {extraordinaryConfig?.title ?? "Extraordinary Circumstances Narrative"}
+            {extraordinaryConfig?.title ?? "Environmental Narrative"}
           </label>
           {extraordinaryConfig?.description ? <p className="help-block">{extraordinaryConfig.description}</p> : null}
           <textarea

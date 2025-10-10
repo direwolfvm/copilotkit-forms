@@ -156,9 +156,9 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
   },
   {
     key: "nepa_extraordinary_circumstances",
-    title: "Extraordinary Circumstances Narrative",
+    title: "Environmental Narrative",
     description:
-      "Summarize analysis of any extraordinary circumstances that could preclude using the categorical exclusion.",
+      "Summarize analysis of any natural or other resources that could be impacted by the project.  If relevant, evaluate how these might be considered an extraordinary circumstance for a categorical exclusion.",
     jsonType: "string",
     widget: "textarea",
     rows: 5,
