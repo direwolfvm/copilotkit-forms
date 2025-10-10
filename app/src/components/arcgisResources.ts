@@ -150,6 +150,25 @@ export function convertToGeoJsonGeometry(geometry: any) {
       centroid
     }
   }
+  if (type === "multipoint") {
+    const multipoint = geometry as { points: number[][] }
+    const points = Array.isArray(multipoint.points) ? multipoint.points.filter((point) => Array.isArray(point)) : []
+    if (points.length === 0) {
+      return { geoJson: JSON.stringify({ type: "MultiPoint", coordinates: [] }) }
+    }
+    if (points.length === 1) {
+      const [x, y] = points[0]
+      return {
+        geoJson: JSON.stringify({ type: "Point", coordinates: points[0] }),
+        centroid: { longitude: x, latitude: y }
+      }
+    }
+    const centroid = computePathCentroid(points)
+    return {
+      geoJson: JSON.stringify({ type: "MultiPoint", coordinates: points }),
+      centroid
+    }
+  }
   if (type === "polygon") {
     const polygon = geometry as { rings: number[][][] }
     if (!Array.isArray(polygon.rings) || polygon.rings.length === 0) {
@@ -192,6 +211,28 @@ export function convertGeoJsonToEsri(geoJson: any) {
     case "MultiLineString": {
       if (Array.isArray(geoJson.coordinates)) {
         return { type: "polyline", paths: geoJson.coordinates, spatialReference }
+      }
+      break
+    }
+    case "MultiPoint": {
+      if (Array.isArray(geoJson.coordinates)) {
+        return { type: "multipoint", points: geoJson.coordinates, spatialReference }
+      }
+      break
+    }
+    case "MultiPolygon": {
+      if (Array.isArray(geoJson.coordinates)) {
+        const rings: number[][][] = []
+        for (const polygon of geoJson.coordinates) {
+          if (Array.isArray(polygon)) {
+            for (const ring of polygon) {
+              if (Array.isArray(ring)) {
+                rings.push(ring)
+              }
+            }
+          }
+        }
+        return { type: "polygon", rings, spatialReference }
       }
       break
     }
@@ -243,7 +284,7 @@ export function getDefaultSymbolForGeometry(geometry: any): ArcgisSymbol | undef
   if (type === "polyline") {
     return cloneSymbol(POLYLINE_SYMBOL)
   }
-  if (type === "point") {
+  if (type === "point" || type === "multipoint") {
     return cloneSymbol(POINT_SYMBOL)
   }
   return undefined
