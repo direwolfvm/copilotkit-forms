@@ -194,7 +194,6 @@ export function ProjectsPage() {
       isMounted = false
     }
   }, [])
-s
   const hasProjects = projects.length > 0
 
   return (

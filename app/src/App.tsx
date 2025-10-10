@@ -3,6 +3,7 @@ import { NavLink, Navigate, Outlet, Route, Routes } from "react-router-dom"
 import "./App.css"
 import PortalPage from "./PortalPage"
 import { ProjectsPage } from "./ProjectsPage"
+import ResourceCheckPage from "./ResourceCheckPage"
 
 function Layout() {
   return (
@@ -30,6 +31,14 @@ function Layout() {
             >
               New Project Portal
             </NavLink>
+            <NavLink
+              to="/resource-check"
+              className={({ isActive }) =>
+                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
+              }
+            >
+              Resource Check
+            </NavLink>
           </nav>
         </div>
       </header>
@@ -50,6 +59,7 @@ function App() {
           <Route index element={<PortalPage />} />
           <Route path=":projectId" element={<PortalPage />} />
         </Route>
+        <Route path="resource-check" element={<ResourceCheckPage />} />
         <Route path="*" element={<Navigate to="/portal" replace />} />
       </Route>
     </Routes>
