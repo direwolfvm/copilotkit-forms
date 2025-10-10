@@ -8,6 +8,7 @@ import type {
 } from "../types/geospatial"
 import type { PermittingChecklistItem } from "../components/PermittingChecklistSection"
 import { getSupabaseAnonKey, getSupabaseUrl } from "../runtimeConfig"
+import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "../types/gis"
 
 const DATA_SOURCE_SYSTEM = "project-portal"
 const PRE_SCREENING_PROCESS_MODEL_ID = 1
@@ -71,6 +72,7 @@ export class ProjectPersistenceError extends Error {
 type SaveProjectSnapshotArgs = {
   formData: ProjectFormData
   geospatialResults: GeospatialResultsState
+  gisUpload?: ProjectGisUpload
 }
 
 type BuildProjectRecordArgs = {
@@ -130,11 +132,13 @@ export type LoadedProjectPortalState = {
   geospatialResults: GeospatialResultsState
   permittingChecklist: LoadedPermittingChecklistItem[]
   lastUpdated?: string
+  gisUpload: ProjectGisUpload
 }
 
 export async function saveProjectSnapshot({
   formData,
-  geospatialResults
+  geospatialResults,
+  gisUpload
 }: SaveProjectSnapshotArgs): Promise<number> {
   const supabaseUrl = getSupabaseUrl()
   const supabaseAnonKey = getSupabaseAnonKey()
@@ -216,6 +220,20 @@ export async function saveProjectSnapshot({
       projectTitle: normalizedTitle,
       projectRecord
     })
+  })
+
+  const resolvedGisUpload: ProjectGisUpload = {
+    geoJson: typeof formData.location_object === "string" ? formData.location_object : undefined,
+    arcgisJson: gisUpload?.arcgisJson,
+    source: gisUpload?.source,
+    uploadedFile: gisUpload?.uploadedFile ?? null
+  }
+
+  await upsertProjectGisDataForProject({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId,
+    upload: resolvedGisUpload
   })
 
   return processInstanceId
@@ -756,6 +774,247 @@ async function createCaseEvent({
         : `Failed to record "${eventType}" case event (${response.status}).`
     )
   }
+}
+
+type UpsertProjectGisDataArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  projectId: number
+  upload: ProjectGisUpload
+}
+
+async function upsertProjectGisDataForProject({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId,
+  upload
+}: UpsertProjectGisDataArgs): Promise<void> {
+  const file = upload.uploadedFile
+  if (!file || !file.base64Data) {
+    await deleteProjectGisDataForProject({ supabaseUrl, supabaseAnonKey, projectId })
+    return
+  }
+
+  const timestamp = new Date().toISOString()
+  const container = buildGisDataContainer(upload, timestamp)
+
+  const endpoint = new URL("/rest/v1/gis_data", supabaseUrl)
+  endpoint.searchParams.set("on_conflict", "parent_project_id")
+
+  const payload = stripUndefined({
+    parent_project_id: projectId,
+    data_container: container,
+    data_source_system: DATA_SOURCE_SYSTEM,
+    updated_last: timestamp,
+    last_updated: timestamp,
+    retrieved_timestamp: timestamp
+  })
+
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+
+  const response = await fetch(url, init)
+  if (!response.ok) {
+    const responseText = await response.text()
+    const detail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      detail
+        ? `Failed to store uploaded GIS data (${response.status}): ${detail}`
+        : `Failed to store uploaded GIS data (${response.status}).`
+    )
+  }
+}
+
+type DeleteProjectGisDataArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  projectId: number
+}
+
+async function deleteProjectGisDataForProject({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId
+}: DeleteProjectGisDataArgs): Promise<void> {
+  const endpoint = new URL("/rest/v1/gis_data", supabaseUrl)
+  endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "DELETE",
+    headers: { Prefer: "count=exact" }
+  })
+
+  const response = await fetch(url, init)
+  if (!response.ok) {
+    const responseText = await response.text()
+    const detail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      detail
+        ? `Failed to remove GIS data (${response.status}): ${detail}`
+        : `Failed to remove GIS data (${response.status}).`
+    )
+  }
+}
+
+type FetchProjectGisDataArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  projectId: number
+}
+
+type FetchedGisUpload = {
+  upload: ProjectGisUpload
+  updatedAt?: string
+}
+
+async function fetchProjectGisDataUpload({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId
+}: FetchProjectGisDataArgs): Promise<FetchedGisUpload | null> {
+  const endpoint = new URL("/rest/v1/gis_data", supabaseUrl)
+  endpoint.searchParams.set("select", "id,data_container,updated_last,last_updated,retrieved_timestamp")
+  endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+  endpoint.searchParams.set("order", "updated_last.desc.nullslast")
+  endpoint.searchParams.set("limit", "1")
+
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "GET"
+  })
+
+  const response = await fetch(url, init)
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const detail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      detail
+        ? `Failed to fetch GIS data (${response.status}): ${detail}`
+        : `Failed to fetch GIS data (${response.status}).`
+    )
+  }
+
+  const payload = responseText ? safeJsonParse(responseText) : undefined
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return null
+  }
+
+  const record = payload[0] as {
+    data_container?: unknown
+    updated_last?: string | null
+    last_updated?: string | null
+    retrieved_timestamp?: string | null
+  }
+
+  const upload: ProjectGisUpload = {}
+  const container = record?.data_container
+
+  if (container && typeof container === "object") {
+    const containerObj = container as Record<string, unknown>
+
+    const geoJsonCandidate = containerObj.geoJson
+    if (typeof geoJsonCandidate === "string") {
+      upload.geoJson = geoJsonCandidate
+    } else if (geoJsonCandidate && typeof geoJsonCandidate === "object") {
+      try {
+        upload.geoJson = JSON.stringify(geoJsonCandidate)
+      } catch {
+        // ignore serialization errors
+      }
+    }
+
+    const arcgisCandidate = containerObj.arcgisJson
+    if (typeof arcgisCandidate === "string") {
+      upload.arcgisJson = arcgisCandidate
+    } else if (arcgisCandidate && typeof arcgisCandidate === "object") {
+      try {
+        upload.arcgisJson = JSON.stringify(arcgisCandidate)
+      } catch {
+        // ignore serialization errors
+      }
+    }
+
+    const sourceCandidate = containerObj.source
+    if (typeof sourceCandidate === "string") {
+      upload.source = sourceCandidate as GeometrySource
+    }
+
+    const fileCandidate = containerObj.originalFile
+    if (fileCandidate && typeof fileCandidate === "object") {
+      const fileRecord = fileCandidate as Record<string, unknown>
+      const formatCandidate = fileRecord.format
+      const base64Candidate = fileRecord.base64Data
+      const fileNameCandidate = fileRecord.fileName
+      const fileSizeCandidate = fileRecord.fileSize
+
+      if (
+        (formatCandidate === "kml" || formatCandidate === "kmz") &&
+        typeof base64Candidate === "string" &&
+        typeof fileNameCandidate === "string" &&
+        typeof fileSizeCandidate === "number"
+      ) {
+        const uploadedFile: UploadedGisFile = {
+          format: formatCandidate,
+          base64Data: base64Candidate,
+          fileName: fileNameCandidate,
+          fileSize: fileSizeCandidate,
+          fileType: typeof fileRecord.fileType === "string" ? fileRecord.fileType : undefined,
+          lastModified:
+            typeof fileRecord.lastModified === "number" && Number.isFinite(fileRecord.lastModified)
+              ? (fileRecord.lastModified as number)
+              : undefined
+        }
+        upload.uploadedFile = uploadedFile
+      }
+    }
+  }
+
+  const updatedAt =
+    (typeof record.updated_last === "string" && record.updated_last) ||
+    (typeof record.last_updated === "string" && record.last_updated) ||
+    (typeof record.retrieved_timestamp === "string" && record.retrieved_timestamp) ||
+    undefined
+
+  return { upload, updatedAt }
+}
+
+function buildGisDataContainer(upload: ProjectGisUpload, timestamp: string): Record<string, unknown> {
+  const container: Record<string, unknown> = { storedAt: timestamp }
+
+  if (upload.geoJson) {
+    const parsed = safeJsonParse(upload.geoJson)
+    container.geoJson = parsed ?? upload.geoJson
+  }
+
+  if (upload.arcgisJson) {
+    const parsed = safeJsonParse(upload.arcgisJson)
+    container.arcgisJson = parsed ?? upload.arcgisJson
+  }
+
+  if (upload.source) {
+    container.source = upload.source
+  }
+
+  if (upload.uploadedFile) {
+    const file = upload.uploadedFile
+    container.originalFile = stripUndefined({
+      format: file.format,
+      fileName: file.fileName,
+      fileSize: file.fileSize,
+      fileType: file.fileType,
+      base64Data: file.base64Data,
+      lastModified: file.lastModified,
+      storedAt: timestamp
+    })
+  }
+
+  return container
 }
 
 function buildCaseEventData(
@@ -2477,6 +2736,17 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
 
   let lastUpdated = typeof projectRow.last_updated === "string" ? projectRow.last_updated : undefined
 
+  const gisUploadResult = await fetchProjectGisDataUpload({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId
+  })
+
+  const gisUpload: ProjectGisUpload = gisUploadResult?.upload ?? {}
+  if (gisUploadResult?.updatedAt) {
+    lastUpdated = pickLatestTimestamp(lastUpdated, gisUploadResult.updatedAt)
+  }
+
   const permittingChecklist: LoadedPermittingChecklistItem[] = []
 
   const processRecord = await fetchLatestPreScreeningProcessInstanceRecord({
@@ -2535,6 +2805,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     formData,
     geospatialResults,
     permittingChecklist,
-    lastUpdated
+    lastUpdated,
+    gisUpload
   }
 }

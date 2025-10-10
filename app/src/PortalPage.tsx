@@ -44,6 +44,7 @@ import {
   formatGeospatialResultsSummary
 } from "./utils/geospatial"
 import { majorPermits } from "./utils/majorPermits"
+import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "./types/gis"
 
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
 
@@ -71,6 +72,12 @@ const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
 type UpdatesPayload = Record<string, unknown>
 
 type LocationFieldKey = "location_text" | "location_lat" | "location_lon" | "location_object"
+type LocationFieldUpdates =
+  Partial<Pick<ProjectFormData, LocationFieldKey>> & {
+    arcgisJson?: string
+    geometrySource?: GeometrySource
+    uploadedFile?: UploadedGisFile | null
+  }
 type NepaFieldKey =
   | "nepa_categorical_exclusion_code"
   | "nepa_conformance_conditions"
@@ -148,6 +155,7 @@ type PersistedProjectFormState = {
   geospatialResults: GeospatialResultsState
   permittingChecklist: PermittingChecklistItem[]
   hasSavedSnapshot: boolean
+  gisUpload: ProjectGisUpload
 }
 
 let persistedProjectFormState: PersistedProjectFormState | undefined
@@ -198,6 +206,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       ? cloneValue(persistedProjectFormState.geospatialResults)
       : createInitialGeospatialResults()
   )
+  const [projectGisUpload, setProjectGisUpload] = useState<ProjectGisUpload>(() =>
+    projectId && persistedProjectFormState ? cloneValue(persistedProjectFormState.gisUpload) : {}
+  )
   const [permittingChecklist, setPermittingChecklist] = useState<PermittingChecklistItem[]>(() =>
     projectId && persistedProjectFormState ? cloneValue(persistedProjectFormState.permittingChecklist) : []
   )
@@ -223,6 +234,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setIsSaving(false)
     setDecisionSubmitState({ status: "idle" })
     setHasSavedSnapshot(false)
+    setProjectGisUpload({})
   }, [
     setFormData,
     setLastSaved,
@@ -231,7 +243,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setSaveError,
     setIsSaving,
     setDecisionSubmitState,
-    setHasSavedSnapshot
+    setHasSavedSnapshot,
+    setProjectGisUpload
   ])
 
   useEffect(() => {
@@ -274,6 +287,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           })
         )
         setPermittingChecklist(checklistWithIds)
+        setProjectGisUpload(cloneValue(loaded.gisUpload ?? {}))
 
         const formattedTimestamp = (() => {
           if (loaded.lastUpdated) {
@@ -322,7 +336,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setIsSaving,
     setDecisionSubmitState,
     setHasSavedSnapshot,
-    setProjectLoadState
+    setProjectLoadState,
+    setProjectGisUpload
   ])
 
   useEffect(() => {
@@ -331,9 +346,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       lastSaved,
       geospatialResults: cloneValue(geospatialResults),
       permittingChecklist: cloneValue(permittingChecklist),
-      hasSavedSnapshot
+      hasSavedSnapshot,
+      gisUpload: cloneValue(projectGisUpload)
     }
-  }, [formData, geospatialResults, lastSaved, permittingChecklist, hasSavedSnapshot])
+  }, [formData, geospatialResults, lastSaved, permittingChecklist, hasSavedSnapshot, projectGisUpload])
 
   const locationFieldDetail = useMemo(
     () => projectFieldDetails.find((field) => field.key === "location_text"),
@@ -762,7 +778,13 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     try {
       await saveProjectSnapshot({
         formData: next,
-        geospatialResults
+        geospatialResults,
+        gisUpload: {
+          arcgisJson: projectGisUpload.arcgisJson,
+          geoJson: next.location_object ?? undefined,
+          source: projectGisUpload.source,
+          uploadedFile: projectGisUpload.uploadedFile ?? null
+        }
       })
       setLastSaved(new Date().toLocaleString())
       setHasSavedSnapshot(true)
@@ -787,19 +809,14 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   }
 
   const updateLocationFields = useCallback(
-    (
-      updates: Partial<Pick<ProjectFormData, "location_text" | "location_lat" | "location_lon" | "location_object">>
-    ) => {
+    (updates: LocationFieldUpdates) => {
       setFormData((previous) => {
         const base = previous ?? createEmptyProjectData()
         const next: ProjectFormData = { ...base }
         const mutableNext = next as Record<LocationFieldKey, ProjectFormData[LocationFieldKey]>
         let changed = false
 
-        const applyUpdate = <K extends LocationFieldKey>(
-          key: K,
-          value: ProjectFormData[K] | undefined
-        ) => {
+        const applyUpdate = <K extends LocationFieldKey>(key: K, value: ProjectFormData[K] | undefined) => {
           if (!Object.prototype.hasOwnProperty.call(updates, key)) {
             return
           }
@@ -826,8 +843,71 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         }
         return applyGeneratedProjectId(next, base.id)
       })
+
+      setProjectGisUpload((previous) => {
+        const next: ProjectGisUpload = { ...previous }
+        let changed = false
+
+        if (Object.prototype.hasOwnProperty.call(updates, "arcgisJson")) {
+          const value = updates.arcgisJson
+          if (value === undefined) {
+            if ("arcgisJson" in next) {
+              delete next.arcgisJson
+              changed = true
+            }
+          } else if (next.arcgisJson !== value) {
+            next.arcgisJson = value
+            changed = true
+          }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(updates, "geometrySource")) {
+          const value = updates.geometrySource
+          if (value === undefined) {
+            if ("source" in next) {
+              delete next.source
+              changed = true
+            }
+          } else if (next.source !== value) {
+            next.source = value
+            changed = true
+          }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(updates, "uploadedFile")) {
+          const value = updates.uploadedFile ?? null
+          if (value === null) {
+            if (next.uploadedFile !== null || next.uploadedFile === undefined) {
+              next.uploadedFile = null
+              changed = true
+            }
+          } else if (
+            !next.uploadedFile ||
+            next.uploadedFile.base64Data !== value.base64Data ||
+            next.uploadedFile.fileName !== value.fileName
+          ) {
+            next.uploadedFile = value
+            changed = true
+          }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(updates, "location_object")) {
+          const value = updates.location_object ?? undefined
+          if (value === undefined) {
+            if ("geoJson" in next) {
+              delete next.geoJson
+              changed = true
+            }
+          } else if (next.geoJson !== value) {
+            next.geoJson = value
+            changed = true
+          }
+        }
+
+        return changed ? next : previous
+      })
     },
-    [setFormData]
+    [setFormData, setProjectGisUpload]
   )
 
   const handleLocationTextChange = useCallback(
@@ -838,15 +918,16 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   )
 
   const handleLocationGeometryChange = useCallback(
-    (
-      updates: Partial<Pick<ProjectFormData, "location_lat" | "location_lon" | "location_object">>
-    ) => {
-      if (Object.prototype.hasOwnProperty.call(updates, "location_object") && !updates.location_object) {
+    (updates: LocationFieldUpdates) => {
+      const nextUpdates: LocationFieldUpdates = { ...updates }
+      if (Object.prototype.hasOwnProperty.call(nextUpdates, "location_object") && !nextUpdates.location_object) {
         setGeospatialResults({ nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] })
+        nextUpdates.location_lat = undefined
+        nextUpdates.location_lon = undefined
       }
-      updateLocationFields(updates)
+      updateLocationFields(nextUpdates)
     },
-    [updateLocationFields]
+    [setGeospatialResults, updateLocationFields]
   )
 
   const handleNepaFieldChange = useCallback(
@@ -1087,6 +1168,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               rows={locationFieldDetail.rows}
               locationText={formData.location_text}
               geometry={formData.location_object}
+              activeUploadFileName={projectGisUpload.uploadedFile?.fileName}
+              enableFileUpload
               onLocationTextChange={handleLocationTextChange}
               onLocationGeometryChange={handleLocationGeometryChange}
             />

@@ -1,4 +1,5 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { ChangeEvent } from "react"
 
 import {
   convertGeoJsonToEsri,
@@ -7,35 +8,44 @@ import {
   focusMapViewOnGeometry,
   getDefaultSymbolForGeometry
 } from "./arcgisResources"
+import type { GeometryChange, GeometrySource, UploadedGisFile } from "../types/gis"
+import { parseUploadedGisFile } from "../utils/kmlConversion"
 
 const DEFAULT_VIEW_CENTER: [number, number] = [-98, 39]
 const DEFAULT_VIEW_ZOOM = 3
-
-type GeometryChange = {
-  geoJson?: string
-  latitude?: number
-  longitude?: number
-}
 
 type ArcgisSketchMapProps = {
   geometry?: string
   onGeometryChange: (change: GeometryChange) => void
   isVisible?: boolean
   hideSketchWidget?: boolean
+  enableFileUpload?: boolean
+  activeUploadFileName?: string
 }
 
 export function ArcgisSketchMap({
   geometry,
   onGeometryChange,
   isVisible = true,
-  hideSketchWidget = false
+  hideSketchWidget = false,
+  enableFileUpload = false,
+  activeUploadFileName
 }: ArcgisSketchMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [mapView, setMapView] = useState<any>(null)
+  const [uploadStatus, setUploadStatus] = useState<{ message?: string; error?: string }>({})
+  const [isUploading, setIsUploading] = useState(false)
   const isMountedRef = useRef(true)
   const containerClassName = hideSketchWidget ? "location-map location-map--hide-sketch" : "location-map"
   const lastFocusedGeometryRef = useRef<any>(null)
+
+  type UpdateGeometryOptions = {
+    source?: GeometrySource
+    uploadedFile?: UploadedGisFile | null
+    arcgisOverride?: any
+    geoJsonOverride?: string
+  }
 
   // Debug: Track component state
   const componentId = useRef(`sketch-${Math.random().toString(36).slice(2, 8)}`)
@@ -44,7 +54,9 @@ export function ArcgisSketchMap({
     geometryLength: geometry?.length,
     isReady,
     hasMapView: !!mapView,
-    isVisible
+    isVisible,
+    enableFileUpload,
+    activeUploadFileName
   })
 
 
@@ -89,40 +101,77 @@ export function ArcgisSketchMap({
   }, [mapView])
 
   const updateGeometryFromEsri = useCallback(
-    (incomingGeometry: any | undefined) => {
+    (incomingGeometry: any | undefined, options?: UpdateGeometryOptions) => {
+      const source = options?.source
+
       if (!incomingGeometry) {
-        onGeometryChange({ geoJson: undefined, latitude: undefined, longitude: undefined })
+        onGeometryChange({
+          geoJson: undefined,
+          arcgisJson: undefined,
+          latitude: undefined,
+          longitude: undefined,
+          source,
+          uploadedFile: source === "upload" ? options?.uploadedFile ?? null : null
+        })
+        lastFocusedGeometryRef.current = null
+        if (source && source !== "upload") {
+          setUploadStatus({})
+        }
         return
       }
 
       const requireFn = (window as any).require
       if (!requireFn) {
+        console.log(`[${componentId.current}] updateGeometryFromEsri aborted - require function missing`)
         return
       }
 
-      requireFn([
-        "esri/geometry/support/webMercatorUtils"
-      ], (webMercatorUtils: any) => {
-        let geographic: any = incomingGeometry
-        try {
-          if ((incomingGeometry as any).spatialReference?.wkid !== 4326) {
-            geographic = webMercatorUtils.webMercatorToGeographic(incomingGeometry)
+      requireFn(
+        ["esri/geometry/support/webMercatorUtils", "esri/geometry/support/jsonUtils"],
+        (webMercatorUtils: any, geometryJsonUtils: any) => {
+          let geographic: any = incomingGeometry
+          try {
+            if ((incomingGeometry as any).spatialReference?.wkid !== 4326) {
+              geographic = webMercatorUtils.webMercatorToGeographic(incomingGeometry)
+            }
+          } catch {
+            geographic = incomingGeometry
           }
-        } catch {
-          geographic = incomingGeometry
-        }
 
-        const { geoJson, centroid } = convertToGeoJsonGeometry(geographic)
-        onGeometryChange({
-          geoJson,
-          latitude: centroid?.latitude,
-          longitude: centroid?.longitude
-        })
-        lastFocusedGeometryRef.current = incomingGeometry
-        focusMapViewOnGeometry(mapView, incomingGeometry)
-      })
+          const { geoJson: derivedGeoJson, centroid } = convertToGeoJsonGeometry(geographic)
+          const geoJson = options?.geoJsonOverride ?? derivedGeoJson
+
+          let arcgisObject = options?.arcgisOverride
+          if (!arcgisObject && geometryJsonUtils && typeof geometryJsonUtils.toJSON === "function") {
+            try {
+              arcgisObject = geometryJsonUtils.toJSON(geographic ?? incomingGeometry)
+            } catch (error) {
+              console.log(`[${componentId.current}] Failed to serialize ArcGIS geometry:`, error)
+              arcgisObject = undefined
+            }
+          }
+
+          const arcgisJson = arcgisObject ? JSON.stringify(arcgisObject) : undefined
+          const uploadedFilePayload = source === "upload" ? options?.uploadedFile ?? null : null
+
+          onGeometryChange({
+            geoJson,
+            arcgisJson,
+            latitude: centroid?.latitude,
+            longitude: centroid?.longitude,
+            source,
+            uploadedFile: uploadedFilePayload
+          })
+          lastFocusedGeometryRef.current = incomingGeometry
+          focusMapViewOnGeometry(mapView, incomingGeometry)
+
+          if (source && source !== "upload") {
+            setUploadStatus({})
+          }
+        }
+      )
     },
-    [mapView, onGeometryChange]
+    [mapView, onGeometryChange, setUploadStatus]
   )
 
   useEffect(() => {
@@ -249,7 +298,7 @@ export function ArcgisSketchMap({
         if (event.detail?.graphic) {
           applyDefaultSymbolToGraphic(event.detail.graphic)
         }
-        updateGeometryFromEsri(event.detail.graphic?.geometry)
+        updateGeometryFromEsri(event.detail.graphic?.geometry, { source: "draw", uploadedFile: null })
       }
     }
 
@@ -258,12 +307,12 @@ export function ArcgisSketchMap({
         event.detail.graphics.forEach((graphic: any) => {
           applyDefaultSymbolToGraphic(graphic)
         })
-        updateGeometryFromEsri(event.detail.graphics[0].geometry)
+        updateGeometryFromEsri(event.detail.graphics[0].geometry, { source: "draw", uploadedFile: null })
       }
     }
 
     const handleDelete = () => {
-      updateGeometryFromEsri(undefined)
+      updateGeometryFromEsri(undefined, { source: "draw", uploadedFile: null })
     }
 
     sketchElement.addEventListener("arcgisCreate", handleCreate as EventListener)
@@ -309,6 +358,9 @@ export function ArcgisSketchMap({
         console.log(`[${componentId.current}] Failed to clear sketch graphics:`, error)
       }
       resetMapView()
+      if (uploadStatus.message || uploadStatus.error || activeUploadFileName) {
+        setUploadStatus({})
+      }
       return undefined
     }
 
@@ -371,7 +423,11 @@ export function ArcgisSketchMap({
     geometry,
     isReady,
     mapView,
-    resetMapView
+    resetMapView,
+    activeUploadFileName,
+    setUploadStatus,
+    uploadStatus.error,
+    uploadStatus.message
   ])
 
   // Cleanup effect to ensure proper component unmounting
@@ -404,7 +460,7 @@ export function ArcgisSketchMap({
     const handleSelectResult = (event: CustomEvent) => {
       const geometry = event?.detail?.result?.feature?.geometry
       if (geometry) {
-        updateGeometryFromEsri(geometry)
+        updateGeometryFromEsri(geometry, { source: "search", uploadedFile: null })
       }
     }
 
@@ -412,7 +468,7 @@ export function ArcgisSketchMap({
       const firstResult = event?.detail?.results?.find?.((group: any) => group?.results?.length)
       const geometry = firstResult?.results?.[0]?.feature?.geometry
       if (geometry) {
-        updateGeometryFromEsri(geometry)
+        updateGeometryFromEsri(geometry, { source: "search", uploadedFile: null })
       }
     }
 
@@ -441,11 +497,103 @@ export function ArcgisSketchMap({
     )
   }, [isReady])
 
+  const handleFileChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.target
+      const file = input.files?.[0]
+      input.value = ""
+
+      if (!file || !enableFileUpload) {
+        return
+      }
+
+      setIsUploading(true)
+      setUploadStatus({})
+
+      try {
+        await ensureArcgisResources()
+        const parsed = await parseUploadedGisFile(file)
+
+        const requireFn = (window as any).require
+        if (!requireFn) {
+          throw new Error("ArcGIS resources are not yet available. Try again in a moment.")
+        }
+
+        requireFn(["esri/geometry/support/jsonUtils"], (geometryJsonUtils: any) => {
+          try {
+            if (!geometryJsonUtils || typeof geometryJsonUtils.fromJSON !== "function") {
+              throw new Error("ArcGIS geometry utilities are unavailable.")
+            }
+
+            const esriGeometry = geometryJsonUtils.fromJSON(parsed.arcgisGeometryJson)
+            if (!esriGeometry) {
+              throw new Error("Unable to create an ArcGIS geometry from the uploaded file.")
+            }
+
+            updateGeometryFromEsri(esriGeometry, {
+              source: "upload",
+              uploadedFile: parsed.uploadedFile,
+              arcgisOverride: parsed.arcgisGeometryJson,
+              geoJsonOverride: parsed.geoJson
+            })
+
+            setUploadStatus({ message: `Uploaded ${file.name}` })
+          } catch (callbackError) {
+            console.error(`[${componentId.current}] Failed to apply uploaded geometry:`, callbackError)
+            const message =
+              callbackError instanceof Error
+                ? callbackError.message
+                : "Failed to apply the uploaded geometry."
+            setUploadStatus({ error: message })
+          }
+        })
+      } catch (error) {
+        console.error(`[${componentId.current}] Failed to process uploaded file:`, error)
+        const message = error instanceof Error ? error.message : "Unable to process the uploaded file."
+        setUploadStatus({ error: message })
+      } finally {
+        setIsUploading(false)
+      }
+    },
+    [enableFileUpload, setUploadStatus, updateGeometryFromEsri]
+  )
+
   return (
     <div className={containerClassName} ref={containerRef}>
       {map}
+      {enableFileUpload ? (
+        <div className="location-map__controls" aria-live="polite">
+          <label className={`location-map__upload-button${isUploading ? " location-map__upload-button--loading" : ""}`}>
+            <span>{isUploading ? "Processing…" : "Upload KML/KMZ"}</span>
+            <input
+              type="file"
+              accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+              onChange={handleFileChange}
+              disabled={isUploading}
+            />
+          </label>
+          {(() => {
+            const statusText = uploadStatus.error
+              ? uploadStatus.error
+              : isUploading
+              ? "Processing upload…"
+              : uploadStatus.message
+              ? uploadStatus.message
+              : activeUploadFileName
+              ? `Active upload: ${activeUploadFileName}`
+              : undefined
+            if (!statusText) {
+              return null
+            }
+            const statusClass = uploadStatus.error
+              ? "location-map__status location-map__status--error"
+              : "location-map__status"
+            return <div className={statusClass}>{statusText}</div>
+          })()}
+        </div>
+      ) : null}
     </div>
   )
 }
 
-export type { GeometryChange }
+export type { GeometryChange } from "../types/gis"

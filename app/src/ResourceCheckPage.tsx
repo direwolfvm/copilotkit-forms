@@ -9,6 +9,7 @@ import "./copilot-overrides.css"
 import "./App.css"
 
 import { ArcgisSketchMap } from "./components/ArcgisSketchMap"
+import type { GeometryChange, UploadedGisFile } from "./types/gis"
 import type { GeospatialResultsState, NepassistSummaryItem } from "./types/geospatial"
 import {
   DEFAULT_BUFFER_MILES,
@@ -153,6 +154,8 @@ const defaultRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
 
 export function ResourceCheckContent() {
   const [geometry, setGeometry] = useState<string | undefined>(undefined)
+  const [arcgisJson, setArcgisJson] = useState<string | undefined>(undefined)
+  const [uploadedGisFile, setUploadedGisFile] = useState<UploadedGisFile | null>(null)
   const [locationNotes, setLocationNotes] = useState("")
   const [bufferInput, setBufferInput] = useState<string>(DEFAULT_BUFFER_MILES.toString())
   const [geospatialResults, setGeospatialResults] = useState<GeospatialResultsState>(
@@ -208,15 +211,21 @@ export function ResourceCheckContent() {
     [locationNotes]
   )
 
-  const handleGeometryChange = useCallback(
-    ({ geoJson }: { geoJson?: string }) => {
-      setGeometry(geoJson)
-    },
-    []
-  )
+  const handleGeometryChange = useCallback((change: GeometryChange) => {
+    const { geoJson, arcgisJson: arcgisString, source, uploadedFile } = change
+    setGeometry(geoJson)
+    setArcgisJson(arcgisString)
+    if (source === "upload") {
+      setUploadedGisFile(uploadedFile ?? null)
+    } else if (uploadedFile === null || source) {
+      setUploadedGisFile(null)
+    }
+  }, [])
 
   const handleClearGeometry = useCallback(() => {
     setGeometry(undefined)
+    setArcgisJson(undefined)
+    setUploadedGisFile(null)
   }, [])
 
   const handleBufferChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -402,8 +411,14 @@ export function ResourceCheckContent() {
                 rows={3}
               />
               <div className="location-card__map">
-                <ArcgisSketchMap geometry={geometry} onGeometryChange={handleGeometryChange} />
+                <ArcgisSketchMap
+                  geometry={geometry}
+                  onGeometryChange={handleGeometryChange}
+                  enableFileUpload
+                  activeUploadFileName={uploadedGisFile?.fileName}
+                />
                 <input type="hidden" name="location_object" value={geometry ?? ""} readOnly aria-hidden="true" />
+                <input type="hidden" name="location_arcgis_json" value={arcgisJson ?? ""} readOnly aria-hidden="true" />
               </div>
             </div>
 

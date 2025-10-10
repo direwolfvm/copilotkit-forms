@@ -2,6 +2,7 @@ import { useCallback, useId } from "react"
 
 import type { ProjectFormData } from "../schema/projectSchema"
 import { ArcgisSketchMap } from "./ArcgisSketchMap"
+import type { GeometryChange, GeometrySource, UploadedGisFile } from "../types/gis"
 
 interface LocationSectionProps {
   title: string
@@ -10,11 +11,18 @@ interface LocationSectionProps {
   rows?: number
   locationText?: string
   geometry?: string
+  activeUploadFileName?: string
+  enableFileUpload?: boolean
   onLocationTextChange: (value: string) => void
-  onLocationGeometryChange: (
-    updates: Partial<Pick<ProjectFormData, "location_lat" | "location_lon" | "location_object">>
-  ) => void
+  onLocationGeometryChange: (updates: LocationGeometryUpdates) => void
 }
+
+type LocationGeometryUpdates =
+  Partial<Pick<ProjectFormData, "location_lat" | "location_lon" | "location_object">> & {
+    arcgisJson?: string
+    geometrySource?: GeometrySource
+    uploadedFile?: UploadedGisFile | null
+  }
 
 export function LocationSection({
   title,
@@ -23,15 +31,20 @@ export function LocationSection({
   rows,
   locationText,
   geometry,
+  activeUploadFileName,
+  enableFileUpload = true,
   onLocationTextChange,
   onLocationGeometryChange
 }: LocationSectionProps) {
   const handleGeometryChange = useCallback(
-    ({ geoJson, latitude, longitude }: { geoJson?: string; latitude?: number; longitude?: number }) => {
+    ({ geoJson, latitude, longitude, arcgisJson, source, uploadedFile }: GeometryChange) => {
       onLocationGeometryChange({
         location_object: geoJson,
         location_lat: latitude,
-        location_lon: longitude
+        location_lon: longitude,
+        arcgisJson,
+        geometrySource: source,
+        uploadedFile: source === "upload" ? uploadedFile ?? null : null
       })
     },
     [onLocationGeometryChange]
@@ -41,7 +54,10 @@ export function LocationSection({
     onLocationGeometryChange({
       location_object: undefined,
       location_lat: undefined,
-      location_lon: undefined
+      location_lon: undefined,
+      arcgisJson: undefined,
+      geometrySource: undefined,
+      uploadedFile: null
     })
   }, [onLocationGeometryChange])
 
@@ -75,7 +91,12 @@ export function LocationSection({
             Search for an address or navigate the map, then draw a point, line, or polygon to capture the
             project footprint.
           </p>
-          <ArcgisSketchMap geometry={geometry} onGeometryChange={handleGeometryChange} />
+          <ArcgisSketchMap
+            geometry={geometry}
+            onGeometryChange={handleGeometryChange}
+            enableFileUpload={enableFileUpload}
+            activeUploadFileName={activeUploadFileName}
+          />
           <input type="hidden" name="location_object" value={geometry ?? ""} readOnly aria-hidden="true" />
         </div>
       </div>
