@@ -6,21 +6,21 @@ const cards = [
   {
     title: "Projects overview",
     description:
-      "Browse active permit applications, review their status at a glance, and jump into the supporting details for each project.",
+      "Browse active permit applications, review their status and milestone progress at a glance, and jump into the supporting details for each project.",
     to: "/projects",
     linkLabel: "View projects"
   },
   {
     title: "Start a new project",
     description:
-      "Work with the guided portal to capture locations, upload documents, and complete the forms needed to kick off permitting.",
+      "Work with the copilot to start your project and initiate a pre-screening process to kick off permitting (simulated, of course).",
     to: "/portal",
     linkLabel: "Open the portal"
   },
   {
     title: "Resource check",
     description:
-      "Quickly verify key requirements like zoning, utilities, and environmental resources before you submit an application.",
+      "Quickly assess how a project footprint might impact natural resources and evaluate the impact on environmental review and permitting before you submit an application.",
     to: "/resource-check",
     linkLabel: "Run a check"
   }
@@ -35,10 +35,10 @@ export default function HomePage() {
     <div className="home">
       <section className="home__hero" aria-labelledby="home-hero-heading">
         <p className="home__eyebrow">Welcome to HelpPermit.me</p>
-        <h1 id="home-hero-heading">Plan, review, and launch permitting projects with confidence</h1>
+        <h1 id="home-hero-heading">Explore technology in permitting and environmental review</h1>
         <p className="home__intro">
-          HelpPermit.me is an internal demo that showcases how we streamline project intake and review. Explore the
-          tools below to see how location sketches, document review, and resource checks come together in one place.
+          HelpPermit.me is an  demo that showcases how technology tools like AI can streamline project intake and review. Explore the
+          tools below to see how project tracking, application portals, and geospatial screening tools come together in one place.
         </p>
       </section>
 
