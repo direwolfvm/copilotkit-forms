@@ -24,7 +24,7 @@ function Layout() {
               </svg>
             </span>
             <p className="site-banner__message">
-              <strong>This is NOT an official US government website</strong>, but it’s still safe to be here.
+              <strong>This is NOT a US government website at all</strong>, but it’s still safe to be here!
             </p>
             <details className="site-banner__details">
               <summary className="site-banner__summary">Here’s how you know</summary>
