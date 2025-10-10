@@ -2355,17 +2355,36 @@ function determineDecisionElementTitle(
   evaluationData: Record<string, unknown>,
   titleMap: Map<number, string>
 ): string | undefined {
-  if (typeof decisionElementId === "number" && titleMap.has(decisionElementId)) {
-    return titleMap.get(decisionElementId)
+  const lookupById = (value: unknown): string | undefined => {
+    if (typeof value === "number" && Number.isFinite(value) && titleMap.has(value)) {
+      return titleMap.get(value)
+    }
+    if (typeof value === "string" && value.trim().length > 0) {
+      const trimmed = value.trim()
+      const parsed = Number.parseInt(trimmed, 10)
+      if (Number.isFinite(parsed) && titleMap.has(parsed)) {
+        return titleMap.get(parsed)
+      }
+      return trimmed
+    }
+    return undefined
   }
-  const fallbackId = evaluationData.id
-  if (typeof fallbackId === "string" && fallbackId.trim().length > 0) {
+
+  const titleFromDecisionElement = lookupById(decisionElementId)
+  if (titleFromDecisionElement) {
+    return titleFromDecisionElement
+  }
+
+  const fallbackId = lookupById(evaluationData.id)
+  if (fallbackId) {
     return fallbackId
   }
+
   const fallbackTitle = evaluationData.title
   if (typeof fallbackTitle === "string" && fallbackTitle.trim().length > 0) {
     return fallbackTitle
   }
+
   return undefined
 }
 
