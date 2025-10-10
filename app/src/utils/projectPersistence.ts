@@ -2028,6 +2028,8 @@ type CaseEventRow = {
 }
 
 type ProcessDecisionPayloadRow = {
+  id?: number | null
+  process?: number | null
   process_decision_element?: number | null
   evaluation_data?: unknown
   last_updated?: string | null
@@ -2614,7 +2616,10 @@ async function fetchProcessDecisionPayloadRows({
     "/rest/v1/process_decision_payload",
     "decision payloads",
     (endpoint) => {
-      endpoint.searchParams.set("select", "process_decision_element,evaluation_data,last_updated")
+      endpoint.searchParams.set(
+        "select",
+        "id,process,process_decision_element,evaluation_data,last_updated"
+      )
       endpoint.searchParams.set("process", `eq.${processInstanceId}`)
     }
   )
@@ -2716,6 +2721,22 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
       )
     : []
 
+  const decisionPayloads = processIds.length
+    ? await fetchSupabaseList<ProcessDecisionPayloadRow>(
+        supabaseUrl,
+        supabaseAnonKey,
+        "/rest/v1/process_decision_payload",
+        "decision payloads",
+        (endpoint) => {
+          endpoint.searchParams.set(
+            "select",
+            "id,process,process_decision_element,evaluation_data,last_updated"
+          )
+          endpoint.searchParams.set("process", `in.(${processIds.join(",")})`)
+        }
+      )
+    : []
+
   const caseEventsByProcess = new Map<number, CaseEventSummary[]>()
   for (const row of caseEvents) {
     const processId = parseNumericId(row.parent_process_id)
@@ -2730,6 +2751,61 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
       lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
       data: row.other ?? undefined
     })
+    caseEventsByProcess.set(processId, events)
+  }
+
+  let decisionElementTitleMap: Map<number, string> | undefined
+  let syntheticEventId = -1
+  if (decisionPayloads.length > 0) {
+    decisionElementTitleMap = await fetchDecisionElementTitleMap({
+      supabaseUrl,
+      supabaseAnonKey
+    })
+  }
+
+  for (const payload of decisionPayloads) {
+    const processId = parseNumericId(payload.process)
+    if (typeof processId !== "number") {
+      continue
+    }
+
+    const events = caseEventsByProcess.get(processId) ?? []
+
+    const normalizedEvaluation =
+      typeof payload.evaluation_data === "string"
+        ? safeJsonParse(payload.evaluation_data)
+        : payload.evaluation_data
+
+    const evaluationRecord =
+      normalizedEvaluation &&
+      typeof normalizedEvaluation === "object" &&
+      !Array.isArray(normalizedEvaluation)
+        ? (normalizedEvaluation as Record<string, unknown>)
+        : undefined
+
+    const eventTitle =
+      evaluationRecord && decisionElementTitleMap
+        ? determineDecisionElementTitle(
+            payload.process_decision_element,
+            evaluationRecord,
+            decisionElementTitleMap
+          )
+        : undefined
+
+    const fallbackTitle =
+      typeof payload.process_decision_element === "number"
+        ? `Decision element ${payload.process_decision_element}`
+        : undefined
+
+    const eventId = parseNumericId(payload.id) ?? syntheticEventId--
+
+    events.push({
+      id: eventId,
+      eventType: eventTitle ?? fallbackTitle ?? "Decision payload",
+      lastUpdated: typeof payload.last_updated === "string" ? payload.last_updated : null,
+      data: evaluationRecord ?? normalizedEvaluation ?? undefined
+    })
+
     caseEventsByProcess.set(processId, events)
   }
 
