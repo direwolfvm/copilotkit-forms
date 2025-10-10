@@ -148,7 +148,7 @@ export const projectFieldDetails: ReadonlyArray<FieldDetail> = [
     key: "nepa_conformance_conditions",
     title: "Conditions for Conformance",
     description:
-      "Document any conditions that must be met for the project to conform with the categorical exclusion.",
+      "Document any conditions that must be met for the project to move through permitting or environmental review.",
     jsonType: "string",
     widget: "textarea",
     rows: 4,

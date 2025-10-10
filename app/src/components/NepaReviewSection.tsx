@@ -229,7 +229,7 @@ export function NepaReviewSection({
       <header className="form-panel__header">
         <h2>NEPA review</h2>
         <p className="help-block">
-          Capture categorical exclusion information to document the NEPA review status for this project.
+          Capture information related to the NEPA review process.
         </p>
       </header>
       <div className="form-panel__body">
