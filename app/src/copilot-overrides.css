@@ -154,6 +154,13 @@
   color: color-mix(in srgb, var(--color-text-muted) 75%, var(--color-text) 25%);
 }
 
+.copilotKitSidebar .copilotKitMessagesFooter:empty {
+  display: none;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
 .copilotKitSidebar .copilotKitMessages footer h6 {
   text-transform: uppercase;
   letter-spacing: 0.05em;
