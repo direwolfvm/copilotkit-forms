@@ -798,9 +798,6 @@ async function upsertProjectGisDataForProject({
   const timestamp = new Date().toISOString()
   const container = buildGisDataContainer(upload, timestamp)
 
-  const endpoint = new URL("/rest/v1/gis_data", supabaseUrl)
-  endpoint.searchParams.set("on_conflict", "parent_project_id")
-
   const payload = stripUndefined({
     parent_project_id: projectId,
     data_container: container,
@@ -810,11 +807,42 @@ async function upsertProjectGisDataForProject({
     retrieved_timestamp: timestamp
   })
 
-  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+  const updateEndpoint = new URL("/rest/v1/gis_data", supabaseUrl)
+  updateEndpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+
+  const updateRequest = buildSupabaseFetchRequest(updateEndpoint, supabaseAnonKey, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(payload)
+  })
+
+  const updateResponse = await fetch(updateRequest.url, updateRequest.init)
+  const updateResponseText = await updateResponse.text()
+
+  if (!updateResponse.ok) {
+    const detail = extractErrorDetail(updateResponseText)
+    throw new ProjectPersistenceError(
+      detail
+        ? `Failed to update existing GIS data (${updateResponse.status}): ${detail}`
+        : `Failed to update existing GIS data (${updateResponse.status}).`
+    )
+  }
+
+  const updatedRecords = updateResponseText ? safeJsonParse(updateResponseText) : undefined
+  if (Array.isArray(updatedRecords) && updatedRecords.length > 0) {
+    return
+  }
+
+  const insertEndpoint = new URL("/rest/v1/gis_data", supabaseUrl)
+
+  const { url, init } = buildSupabaseFetchRequest(insertEndpoint, supabaseAnonKey, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=minimal"
+      Prefer: "return=minimal"
     },
     body: JSON.stringify(payload)
   })
