@@ -35,6 +35,10 @@ function renderEventData(data: unknown): string {
 function ProcessTree({ process }: { process: ProjectProcessSummary }) {
   const formattedUpdated = useMemo(() => formatTimestamp(process.lastUpdated), [process.lastUpdated])
   const formattedCreated = useMemo(() => formatTimestamp(process.createdTimestamp), [process.createdTimestamp])
+  const chronologicalCaseEvents = useMemo(
+    () => [...process.caseEvents].reverse(),
+    [process.caseEvents]
+  )
 
   return (
     <li className="projects-tree__process">
@@ -49,7 +53,7 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
           {process.description ? <p className="projects-tree__description">{process.description}</p> : null}
           {process.caseEvents.length > 0 ? (
             <ul className="projects-tree__events">
-              {process.caseEvents.map((event) => (
+              {chronologicalCaseEvents.map((event) => (
                 <CaseEventTree key={event.id} event={event} />
               ))}
             </ul>
