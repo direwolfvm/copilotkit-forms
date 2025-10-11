@@ -337,22 +337,14 @@ export async function submitDecisionPayload({
     return
   }
 
-  const evaluation = evaluateDecisionPayloads(records)
-
-  const recordsToSubmit = evaluation.isComplete
-    ? records.map((record) => ({
-        ...record,
-        result_bool: true,
-        result: "Complete"
-      }))
-    : records
-
   await submitDecisionPayloadRecords({
     supabaseUrl,
     supabaseAnonKey,
     processInstanceId,
-    records: recordsToSubmit
+    records
   })
+
+  const evaluation = evaluateDecisionPayloads(records)
 
   await ensureCaseEvent({
     supabaseUrl,
@@ -589,7 +581,6 @@ function evaluateDecisionPayloads(
 ): DecisionPayloadEvaluation {
   const titles = DECISION_ELEMENT_BUILDERS.map((builder) => builder.title)
   const completedTitles: string[] = []
-  const evaluationDataByTitle: Map<string, Record<string, unknown>> = new Map()
 
   for (let index = 0; index < titles.length; index += 1) {
     const record = records[index]
@@ -597,14 +588,8 @@ function evaluateDecisionPayloads(
       continue
     }
 
-    const evaluationData = extractDecisionPayloadData(record)
-    if (!evaluationData) {
-      continue
-    }
-
-    evaluationDataByTitle.set(titles[index], evaluationData)
-
-    if (hasMeaningfulDecisionPayloadData(evaluationData)) {
+    const data = (record as { data?: unknown }).data
+    if (hasMeaningfulDecisionPayloadData(data)) {
       completedTitles.push(titles[index])
     }
   }
@@ -612,245 +597,8 @@ function evaluateDecisionPayloads(
   return {
     total: titles.length,
     completedTitles,
-    isComplete: isPreScreeningComplete(evaluationDataByTitle)
+    isComplete: completedTitles.length === titles.length
   }
-}
-
-function extractDecisionPayloadData(
-  record: Record<string, unknown>
-): Record<string, unknown> | null {
-  const evaluationData = (record as { evaluation_data?: unknown }).evaluation_data
-  if (evaluationData && typeof evaluationData === "object") {
-    return evaluationData as Record<string, unknown>
-  }
-
-  const data = (record as { data?: unknown }).data
-  if (data && typeof data === "object") {
-    return data as Record<string, unknown>
-  }
-
-  return null
-}
-
-function isPreScreeningComplete(
-  evaluationDataByTitle: Map<string, Record<string, unknown>>
-): boolean {
-  const projectDetails = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.PROJECT_DETAILS)
-  if (!hasProjectDetails(projectDetails)) {
-    return false
-  }
-
-  const nepaAssistPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.NEPA_ASSIST)
-  if (!hasNepaAssistResults(nepaAssistPayload)) {
-    return false
-  }
-
-  const ipacPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.IPAC)
-  if (!hasIpacResults(ipacPayload)) {
-    return false
-  }
-
-  const permitNotesPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.PERMIT_NOTES)
-  if (!hasPermitNotesText(permitNotesPayload)) {
-    return false
-  }
-
-  const categoricalExclusionPayload = evaluationDataByTitle.get(
-    DECISION_ELEMENT_TITLES.CE_REFERENCES
-  )
-  if (!hasCategoricalExclusionText(categoricalExclusionPayload)) {
-    return false
-  }
-
-  const conditionsPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.CONDITIONS)
-  if (!hasConditionsText(conditionsPayload)) {
-    return false
-  }
-
-  const resourceNotesPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.RESOURCE_NOTES)
-  if (!hasResourceNotesText(resourceNotesPayload)) {
-    return false
-  }
-
-  return true
-}
-
-function hasProjectDetails(payload: Record<string, unknown> | undefined): boolean {
-  if (!payload) {
-    return false
-  }
-
-  const project = (payload as { project?: unknown }).project
-  if (!project || typeof project !== "object") {
-    return false
-  }
-
-  if (Array.isArray(project)) {
-    return project.length > 0
-  }
-
-  return Object.keys(project as Record<string, unknown>).length > 0
-}
-
-function hasNepaAssistResults(payload: Record<string, unknown> | undefined): boolean {
-  if (!payload) {
-    return false
-  }
-
-  const raw = (payload as { nepa_assist_raw?: unknown }).nepa_assist_raw
-  const summary = (payload as { nepa_assist_summary?: unknown }).nepa_assist_summary
-
-  return hasNonEmptyValue(raw) || hasNonEmptyValue(summary)
-}
-
-function hasIpacResults(payload: Record<string, unknown> | undefined): boolean {
-  if (!payload) {
-    return false
-  }
-
-  const raw = (payload as { ipac_raw?: unknown }).ipac_raw
-  const summary = (payload as { ipac_summary?: unknown }).ipac_summary
-
-  return hasNonEmptyValue(raw) || hasNonEmptyValue(summary)
-}
-
-function hasPermitNotesText(payload: Record<string, unknown> | undefined): boolean {
-  if (!payload) {
-    return false
-  }
-
-  const notes = (payload as { notes?: unknown }).notes
-  if (containsMeaningfulText(notes)) {
-    return true
-  }
-
-  const permits = (payload as { permits?: unknown }).permits
-  if (!Array.isArray(permits)) {
-    return false
-  }
-
-  const ignoredPermitKeys = new Set(["label", "source", "completed"])
-  return permits.some((entry) => containsMeaningfulText(entry, ignoredPermitKeys))
-}
-
-function hasCategoricalExclusionText(payload: Record<string, unknown> | undefined): boolean {
-  if (!payload) {
-    return false
-  }
-
-  const rationale = normalizeString(
-    (payload as { rationale?: unknown }).rationale as string | null | undefined
-  )
-  if (rationale) {
-    return true
-  }
-
-  const candidates = (payload as { ce_candidates?: unknown }).ce_candidates
-  if (!Array.isArray(candidates)) {
-    return false
-  }
-
-  return candidates.some((candidate) =>
-    Boolean(normalizeString(candidate as string | null | undefined))
-  )
-}
-
-function hasConditionsText(payload: Record<string, unknown> | undefined): boolean {
-  if (!payload) {
-    return false
-  }
-
-  const conditions = (payload as { conditions?: unknown }).conditions
-  if (!Array.isArray(conditions)) {
-    return false
-  }
-
-  return conditions.some((condition) =>
-    Boolean(normalizeString(condition as string | null | undefined))
-  )
-}
-
-function hasResourceNotesText(payload: Record<string, unknown> | undefined): boolean {
-  if (!payload) {
-    return false
-  }
-
-  const summary = (payload as { summary?: unknown }).summary
-  if (containsMeaningfulText(summary)) {
-    return true
-  }
-
-  const notes = (payload as { notes?: unknown }).notes
-  if (containsMeaningfulText(notes)) {
-    return true
-  }
-
-  const resources = (payload as { resources?: unknown }).resources
-  if (!Array.isArray(resources)) {
-    return false
-  }
-
-  const ignoredResourceKeys = new Set(["name", "status", "meta"])
-  return resources.some((resource) => containsMeaningfulText(resource, ignoredResourceKeys))
-}
-
-function hasNonEmptyValue(value: unknown): boolean {
-  if (value === null || typeof value === "undefined") {
-    return false
-  }
-
-  if (typeof value === "string") {
-    return value.trim().length > 0
-  }
-
-  if (typeof value === "number") {
-    return Number.isFinite(value)
-  }
-
-  if (typeof value === "boolean") {
-    return value
-  }
-
-  if (Array.isArray(value)) {
-    return value.some((entry) => hasNonEmptyValue(entry))
-  }
-
-  if (typeof value === "object") {
-    return Object.keys(value as Record<string, unknown>).length > 0
-  }
-
-  return true
-}
-
-function containsMeaningfulText(
-  value: unknown,
-  ignoredKeys: ReadonlySet<string> = new Set()
-): boolean {
-  if (value === null || typeof value === "undefined") {
-    return false
-  }
-
-  if (typeof value === "string") {
-    return value.trim().length > 0
-  }
-
-  if (Array.isArray(value)) {
-    return value.some((entry) => containsMeaningfulText(entry, ignoredKeys))
-  }
-
-  if (typeof value === "object") {
-    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-      if (ignoredKeys.has(key)) {
-        continue
-      }
-      if (containsMeaningfulText(entry, ignoredKeys)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  return false
 }
 
 function hasMeaningfulDecisionPayloadData(data: unknown): boolean {
