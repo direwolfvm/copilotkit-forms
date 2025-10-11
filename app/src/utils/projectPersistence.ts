@@ -234,7 +234,10 @@ export async function saveProjectSnapshot({
     supabaseUrl,
     supabaseAnonKey,
     projectId,
-    upload: resolvedGisUpload
+    upload: resolvedGisUpload,
+    projectTitle: normalizedTitle,
+    centroidLat: formData.location_lat ?? null,
+    centroidLon: formData.location_lon ?? null
   })
 
   return processInstanceId
@@ -782,13 +785,19 @@ type UpsertProjectGisDataArgs = {
   supabaseAnonKey: string
   projectId: number
   upload: ProjectGisUpload
+  projectTitle?: string | null
+  centroidLat?: number | null
+  centroidLon?: number | null
 }
 
 async function upsertProjectGisDataForProject({
   supabaseUrl,
   supabaseAnonKey,
   projectId,
-  upload
+  upload,
+  projectTitle,
+  centroidLat,
+  centroidLon
 }: UpsertProjectGisDataArgs): Promise<void> {
   const file = upload.uploadedFile
   if (!file || !file.base64Data) {
@@ -798,10 +807,22 @@ async function upsertProjectGisDataForProject({
 
   const timestamp = new Date().toISOString()
   const container = buildGisDataContainer(upload, timestamp)
+  const metadata = buildProjectBoundaryMetadata({
+    upload,
+    timestamp,
+    projectTitle,
+    centroidLat,
+    centroidLon
+  })
 
   const payload = stripUndefined({
     parent_project_id: projectId,
+    description: metadata.description,
+    container_inventory: metadata.containerInventory,
     data_container: container,
+    centroid_lat: metadata.centroidLat,
+    centroid_lon: metadata.centroidLon,
+    extent: metadata.extentText,
     data_source_system: DATA_SOURCE_SYSTEM,
     updated_last: timestamp,
     last_updated: timestamp,
@@ -1044,6 +1065,402 @@ function buildGisDataContainer(upload: ProjectGisUpload, timestamp: string): Rec
   }
 
   return container
+}
+
+type ProjectBoundaryMetadataArgs = {
+  upload: ProjectGisUpload
+  timestamp: string
+  projectTitle?: string | null
+  centroidLat?: number | null
+  centroidLon?: number | null
+}
+
+type ProjectBoundaryMetadata = {
+  description: string | null
+  containerInventory: Record<string, unknown> | null
+  centroidLat: number | null
+  centroidLon: number | null
+  extentText: string | null
+}
+
+type ProjectBoundarySummary = {
+  geometryType?: string
+  extent?: {
+    latitude: { min: number; max: number }
+    longitude: { min: number; max: number }
+  }
+  centroid?: { latitude: number; longitude: number }
+  coordinateCount: number
+}
+
+function buildProjectBoundaryMetadata({
+  upload,
+  timestamp,
+  projectTitle,
+  centroidLat,
+  centroidLon
+}: ProjectBoundaryMetadataArgs): ProjectBoundaryMetadata {
+  const geoJsonObject = parseProjectBoundaryGeoJson(upload.geoJson)
+  const summary = geoJsonObject ? summarizeProjectBoundaryGeometry(geoJsonObject) : null
+  const availableFormats = determineAvailableFormats(upload)
+
+  const description = summary || availableFormats.length > 0
+    ? buildProjectBoundaryDescription({
+        projectTitle: projectTitle ?? undefined,
+        geometryType: summary?.geometryType,
+        source: upload.source,
+        availableFormats
+      })
+    : null
+
+  const centroidLatitudeCandidate =
+    typeof centroidLat === "number" && Number.isFinite(centroidLat)
+      ? centroidLat
+      : summary?.centroid?.latitude
+  const centroidLongitudeCandidate =
+    typeof centroidLon === "number" && Number.isFinite(centroidLon)
+      ? centroidLon
+      : summary?.centroid?.longitude
+
+  const normalizedCentroidLat = normalizeNumber(centroidLatitudeCandidate)
+  const normalizedCentroidLon = normalizeNumber(centroidLongitudeCandidate)
+
+  const extentText = summary?.extent ? JSON.stringify(summary.extent) : null
+
+  const inventoryEntry = buildProjectBoundaryInventoryEntry({
+    upload,
+    summary,
+    description,
+    timestamp,
+    availableFormats
+  })
+
+  return {
+    description: description ?? null,
+    containerInventory: inventoryEntry ? { projectBoundary: inventoryEntry } : null,
+    centroidLat: normalizedCentroidLat,
+    centroidLon: normalizedCentroidLon,
+    extentText
+  }
+}
+
+function parseProjectBoundaryGeoJson(rawGeoJson: unknown): unknown | null {
+  if (!rawGeoJson) {
+    return null
+  }
+
+  if (typeof rawGeoJson === "string") {
+    const parsed = safeJsonParse(rawGeoJson)
+    if (parsed && typeof parsed === "object") {
+      return parsed
+    }
+    return null
+  }
+
+  if (typeof rawGeoJson === "object") {
+    return rawGeoJson
+  }
+
+  return null
+}
+
+function summarizeProjectBoundaryGeometry(value: unknown): ProjectBoundarySummary | null {
+  if (!value || typeof value !== "object") {
+    return null
+  }
+
+  const coordinates: Array<[number, number]> = []
+  collectCoordinatesFromGeoJson(value, coordinates, new Set())
+
+  const summary: ProjectBoundarySummary = {
+    geometryType: extractProjectBoundaryGeometryType(value),
+    coordinateCount: coordinates.length
+  }
+
+  if (coordinates.length === 0) {
+    return summary
+  }
+
+  let minLon = Number.POSITIVE_INFINITY
+  let maxLon = Number.NEGATIVE_INFINITY
+  let minLat = Number.POSITIVE_INFINITY
+  let maxLat = Number.NEGATIVE_INFINITY
+  let sumLon = 0
+  let sumLat = 0
+
+  for (const [lon, lat] of coordinates) {
+    if (lon < minLon) minLon = lon
+    if (lon > maxLon) maxLon = lon
+    if (lat < minLat) minLat = lat
+    if (lat > maxLat) maxLat = lat
+    sumLon += lon
+    sumLat += lat
+  }
+
+  if (
+    Number.isFinite(minLon) &&
+    Number.isFinite(maxLon) &&
+    Number.isFinite(minLat) &&
+    Number.isFinite(maxLat)
+  ) {
+    summary.extent = {
+      latitude: { min: minLat, max: maxLat },
+      longitude: { min: minLon, max: maxLon }
+    }
+  }
+
+  const coordinateCount = coordinates.length
+  if (coordinateCount > 0) {
+    summary.centroid = {
+      latitude: sumLat / coordinateCount,
+      longitude: sumLon / coordinateCount
+    }
+  }
+
+  return summary
+}
+
+function collectCoordinatesFromGeoJson(
+  value: unknown,
+  result: Array<[number, number]>,
+  seen: Set<unknown>
+): void {
+  if (!value || typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
+    return
+  }
+
+  if (Array.isArray(value)) {
+    if (
+      value.length >= 2 &&
+      typeof value[0] === "number" &&
+      typeof value[1] === "number" &&
+      Number.isFinite(value[0]) &&
+      Number.isFinite(value[1])
+    ) {
+      result.push([value[0], value[1]])
+      return
+    }
+    for (const entry of value) {
+      collectCoordinatesFromGeoJson(entry, result, seen)
+    }
+    return
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return
+  }
+
+  if (seen.has(value)) {
+    return
+  }
+  seen.add(value)
+
+  const record = value as Record<string, unknown>
+
+  if (record.type === "Feature" && record.geometry) {
+    collectCoordinatesFromGeoJson(record.geometry, result, seen)
+  }
+
+  if (record.type === "FeatureCollection" && Array.isArray(record.features)) {
+    for (const feature of record.features) {
+      collectCoordinatesFromGeoJson(feature, result, seen)
+    }
+  }
+
+  if (record.type === "GeometryCollection" && Array.isArray(record.geometries)) {
+    for (const geometry of record.geometries) {
+      collectCoordinatesFromGeoJson(geometry, result, seen)
+    }
+  }
+
+  if (Array.isArray(record.coordinates)) {
+    collectCoordinatesFromGeoJson(record.coordinates, result, seen)
+  }
+}
+
+function extractProjectBoundaryGeometryType(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  const typeValue = typeof record.type === "string" ? record.type : undefined
+
+  if (!typeValue) {
+    return undefined
+  }
+
+  if (typeValue === "Feature") {
+    return extractProjectBoundaryGeometryType(record.geometry)
+  }
+
+  if (typeValue === "FeatureCollection" && Array.isArray(record.features)) {
+    const geometryTypes = new Set<string>()
+    for (const feature of record.features) {
+      const childType = extractProjectBoundaryGeometryType(feature)
+      if (childType) {
+        geometryTypes.add(childType)
+      }
+    }
+    if (geometryTypes.size === 1) {
+      return geometryTypes.values().next().value
+    }
+    if (geometryTypes.size > 1) {
+      return "Mixed"
+    }
+    return undefined
+  }
+
+  if (typeValue === "GeometryCollection" && Array.isArray(record.geometries)) {
+    const geometryTypes = new Set<string>()
+    for (const geometry of record.geometries) {
+      const childType = extractProjectBoundaryGeometryType(geometry)
+      if (childType) {
+        geometryTypes.add(childType)
+      }
+    }
+    if (geometryTypes.size === 1) {
+      return geometryTypes.values().next().value
+    }
+    if (geometryTypes.size > 1) {
+      return "Mixed"
+    }
+    return undefined
+  }
+
+  return typeValue
+}
+
+function determineAvailableFormats(upload: ProjectGisUpload): string[] {
+  const formats: string[] = []
+  if (upload.geoJson) {
+    formats.push("GeoJSON")
+  }
+  if (upload.arcgisJson) {
+    formats.push("ArcGIS JSON")
+  }
+  const originalFormat = upload.uploadedFile?.format
+  if (originalFormat === "kml") {
+    formats.push("KML")
+  } else if (originalFormat === "kmz") {
+    formats.push("KMZ")
+  } else if (originalFormat === "geojson") {
+    formats.push("GeoJSON (uploaded file)")
+  }
+  return Array.from(new Set(formats))
+}
+
+function describeGeometrySource(source: GeometrySource | undefined): string | null {
+  switch (source) {
+    case "draw":
+      return "interactive sketching tools"
+    case "search":
+      return "map search results"
+    case "upload":
+      return "an uploaded file"
+    default:
+      return null
+  }
+}
+
+function buildProjectBoundaryDescription({
+  projectTitle,
+  geometryType,
+  source,
+  availableFormats
+}: {
+  projectTitle?: string
+  geometryType?: string
+  source?: GeometrySource
+  availableFormats: string[]
+}): string {
+  const segments: string[] = []
+
+  if (projectTitle && projectTitle.trim().length > 0) {
+    segments.push(`Project boundary for "${projectTitle.trim()}".`)
+  } else {
+    segments.push("Project boundary geometry.")
+  }
+
+  if (geometryType) {
+    segments.push(`Geometry type: ${geometryType}.`)
+  }
+
+  const sourceDescription = describeGeometrySource(source)
+  if (sourceDescription) {
+    segments.push(`Captured via ${sourceDescription}.`)
+  }
+
+  if (availableFormats.length > 0) {
+    segments.push(`Available formats: ${availableFormats.join(", ")}.`)
+  }
+
+  return segments.join(" ")
+}
+
+function buildProjectBoundaryInventoryEntry({
+  upload,
+  summary,
+  description,
+  timestamp,
+  availableFormats
+}: {
+  upload: ProjectGisUpload
+  summary: ProjectBoundarySummary | null
+  description: string | null
+  timestamp: string
+  availableFormats: string[]
+}): Record<string, unknown> | null {
+  if (!summary && availableFormats.length === 0 && !upload.uploadedFile) {
+    return null
+  }
+
+  const entry: Record<string, unknown> = {
+    name: "Project Boundary",
+    storedAt: timestamp
+  }
+
+  if (description) {
+    entry.description = description
+  }
+
+  if (summary?.geometryType) {
+    entry.geometryType = summary.geometryType
+  }
+
+  if (summary?.coordinateCount && summary.coordinateCount > 0) {
+    entry.coordinateCount = summary.coordinateCount
+  }
+
+  if (availableFormats.length > 0) {
+    entry.availableFormats = availableFormats
+  }
+
+  if (upload.source) {
+    entry.source = upload.source
+  }
+
+  if (summary?.extent) {
+    entry.extent = summary.extent
+  }
+
+  if (summary?.centroid) {
+    entry.centroid = summary.centroid
+  }
+
+  if (upload.uploadedFile) {
+    const file = upload.uploadedFile
+    entry.originalFile = stripUndefined({
+      format: file.format,
+      fileName: file.fileName,
+      fileSize: file.fileSize,
+      fileType: file.fileType,
+      lastModified: file.lastModified,
+      storedAt: timestamp
+    })
+  }
+
+  return entry
 }
 
 function buildCaseEventData(
