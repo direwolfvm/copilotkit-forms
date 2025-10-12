@@ -88,6 +88,13 @@ type SubmitDecisionPayloadArgs = {
   formData: ProjectFormData
   geospatialResults: GeospatialResultsState
   permittingChecklist: PermittingChecklistItem[]
+  createCompletionEvent?: boolean
+}
+
+type EvaluatePreScreeningDataArgs = {
+  formData: ProjectFormData
+  geospatialResults: GeospatialResultsState
+  permittingChecklist: PermittingChecklistItem[]
 }
 
 type DecisionElementRecord = {
@@ -273,8 +280,9 @@ function buildProjectRecord({
 export async function submitDecisionPayload({
   formData,
   geospatialResults,
-  permittingChecklist
-}: SubmitDecisionPayloadArgs): Promise<void> {
+  permittingChecklist,
+  createCompletionEvent = true
+}: SubmitDecisionPayloadArgs): Promise<DecisionPayloadEvaluation> {
   const supabaseUrl = getSupabaseUrl()
   const supabaseAnonKey = getSupabaseAnonKey()
 
@@ -336,11 +344,11 @@ export async function submitDecisionPayload({
     formData
   })
 
-  if (!records.length) {
-    return
-  }
-
   const evaluation = evaluateDecisionPayloads(records)
+
+  if (!records.length) {
+    return evaluation
+  }
 
   const recordsToSubmit = evaluation.isComplete
     ? records.map((record) => ({
@@ -369,7 +377,7 @@ export async function submitDecisionPayload({
     })
   })
 
-  if (evaluation.isComplete) {
+  if (createCompletionEvent && evaluation.isComplete) {
     await ensureCaseEvent({
       supabaseUrl,
       supabaseAnonKey,
@@ -382,6 +390,8 @@ export async function submitDecisionPayload({
       })
     })
   }
+
+  return evaluation
 }
 
 type SubmitDecisionPayloadRecordsArgs = {
@@ -581,7 +591,7 @@ function buildPreScreeningInitiatedEventData({
   })
 }
 
-type DecisionPayloadEvaluation = {
+export type DecisionPayloadEvaluation = {
   total: number
   completedTitles: string[]
   isComplete: boolean
@@ -617,6 +627,63 @@ function evaluateDecisionPayloads(
     completedTitles,
     isComplete: isPreScreeningComplete(evaluationDataByTitle)
   }
+}
+
+function buildDecisionPayloadEvaluationRecords({
+  projectRecord,
+  geospatialResults,
+  permittingChecklist,
+  formData
+}: {
+  projectRecord: Record<string, unknown>
+  geospatialResults: GeospatialResultsState
+  permittingChecklist: PermittingChecklistItem[]
+  formData: ProjectFormData
+}): Array<Record<string, unknown>> {
+  return DECISION_ELEMENT_BUILDERS.map((builder) => ({
+    evaluation_data: builder.build({
+      elementId: undefined,
+      projectRecord,
+      geospatialResults,
+      permittingChecklist,
+      formData
+    })
+  }))
+}
+
+export function evaluatePreScreeningData({
+  formData,
+  geospatialResults,
+  permittingChecklist
+}: EvaluatePreScreeningDataArgs): DecisionPayloadEvaluation {
+  const normalizedId = normalizeString(formData.id)
+  const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
+
+  if (!numericId || Number.isNaN(numericId) || !Number.isFinite(numericId)) {
+    throw new ProjectPersistenceError(
+      "A numeric project identifier is required to submit pre-screening data. Save the project snapshot first."
+    )
+  }
+
+  const normalizedTitle = normalizeString(formData.title)
+  const locationResult = parseLocationObject(formData.location_object)
+
+  const projectRecord = buildProjectRecord({
+    formData,
+    geospatialResults,
+    numericId,
+    normalizedTitle,
+    locationResult
+  })
+
+  const evaluationRecords = buildDecisionPayloadEvaluationRecords({
+    projectRecord,
+    geospatialResults,
+    permittingChecklist,
+    formData
+  })
+
+  return evaluateDecisionPayloads(evaluationRecords)
 }
 
 function extractDecisionPayloadData(

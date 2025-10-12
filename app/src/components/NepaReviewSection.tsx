@@ -33,8 +33,13 @@ interface NepaReviewSectionProps {
   isRunningGeospatial: boolean
   hasGeometry: boolean
   bufferMiles: number
+  onSavePreScreeningData: () => void
   onSubmitPreScreeningData: () => void
-  preScreeningSubmitState: { status: "idle" | "saving" | "success" | "error"; message?: string }
+  preScreeningSubmitState: {
+    status: "idle" | "saving" | "success" | "error"
+    message?: string
+    action?: "save" | "submit"
+  }
   isProjectSaving: boolean
   canSubmitPreScreening: boolean
 }
@@ -180,6 +185,7 @@ export function NepaReviewSection({
   isRunningGeospatial,
   hasGeometry,
   bufferMiles,
+  onSavePreScreeningData,
   onSubmitPreScreeningData,
   preScreeningSubmitState,
   isProjectSaving,
@@ -197,9 +203,14 @@ export function NepaReviewSection({
 
   let submissionStatus: ReactNode = null
   if (preScreeningSubmitState.status === "saving") {
+    const savingLabel =
+      preScreeningSubmitState.message ??
+      (preScreeningSubmitState.action === "save"
+        ? "Saving pre-screening data…"
+        : "Submitting pre-screening data…")
     submissionStatus = (
       <div className="form-panel__status">
-        <span className="status" role="status">Submitting pre-screening data…</span>
+        <span className="status" role="status">{savingLabel}</span>
       </div>
     )
   } else if (preScreeningSubmitState.status === "error") {
@@ -209,17 +220,22 @@ export function NepaReviewSection({
       </div>
     )
   } else if (preScreeningSubmitState.status === "success") {
+    const successLabel =
+      preScreeningSubmitState.message ??
+      (preScreeningSubmitState.action === "save"
+        ? "Pre-screening data saved."
+        : "Pre-screening data submitted.")
     submissionStatus = (
       <div className="form-panel__status">
-        <span className="status" role="status">
-          {preScreeningSubmitState.message ?? "Pre-screening data submitted."}
-        </span>
+        <span className="status" role="status">{successLabel}</span>
       </div>
     )
   } else if (!canSubmitPreScreening) {
     submissionStatus = (
       <div className="form-panel__status">
-        <span className="status" role="status">Save the project snapshot to enable submission.</span>
+        <span className="status" role="status">
+          Save the project snapshot to enable pre-screening actions.
+        </span>
       </div>
     )
   }
@@ -329,6 +345,20 @@ export function NepaReviewSection({
         <button
           type="button"
           className="usa-button usa-button--outline secondary"
+          onClick={onSavePreScreeningData}
+          disabled={
+            isProjectSaving ||
+            preScreeningSubmitState.status === "saving" ||
+            !canSubmitPreScreening
+          }
+        >
+          {preScreeningSubmitState.status === "saving" && preScreeningSubmitState.action === "save"
+            ? "Saving…"
+            : "Save pre-screening data"}
+        </button>
+        <button
+          type="button"
+          className="usa-button usa-button--outline secondary"
           onClick={onSubmitPreScreeningData}
           disabled={
             isProjectSaving ||
@@ -336,7 +366,9 @@ export function NepaReviewSection({
             !canSubmitPreScreening
           }
         >
-          {preScreeningSubmitState.status === "saving" ? "Submitting…" : "Submit pre-screening data"}
+          {preScreeningSubmitState.status === "saving" && preScreeningSubmitState.action === "submit"
+            ? "Submitting…"
+            : "Submit pre-screening data"}
         </button>
       </div>
     </section>
