@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
-import type { ChangeEvent, ReactNode } from "react"
+import type { ReactNode } from "react"
 import Form from "@rjsf/core"
 import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
@@ -26,6 +26,7 @@ import {
 } from "./components/PermittingChecklistSection"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
+import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
 import {
   ProjectPersistenceError,
   saveProjectSnapshot,
@@ -52,23 +53,6 @@ import { majorPermits } from "./utils/majorPermits"
 import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "./types/gis"
 
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
-
-type CopilotRuntimeMode = "default" | "custom"
-
-type CopilotRuntimeContextValue = {
-  runtimeMode: CopilotRuntimeMode
-  setRuntimeMode: (mode: CopilotRuntimeMode) => void
-}
-
-const CopilotRuntimeContext = createContext<CopilotRuntimeContextValue | undefined>(undefined)
-
-function useCopilotRuntimeSelection() {
-  const context = useContext(CopilotRuntimeContext)
-  if (!context) {
-    throw new Error("useCopilotRuntimeSelection must be used within a CopilotRuntimeContext provider")
-  }
-  return context
-}
 
 const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
   (permit) => `${permit.title}: ${permit.description}`
@@ -327,30 +311,6 @@ function ProgressPanel({
 
 type ProjectFormWithCopilotProps = {
   showApiKeyWarning: boolean
-}
-
-function RuntimeSelectionControl() {
-  const { runtimeMode, setRuntimeMode } = useCopilotRuntimeSelection()
-
-  const handleModeChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const value = event.target.value === "custom" ? "custom" : "default"
-    setRuntimeMode(value)
-  }
-
-  return (
-    <label className="runtime-toggle">
-      <span className="runtime-toggle__label">Copilot runtime</span>
-      <select
-        className="runtime-toggle__select"
-        value={runtimeMode}
-        onChange={handleModeChange}
-        aria-label="Select Copilot runtime"
-      >
-        <option value="default">Copilot Cloud</option>
-        <option value="custom">Permitting ADK</option>
-      </select>
-    </label>
-  )
 }
 
 function formatDisplayDate(timestamp?: string | null) {
@@ -1853,7 +1813,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               </p>
             </div>
             <div className="actions">
-              <RuntimeSelectionControl />
               <button type="button" className="usa-button usa-button--outline secondary" onClick={handleReset}>
                 Reset form
               </button>
@@ -1976,26 +1935,19 @@ const publicApiKey = getPublicApiKey()
 const defaultRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
 
 function PortalPage() {
-  const [runtimeMode, setRuntimeMode] = useState<CopilotRuntimeMode>("default")
-
-  const runtimeContextValue = useMemo(
-    () => ({ runtimeMode, setRuntimeMode }),
-    [runtimeMode, setRuntimeMode]
-  )
+  const { runtimeMode } = useCopilotRuntimeSelection()
 
   const effectiveRuntimeUrl = runtimeMode === "custom" ? CUSTOM_ADK_PROXY_URL : defaultRuntimeUrl
   const showApiKeyWarning = runtimeMode === "default" && !publicApiKey
 
   return (
-    <CopilotRuntimeContext.Provider value={runtimeContextValue}>
-      <CopilotKit
-        key={runtimeMode}
-        publicApiKey={publicApiKey || undefined}
-        runtimeUrl={effectiveRuntimeUrl || undefined}
-      >
-        <ProjectFormWithCopilot showApiKeyWarning={showApiKeyWarning} />
-      </CopilotKit>
-    </CopilotRuntimeContext.Provider>
+    <CopilotKit
+      key={runtimeMode}
+      publicApiKey={publicApiKey || undefined}
+      runtimeUrl={effectiveRuntimeUrl || undefined}
+    >
+      <ProjectFormWithCopilot showApiKeyWarning={showApiKeyWarning} />
+    </CopilotKit>
   )
 }
 
