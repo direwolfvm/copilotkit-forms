@@ -197,11 +197,11 @@ function DeveloperToolsContent() {
     {
       description: "Supabase REST documentation for HelpPermit.me",
       value: knowledgeBase,
-      convert: (_, sections) =>
+      convert: (_: unknown, sections: SectionDoc[]) =>
         sections
-          .map((section) => {
+          .map((section: SectionDoc) => {
             const endpointLines = section.endpoints
-              .map((endpoint) => {
+              .map((endpoint: EndpointDoc) => {
                 const parameters = endpoint.queryParameters
                   ? `Parameters: ${endpoint.queryParameters.map((param) => param.name).join(", ")}`
                   : ""
