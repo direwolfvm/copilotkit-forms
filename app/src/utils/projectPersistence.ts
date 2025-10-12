@@ -236,7 +236,7 @@ export async function saveProjectSnapshot({
   const responsePayload = responseText ? safeJsonParse(responseText) : undefined
   const projectId = determineProjectId(numericId, responsePayload)
 
-  const processInstanceId = await createPreScreeningProcessInstance({
+  const processInstanceId = await getLatestProcessInstanceId({
     supabaseUrl,
     supabaseAnonKey,
     projectId,
@@ -1868,15 +1868,16 @@ type CreatePreScreeningProcessInstanceArgs = {
   supabaseAnonKey: string
   projectId: number
   projectTitle: string | null
+  existingProcessInstanceId?: number
 }
 
 async function createPreScreeningProcessInstance({
   supabaseUrl,
   supabaseAnonKey,
   projectId,
-  projectTitle
+  projectTitle,
+  existingProcessInstanceId
 }: CreatePreScreeningProcessInstanceArgs): Promise<number> {
-  const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
   const timestamp = new Date().toISOString()
 
   const processInstancePayload = stripUndefined({
@@ -1887,6 +1888,37 @@ async function createPreScreeningProcessInstance({
     last_updated: timestamp,
     retrieved_timestamp: timestamp
   })
+
+  if (typeof existingProcessInstanceId === "number") {
+    const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
+    endpoint.searchParams.set("id", `eq.${existingProcessInstanceId}`)
+
+    const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify(processInstancePayload)
+    })
+    const response = await fetch(url, init)
+
+    const responseText = await response.text()
+
+    if (!response.ok) {
+      const errorDetail = extractErrorDetail(responseText)
+
+      throw new ProjectPersistenceError(
+        errorDetail
+          ? `Failed to update process instance (${response.status}): ${errorDetail}`
+          : `Failed to update process instance (${response.status}).`
+      )
+    }
+
+    return existingProcessInstanceId
+  }
+
+  const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
 
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "POST",
@@ -1938,15 +1970,12 @@ async function getLatestProcessInstanceId({
     projectId
   })
 
-  if (typeof existingId === "number") {
-    return existingId
-  }
-
   return createPreScreeningProcessInstance({
     supabaseUrl,
     supabaseAnonKey,
     projectId,
-    projectTitle
+    projectTitle,
+    existingProcessInstanceId: existingId
   })
 }
 
@@ -3561,6 +3590,7 @@ async function fetchLatestPreScreeningProcessInstanceRecord({
       )
       endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
       endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
       endpoint.searchParams.append("order", "last_updated.desc.nullslast")
       endpoint.searchParams.append("order", "id.desc")
       endpoint.searchParams.set("limit", "1")
