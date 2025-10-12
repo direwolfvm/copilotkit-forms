@@ -6,7 +6,7 @@ export default function AboutPage() {
       <div className="app__inner">
         <header className="about-page__header">
           <p className="about-page__eyebrow">About HelpPermit.me</p>
-          <h1>Technology demonstration for the CEQ Permitting Action Plan</h1>
+          <h1>Technology and permitting and environmental review</h1>
           <p>
             HelpPermit.me is a very unofficial demonstration platform that brings the <strong>Council on Environmental Quality (CEQ)</strong>
             {" "}
