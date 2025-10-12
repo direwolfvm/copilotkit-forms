@@ -198,6 +198,7 @@
   color: color-mix(in srgb, #d03b3b 70%, var(--color-text) 30%);
 }
 
+
 .swagger-panel__block pre {
   margin: 0;
   padding: 1rem;
@@ -207,6 +208,17 @@
   overflow-x: auto;
   font-size: 0.9rem;
   line-height: 1.5;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.swagger-panel__block pre code {
+  display: block;
+  width: fit-content;
+  min-width: 100%;
+  background: none;
+  padding: 0;
+  color: inherit;
 }
 
 .swagger-panel__notes {
