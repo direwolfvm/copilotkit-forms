@@ -335,7 +335,7 @@
   width: 100%;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 1rem;
   flex-wrap: wrap;
 }
@@ -344,7 +344,8 @@
   flex: 1 1 220px;
   min-width: 200px;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  justify-content: flex-start;
 }
 
 .pre-screening-footer__actions {
@@ -626,6 +627,10 @@
   .pre-screening-footer__actions {
     flex: 1 1 auto;
     min-width: 100%;
+  }
+
+  .pre-screening-footer__process {
+    align-items: flex-start;
   }
 
   .pre-screening-footer__buttons {
