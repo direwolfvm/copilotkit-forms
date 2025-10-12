@@ -8,14 +8,13 @@ export default function AboutPage() {
           <p className="about-page__eyebrow">About HelpPermit.me</p>
           <h1>Technology demonstration for the CEQ Permitting Action Plan</h1>
           <p>
-            HelpPermit.me is a demonstration platform that brings the <strong>Council on Environmental Quality (CEQ)</strong>
+            HelpPermit.me is a very unofficial demonstration platform that brings the <strong>Council on Environmental Quality (CEQ)</strong>
             {" "}
             Permitting Technology Action Plan to life.
           </p>
           <p>
-            The site weaves together a React front end, a Supabase data layer, and Copilot-assisted workflows to mimic the
-            end-to-end journey of a permitting program. Visitors can intake a new project through the portal, watch it appear
-            in the projects dashboard with case events and decision payloads, and run resource screenings that log
+            The site weaves together a React front end, a Supabase data layer, and Copilot-assisted workflows to show how an online portal might work, including project initiation and tracking through a pre-screening process. Visitors can intake a new project through the portal, watch it appear
+            It delves deep into implementing the data standards, including in the projects dashboard with case events and decision payloads, and users can try out features like running resource screenings that log
             geospatial findings back to the same data model. Every interaction reads or writes structured records that follow
             the CEQ schema, demonstrating how agencies can orchestrate intake, tracking, and analytics without bespoke
             systems.
