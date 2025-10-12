@@ -178,7 +178,9 @@ const sectionDocs: SectionDoc[] = [
 
 function DeveloperToolsContent() {
   const publicApiKey = getPublicApiKey()
-  const effectiveRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
+  const runtimeUrl = getRuntimeUrl()
+  const effectiveRuntimeUrl = runtimeUrl || COPILOT_CLOUD_CHAT_URL
+  const hasCopilotConfiguration = Boolean(publicApiKey || runtimeUrl)
 
   const copilotInstructions = useMemo(
     () =>
@@ -197,6 +199,7 @@ function DeveloperToolsContent() {
     {
       description: "Supabase REST documentation for HelpPermit.me",
       value: knowledgeBase,
+      available: hasCopilotConfiguration ? "enabled" : "disabled",
       convert: (_: unknown, sections: SectionDoc[]) =>
         sections
           .map((section: SectionDoc) => {
@@ -219,8 +222,93 @@ function DeveloperToolsContent() {
           })
           .join("\n\n")
     },
-    [knowledgeBase]
+    [knowledgeBase, hasCopilotConfiguration]
   )
+
+  const pageContent = (
+    <main className="developer-tools" aria-labelledby="developer-tools-heading">
+      <header className="developer-tools__intro">
+        <p className="developer-tools__eyebrow">Developer tools</p>
+        <h1 id="developer-tools-heading">Supabase integration guide</h1>
+        <p>
+          Supabase exposes a REST interface for every table in our database. This page explains how HelpPermit.me reads and
+          writes data through that interface while keeping API keys secured on the server.
+        </p>
+      </header>
+
+      {!hasCopilotConfiguration ? (
+        <div className="developer-tools__callout" role="alert">
+          <h2>Copilot chat is turned off</h2>
+          <p>
+            Add <code>VITE_COPILOTKIT_PUBLIC_API_KEY</code> or <code>VITE_COPILOTKIT_RUNTIME_URL</code> environment variables to
+            enable the developer copilot sidebar. The reference documentation below is always available.
+          </p>
+        </div>
+      ) : null}
+
+      {knowledgeBase.map((section) => (
+        <section key={section.id} className="swagger-section" aria-labelledby={`${section.id}-heading`}>
+          <div className="swagger-section__header">
+            <h2 id={`${section.id}-heading`}>{section.title}</h2>
+            <p>{section.summary}</p>
+          </div>
+          <div className="swagger-section__endpoints">
+            {section.endpoints.map((endpoint) => (
+              <article key={`${section.id}-${endpoint.title}`} className="swagger-panel">
+                <header className="swagger-panel__header">
+                  <span className={`swagger-panel__method swagger-panel__method--${endpoint.method.toLowerCase()}`}>
+                    {endpoint.method}
+                  </span>
+                  <h3>{endpoint.title}</h3>
+                </header>
+                <p className="swagger-panel__path">{endpoint.path}</p>
+                <p className="swagger-panel__description">{endpoint.description}</p>
+                {endpoint.queryParameters && endpoint.queryParameters.length > 0 ? (
+                  <div className="swagger-panel__block">
+                    <h4>Query parameters</h4>
+                    <ul>
+                      {endpoint.queryParameters.map((param) => (
+                        <li key={param.name}>
+                          <code>{param.name}</code>
+                          {param.required ? <span className="swagger-panel__required">Required</span> : null}
+                          <p>{param.description}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {endpoint.requestExample ? (
+                  <div className="swagger-panel__block">
+                    <h4>Request example</h4>
+                    <pre>
+                      <code>{endpoint.requestExample}</code>
+                    </pre>
+                  </div>
+                ) : null}
+                {endpoint.responseExample ? (
+                  <div className="swagger-panel__block">
+                    <h4>Sample response</h4>
+                    <pre>
+                      <code>{endpoint.responseExample}</code>
+                    </pre>
+                  </div>
+                ) : null}
+                {endpoint.notes ? <p className="swagger-panel__notes">{endpoint.notes}</p> : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
+    </main>
+  )
+
+  if (!hasCopilotConfiguration) {
+    return (
+      <CopilotKit publicApiKey={publicApiKey || undefined} runtimeUrl={effectiveRuntimeUrl || undefined}>
+        {pageContent}
+      </CopilotKit>
+    )
+  }
 
   return (
     <CopilotKit publicApiKey={publicApiKey || undefined} runtimeUrl={effectiveRuntimeUrl || undefined}>
@@ -230,70 +318,7 @@ function DeveloperToolsContent() {
         clickOutsideToClose={false}
         labels={{ title: "Developer tools copilot" }}
       >
-        <main className="developer-tools" aria-labelledby="developer-tools-heading">
-          <header className="developer-tools__intro">
-            <p className="developer-tools__eyebrow">Developer tools</p>
-            <h1 id="developer-tools-heading">Supabase integration guide</h1>
-            <p>
-              Supabase exposes a REST interface for every table in our database. This page explains how HelpPermit.me reads and
-              writes data through that interface while keeping API keys secured on the server.
-            </p>
-          </header>
-
-          {knowledgeBase.map((section) => (
-            <section key={section.id} className="swagger-section" aria-labelledby={`${section.id}-heading`}>
-              <div className="swagger-section__header">
-                <h2 id={`${section.id}-heading`}>{section.title}</h2>
-                <p>{section.summary}</p>
-              </div>
-              <div className="swagger-section__endpoints">
-                {section.endpoints.map((endpoint) => (
-                  <article key={`${section.id}-${endpoint.title}`} className="swagger-panel">
-                    <header className="swagger-panel__header">
-                      <span className={`swagger-panel__method swagger-panel__method--${endpoint.method.toLowerCase()}`}>
-                        {endpoint.method}
-                      </span>
-                      <h3>{endpoint.title}</h3>
-                    </header>
-                    <p className="swagger-panel__path">{endpoint.path}</p>
-                    <p className="swagger-panel__description">{endpoint.description}</p>
-                    {endpoint.queryParameters && endpoint.queryParameters.length > 0 ? (
-                      <div className="swagger-panel__block">
-                        <h4>Query parameters</h4>
-                        <ul>
-                          {endpoint.queryParameters.map((param) => (
-                            <li key={param.name}>
-                              <code>{param.name}</code>
-                              {param.required ? <span className="swagger-panel__required">Required</span> : null}
-                              <p>{param.description}</p>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {endpoint.requestExample ? (
-                      <div className="swagger-panel__block">
-                        <h4>Request example</h4>
-                        <pre>
-                          <code>{endpoint.requestExample}</code>
-                        </pre>
-                      </div>
-                    ) : null}
-                    {endpoint.responseExample ? (
-                      <div className="swagger-panel__block">
-                        <h4>Sample response</h4>
-                        <pre>
-                          <code>{endpoint.responseExample}</code>
-                        </pre>
-                      </div>
-                    ) : null}
-                    {endpoint.notes ? <p className="swagger-panel__notes">{endpoint.notes}</p> : null}
-                  </article>
-                ))}
-              </div>
-            </section>
-          ))}
-        </main>
+        {pageContent}
       </CopilotSidebar>
     </CopilotKit>
   )
