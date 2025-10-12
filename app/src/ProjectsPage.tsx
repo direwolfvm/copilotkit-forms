@@ -10,6 +10,46 @@ import {
 } from "./utils/projectPersistence"
 import { ArcgisSketchMap, type GeometryChange } from "./components/ArcgisSketchMap"
 
+const PRE_SCREENING_COMPLETE_EVENT = "Pre-screening complete"
+const PRE_SCREENING_INITIATED_EVENT = "Pre-screening initiated"
+const PRE_SCREENING_ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+
+type PreScreeningStatus = "complete" | "pending" | "caution"
+
+type StatusIndicatorProps = {
+  variant: PreScreeningStatus
+  label: string
+}
+
+function StatusIndicator({ variant, label }: StatusIndicatorProps) {
+  return (
+    <span className={`status-indicator status-indicator--${variant}`}>
+      <span className="status-indicator__icon" aria-hidden="true">
+        {variant === "complete" ? (
+          <svg viewBox="0 0 24 24" focusable="false">
+            <circle cx="12" cy="12" r="9" fill="none" strokeWidth="2" />
+            <polyline points="7 12.5 10.5 16 17 9" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : null}
+        {variant === "pending" ? (
+          <svg viewBox="0 0 24 24" focusable="false">
+            <circle cx="12" cy="12" r="9" fill="none" strokeWidth="2" />
+            <path d="M12 7v5l3 3" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : null}
+        {variant === "caution" ? (
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M12 5 19 17H5z" fill="none" strokeWidth="2" strokeLinejoin="round" />
+            <path d="M12 10v3.5" fill="none" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="16.5" r="1.2" stroke="none" />
+          </svg>
+        ) : null}
+      </span>
+      <span className="status-indicator__text">{label}</span>
+    </span>
+  )
+}
+
 function formatTimestamp(value?: string | null): string | undefined {
   if (!value) {
     return undefined
@@ -32,6 +72,79 @@ function renderEventData(data: unknown): string {
   }
 }
 
+function parseTimestampMillis(value?: string | null): number | undefined {
+  if (!value) {
+    return undefined
+  }
+  const timestamp = new Date(value).getTime()
+  if (Number.isNaN(timestamp)) {
+    return undefined
+  }
+  return timestamp
+}
+
+function isPreScreeningProcess(process: ProjectProcessSummary): boolean {
+  const haystack = `${process.title ?? ""} ${process.description ?? ""}`.toLowerCase()
+  return haystack.includes("pre-screening")
+}
+
+function findPreScreeningProcess(processes: ProjectProcessSummary[]): ProjectProcessSummary | undefined {
+  return processes.find((process) => isPreScreeningProcess(process))
+}
+
+function determinePreScreeningStatus(
+  process: ProjectProcessSummary
+): { variant: PreScreeningStatus; label: string } | undefined {
+  if (!isPreScreeningProcess(process)) {
+    return undefined
+  }
+
+  if (process.caseEvents.some((event) => event.eventType === PRE_SCREENING_COMPLETE_EVENT)) {
+    return { variant: "complete", label: PRE_SCREENING_COMPLETE_EVENT }
+  }
+
+  const hasInitiated = process.caseEvents.some((event) => event.eventType === PRE_SCREENING_INITIATED_EVENT)
+  const latestEvent = process.caseEvents[0]
+
+  if (!hasInitiated && !latestEvent) {
+    return undefined
+  }
+
+  if (latestEvent) {
+    const latestTimestamp = parseTimestampMillis(latestEvent.lastUpdated)
+    if (latestTimestamp && Date.now() - latestTimestamp > PRE_SCREENING_ONE_WEEK_MS) {
+      return { variant: "caution", label: "Pre-screening pending for over 7 days" }
+    }
+  }
+
+  if (hasInitiated || latestEvent) {
+    return { variant: "pending", label: "Pre-screening in progress" }
+  }
+
+  return undefined
+}
+
+function getLatestCaseEvent(entry: ProjectHierarchy): CaseEventSummary | undefined {
+  let latest: CaseEventSummary | undefined
+  let latestTimestamp = -Infinity
+
+  for (const process of entry.processes) {
+    for (const event of process.caseEvents) {
+      const timestamp = parseTimestampMillis(event.lastUpdated)
+      if (typeof timestamp === "number") {
+        if (timestamp > latestTimestamp) {
+          latestTimestamp = timestamp
+          latest = event
+        }
+      } else if (!latest) {
+        latest = event
+      }
+    }
+  }
+
+  return latest
+}
+
 function ProcessTree({ process }: { process: ProjectProcessSummary }) {
   const formattedUpdated = useMemo(() => formatTimestamp(process.lastUpdated), [process.lastUpdated])
   const formattedCreated = useMemo(() => formatTimestamp(process.createdTimestamp), [process.createdTimestamp])
@@ -39,12 +152,25 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
     () => [...process.caseEvents].reverse(),
     [process.caseEvents]
   )
+  const latestCaseEvent = process.caseEvents[0]
+  const preScreeningStatus = determinePreScreeningStatus(process)
 
   return (
     <li className="projects-tree__process">
       <details>
         <summary>
-          <span className="projects-tree__process-title">{process.title ?? `Process ${process.id}`}</span>
+          <div className="projects-tree__process-title">
+            <span className="projects-tree__process-name">{process.title ?? `Process ${process.id}`}</span>
+            {preScreeningStatus ? (
+              <StatusIndicator variant={preScreeningStatus.variant} label={preScreeningStatus.label} />
+            ) : null}
+            {latestCaseEvent?.eventType ? (
+              <span className="projects-tree__latest-event">
+                <span className="projects-tree__latest-event-label">Latest event:</span>
+                <span className="projects-tree__latest-event-value">{latestCaseEvent.eventType}</span>
+              </span>
+            ) : null}
+          </div>
           <span className="projects-tree__summary-meta">
             {formattedUpdated ? `Updated ${formattedUpdated}` : formattedCreated ? `Created ${formattedCreated}` : null}
           </span>
@@ -100,9 +226,10 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
     setIsOpen(event.currentTarget.open)
   }, [])
   const geometry = entry.project.geometry ?? undefined
-  
+  const latestEvent = getLatestCaseEvent(entry)
+  const preScreeningProcess = findPreScreeningProcess(entry.processes)
+  const preScreeningStatus = preScreeningProcess ? determinePreScreeningStatus(preScreeningProcess) : undefined
 
-  
   const handleGeometryChange = useCallback((_change: GeometryChange) => {
     // For read-only viewing, we don't need to handle changes
     // This component is just for viewing existing project geometry
@@ -118,6 +245,15 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
             <Link to={`/portal/${entry.project.id}`} className="projects-tree__project-link">
               {projectTitle}
             </Link>
+            {preScreeningStatus ? (
+              <StatusIndicator variant={preScreeningStatus.variant} label={preScreeningStatus.label} />
+            ) : null}
+            {latestEvent?.eventType ? (
+              <span className="projects-tree__latest-event">
+                <span className="projects-tree__latest-event-label">Latest event:</span>
+                <span className="projects-tree__latest-event-value">{latestEvent.eventType}</span>
+              </span>
+            ) : null}
             {formattedUpdated ? (
               <span className="projects-tree__summary-meta">Updated {formattedUpdated}</span>
             ) : null}

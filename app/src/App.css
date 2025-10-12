@@ -1508,8 +1508,14 @@
 .projects-tree__project-summary,
 .projects-tree__process-title {
   display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.projects-tree__process-name {
+  font-weight: 600;
+  color: var(--color-heading);
 }
 
 .projects-tree__project-link {
@@ -1658,6 +1664,87 @@
 .projects-tree__event-title {
   font-weight: 600;
   color: var(--color-heading);
+}
+
+.projects-tree__latest-event {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--color-text-muted) 68%, var(--color-text) 32%);
+}
+
+.projects-tree__latest-event-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
+}
+
+.projects-tree__latest-event-value {
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.status-indicator__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+}
+
+.status-indicator__icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.status-indicator__icon circle,
+.status-indicator__icon path {
+  transition: stroke 120ms ease, fill 120ms ease;
+}
+
+.status-indicator--complete {
+  background: color-mix(in srgb, var(--surface-muted) 80%, #22c55e 20%);
+  color: #15803d;
+}
+
+.status-indicator--pending {
+  background: color-mix(in srgb, var(--surface-muted) 84%, #60a5fa 16%);
+  color: #1d4ed8;
+}
+
+.status-indicator--caution {
+  background: color-mix(in srgb, var(--surface-muted) 76%, #fbbf24 24%);
+  color: #b45309;
+}
+
+.status-indicator--caution .status-indicator__icon svg {
+  fill: none;
+}
+
+.status-indicator--caution .status-indicator__icon circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+.status-indicator__text {
+  white-space: nowrap;
 }
 
 .projects-tree__event-data {
