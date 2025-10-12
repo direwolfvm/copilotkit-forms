@@ -10,7 +10,7 @@ export default function AboutPage() {
           <p>
             HelpPermit.me is a very unofficial demonstration platform that brings the <strong>Council on Environmental Quality (CEQ)</strong>
             {" "}
-            Permitting Technology Action Plan to life.
+            Permitting Technology Action Plan to life (absolutely no connection to official CEQ, FYI).
           </p>
           <p>
             The site weaves together a React front end, a Supabase data layer, and Copilot-assisted workflows to show how an online portal might work, including project initiation and tracking through a pre-screening process. Visitors can intake a new project through the portal, watch it appear
@@ -242,7 +242,7 @@ export default function AboutPage() {
         <section className="about-page__section" aria-labelledby="about-learn-more-heading">
           <h2 id="about-learn-more-heading">Learn More</h2>
           <p>
-            Learn more about the CEQ Permitting Technology Action Plan at{" "}
+            This website is not associated with the CEQ, but learn more about the CEQ Permitting Technology Action Plan at{" "}
             <a href="https://permitting.innovation.gov/resources/action-plan/">permitting.innovation.gov</a>.
           </p>
         </section>
