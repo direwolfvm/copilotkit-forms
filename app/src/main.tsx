@@ -4,11 +4,14 @@ import { BrowserRouter } from "react-router-dom"
 import "@uswds/uswds/css/uswds.min.css"
 import "./index.css"
 import App from "./App.tsx"
+import { CopilotRuntimeProvider } from "./copilotRuntimeContext"
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <CopilotRuntimeProvider>
+        <App />
+      </CopilotRuntimeProvider>
     </BrowserRouter>
   </StrictMode>,
 )
