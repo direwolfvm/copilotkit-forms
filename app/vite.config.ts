@@ -82,7 +82,7 @@ function attachGeospatialProxy(server: { middlewares: { use: (path: string, hand
   server.middlewares.use('/api/geospatial/ipac', createProxyMiddleware(callIpacProxy))
 }
 
-const benchmarkExclude = configDefaults.benchmark?.exclude ?? []
+const defaultBenchmarkExclude = (configDefaults as { benchmark?: { exclude?: string[] } }).benchmark?.exclude ?? []
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
@@ -113,9 +113,9 @@ export default defineConfig(({ command }) => ({
     },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: [...configDefaults.exclude, 'src/**/*.bench.{ts,tsx}'],
-  },
-  benchmark: {
-    include: ['src/**/*.bench.{ts,tsx}'],
-    exclude: benchmarkExclude,
+    benchmark: {
+      include: ['src/**/*.bench.{ts,tsx}'],
+      exclude: defaultBenchmarkExclude,
+    },
   },
 }))
