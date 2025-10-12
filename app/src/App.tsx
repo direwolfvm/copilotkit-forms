@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { NavLink, Navigate, Outlet, Route, Routes } from "react-router-dom"
 
 import "./App.css"
@@ -7,9 +8,44 @@ import { ProjectsPage } from "./ProjectsPage"
 import ResourceCheckPage from "./ResourceCheckPage"
 
 function Layout() {
+  const bannerRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const root = document.documentElement
+    const updateBannerHeight = () => {
+      const bannerHeight = bannerRef.current?.offsetHeight ?? 0
+      root.style.setProperty("--site-banner-height", `${bannerHeight}px`)
+    }
+
+    updateBannerHeight()
+
+    const banner = bannerRef.current
+    if (banner && typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => {
+        updateBannerHeight()
+      })
+      observer.observe(banner)
+
+      window.addEventListener("resize", updateBannerHeight)
+      return () => {
+        observer.disconnect()
+        window.removeEventListener("resize", updateBannerHeight)
+      }
+    }
+
+    window.addEventListener("resize", updateBannerHeight)
+    return () => {
+      window.removeEventListener("resize", updateBannerHeight)
+    }
+  }, [])
+
   return (
     <div className="site-shell">
-      <section className="site-banner" aria-label="Website disclaimer">
+      <section ref={bannerRef} className="site-banner" aria-label="Website disclaimer">
         <div className="site-banner__inner">
           <div className="site-banner__bar">
             <span className="site-banner__icon" aria-hidden="true">
