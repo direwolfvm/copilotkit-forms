@@ -99,10 +99,10 @@ type EvaluatePreScreeningDataArgs = {
 
 type DecisionElementRecord = {
   id: number
-  title: string
+  decisionElementId: number
 }
 
-type DecisionElementMap = Map<string, DecisionElementRecord>
+type DecisionElementMap = Map<number, DecisionElementRecord>
 
 export type CaseEventSummary = {
   id: number
@@ -321,9 +321,9 @@ export async function submitDecisionPayload({
 
   const decisionElements = await fetchDecisionElements({ supabaseUrl, supabaseAnonKey })
 
-  const missingElements = DECISION_ELEMENT_BUILDERS.map((builder) => builder.title).filter(
-    (title) => !decisionElements.has(title)
-  )
+  const missingElements = DECISION_ELEMENT_BUILDERS.filter(
+    (builder) => !decisionElements.has(builder.decisionElementId)
+  ).map((builder) => builder.title)
   if (missingElements.length > 0) {
     console.warn(
       "Decision elements are not configured for:",
@@ -1953,9 +1953,9 @@ async function fetchDecisionElements({
   supabaseUrl,
   supabaseAnonKey
 }: FetchDecisionElementsArgs): Promise<DecisionElementMap> {
-  const endpoint = new URL("/rest/v1/decision_element", supabaseUrl)
-  endpoint.searchParams.set("select", "id,title")
-  endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
+  const endpoint = new URL("/rest/v1/process_decision_element", supabaseUrl)
+  endpoint.searchParams.set("select", "id,decision_element")
+  endpoint.searchParams.set("process", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
 
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "GET"
@@ -1982,12 +1982,22 @@ async function fetchDecisionElements({
       if (!entry || typeof entry !== "object") {
         continue
       }
-      const title = (entry as { title?: unknown }).title
-      const id = (entry as { id?: unknown }).id
-      if (typeof title !== "string" || typeof id !== "number" || !Number.isFinite(id)) {
+      const rawId = (entry as { id?: unknown }).id
+      const rawDecisionElementId = (entry as { decision_element?: unknown }).decision_element
+      const processDecisionElementId = parseNumericId(rawId)
+      const decisionElementId = parseNumericId(rawDecisionElementId)
+
+      if (
+        typeof processDecisionElementId !== "number" ||
+        typeof decisionElementId !== "number"
+      ) {
         continue
       }
-      map.set(title, { id, title })
+
+      map.set(decisionElementId, {
+        id: processDecisionElementId,
+        decisionElementId
+      })
     }
   }
 
@@ -2013,36 +2023,44 @@ type DecisionPayloadBuilderContext = {
 }
 
 type DecisionElementBuilder = {
+  decisionElementId: number
   title: string
   build: (context: DecisionPayloadBuilderContext) => Record<string, unknown>
 }
 
 const DECISION_ELEMENT_BUILDERS: ReadonlyArray<DecisionElementBuilder> = [
   {
+    decisionElementId: 1,
     title: "Provide complete project details",
     build: buildProjectDetailsPayload
   },
   {
+    decisionElementId: 2,
     title: "Confirm or upload NEPA Assist results if auto fetch fails",
     build: buildNepaAssistPayload
   },
   {
+    decisionElementId: 3,
     title: "Confirm or upload IPaC results if auto fetch fails",
     build: buildIpacPayload
   },
   {
+    decisionElementId: 4,
     title: "Provide permit applicability notes",
     build: buildPermitNotesPayload
   },
   {
+    decisionElementId: 5,
     title: "Enter CE references and rationale",
     build: buildCategoricalExclusionPayload
   },
   {
+    decisionElementId: 6,
     title: "List applicable conditions and notes",
     build: buildConditionsPayload
   },
   {
+    decisionElementId: 7,
     title: "Provide resource-by-resource notes",
     build: buildResourceNotesPayload
   }
@@ -2098,7 +2116,7 @@ function buildDecisionPayloadRecords({
   const records: Array<Record<string, unknown>> = []
 
   for (const builder of DECISION_ELEMENT_BUILDERS) {
-    const element = decisionElements.get(builder.title)
+    const element = decisionElements.get(builder.decisionElementId)
 
     if (!element) {
       console.warn(
@@ -3371,7 +3389,7 @@ async function fetchDecisionElementTitleMap({
   const map = new Map<number, string>()
 
   for (const builder of DECISION_ELEMENT_BUILDERS) {
-    const element = elements.get(builder.title)
+    const element = elements.get(builder.decisionElementId)
     if (!element) {
       continue
     }
