@@ -32,7 +32,7 @@
   --shadow-subtle: 0 24px 48px -40px rgba(3, 20, 48, 0.35);
   --copilot-frame-side-offset: clamp(1.35rem, 3vw, 3rem);
   --copilot-frame-width: clamp(22rem, 28vw, 30rem);
-  --layout-site-main-padding-top: 2.5rem;
+  --layout-site-main-padding-top: 1.25rem;
   --layout-site-main-padding-bottom: 4rem;
   --layout-app-top-offset: 3rem;
   --site-header-height: 4rem;
