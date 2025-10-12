@@ -1,6 +1,9 @@
+/// <reference types="vitest" />
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import type { IncomingMessage, ServerResponse } from 'http'
+import { configDefaults } from 'vitest/config'
 
 import { callIpacProxy, callNepassistProxy, ProxyError } from './server/geospatialProxy.js'
 
@@ -79,6 +82,8 @@ function attachGeospatialProxy(server: { middlewares: { use: (path: string, hand
   server.middlewares.use('/api/geospatial/ipac', createProxyMiddleware(callIpacProxy))
 }
 
+const benchmarkExclude = configDefaults.benchmark?.exclude ?? []
+
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
   // Use absolute paths during development for the Vite dev server, but
@@ -98,4 +103,19 @@ export default defineConfig(({ command }) => ({
       },
     },
   ],
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setupTests.ts',
+    coverage: {
+      reporter: ['text', 'html'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.d.ts', 'src/main.tsx', 'src/vite-env.d.ts'],
+    },
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    exclude: [...configDefaults.exclude, 'src/**/*.bench.{ts,tsx}'],
+  },
+  benchmark: {
+    include: ['src/**/*.bench.{ts,tsx}'],
+    exclude: benchmarkExclude,
+  },
 }))
