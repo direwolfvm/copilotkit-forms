@@ -10,6 +10,7 @@
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   color: var(--color-text);
+  overflow: hidden;
 }
 
 .developer-tools__intro {
@@ -92,6 +93,7 @@
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   background: color-mix(in srgb, var(--surface) 95%, var(--surface-muted) 5%);
   box-shadow: var(--shadow-subtle);
+  overflow: hidden;
 }
 
 .swagger-panel__header {
@@ -209,13 +211,14 @@
   font-size: 0.9rem;
   line-height: 1.5;
   width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
 }
 
 .swagger-panel__block pre code {
   display: block;
-  width: fit-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
   background: none;
   padding: 0;
   color: inherit;
