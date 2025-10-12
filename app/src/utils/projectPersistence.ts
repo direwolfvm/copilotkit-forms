@@ -1052,15 +1052,36 @@ async function upsertProjectGisDataForProject({
   centroidLon
 }: UpsertProjectGisDataArgs): Promise<void> {
   const file = upload.uploadedFile
-  if (!file || !file.base64Data) {
+  const hasUploadedFile =
+    !!file && typeof file.base64Data === "string" && file.base64Data.trim().length > 0
+  const hasGeoJson = typeof upload.geoJson === "string" && upload.geoJson.trim().length > 0
+  const hasArcgisJson =
+    typeof upload.arcgisJson === "string" && upload.arcgisJson.trim().length > 0
+
+  if (!hasUploadedFile && !hasGeoJson && !hasArcgisJson) {
     await deleteProjectGisDataForProject({ supabaseUrl, supabaseAnonKey, projectId })
     return
   }
 
+  const normalizedUpload: ProjectGisUpload = { ...upload }
+  if (!hasUploadedFile) {
+    normalizedUpload.uploadedFile = null
+  }
+  if (hasGeoJson) {
+    normalizedUpload.geoJson = upload.geoJson!.trim()
+  } else {
+    delete normalizedUpload.geoJson
+  }
+  if (hasArcgisJson) {
+    normalizedUpload.arcgisJson = upload.arcgisJson!.trim()
+  } else {
+    delete normalizedUpload.arcgisJson
+  }
+
   const timestamp = new Date().toISOString()
-  const container = buildGisDataContainer(upload, timestamp)
+  const container = buildGisDataContainer(normalizedUpload, timestamp)
   const metadata = buildProjectBoundaryMetadata({
-    upload,
+    upload: normalizedUpload,
     timestamp,
     projectTitle,
     centroidLat,
