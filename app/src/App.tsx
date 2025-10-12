@@ -10,6 +10,7 @@ import DeveloperToolsPage from "./DeveloperToolsPage"
 
 function Layout() {
   const bannerRef = useRef<HTMLElement | null>(null)
+  const headerRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -17,30 +18,41 @@ function Layout() {
     }
 
     const root = document.documentElement
-    const updateBannerHeight = () => {
+    const updateLayoutMetrics = () => {
       const bannerHeight = bannerRef.current?.offsetHeight ?? 0
+      const headerHeight = headerRef.current?.offsetHeight ?? 0
       root.style.setProperty("--site-banner-height", `${bannerHeight}px`)
+      root.style.setProperty("--site-header-height", `${headerHeight}px`)
     }
 
-    updateBannerHeight()
+    updateLayoutMetrics()
 
     const banner = bannerRef.current
-    if (banner && typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver(() => {
-        updateBannerHeight()
-      })
-      observer.observe(banner)
+    const header = headerRef.current
+    const observers: ResizeObserver[] = []
 
-      window.addEventListener("resize", updateBannerHeight)
-      return () => {
-        observer.disconnect()
-        window.removeEventListener("resize", updateBannerHeight)
+    if (typeof ResizeObserver !== "undefined") {
+      if (banner) {
+        const observer = new ResizeObserver(() => {
+          updateLayoutMetrics()
+        })
+        observer.observe(banner)
+        observers.push(observer)
+      }
+
+      if (header) {
+        const observer = new ResizeObserver(() => {
+          updateLayoutMetrics()
+        })
+        observer.observe(header)
+        observers.push(observer)
       }
     }
 
-    window.addEventListener("resize", updateBannerHeight)
+    window.addEventListener("resize", updateLayoutMetrics)
     return () => {
-      window.removeEventListener("resize", updateBannerHeight)
+      observers.forEach((observer) => observer.disconnect())
+      window.removeEventListener("resize", updateLayoutMetrics)
     }
   }, [])
 
@@ -82,7 +94,7 @@ function Layout() {
           </div>
         </div>
       </section>
-      <header className="site-header">
+      <header ref={headerRef} className="site-header">
         <div className="site-header__inner">
           <div className="site-header__brand">
             <NavLink

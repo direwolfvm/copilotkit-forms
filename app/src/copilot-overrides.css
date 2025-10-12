@@ -15,8 +15,7 @@
   --copilot-sidebar-top-offset: calc(
     var(--site-banner-height) +
     var(--site-header-height) +
-    var(--layout-site-main-padding-top) +
-    var(--layout-app-top-offset)
+    1.25rem
   );
   --copilot-sidebar-side-offset: var(--copilot-frame-side-offset);
   --copilot-sidebar-bottom-offset: 0rem;
