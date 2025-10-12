@@ -30,6 +30,7 @@ import {
   ProjectPersistenceError,
   saveProjectSnapshot,
   submitDecisionPayload,
+  evaluatePreScreeningData,
   loadProjectPortalState,
   type LoadedPermittingChecklistItem
 } from "./utils/projectPersistence"
@@ -108,6 +109,7 @@ type ChecklistUpsertInput = {
 type DecisionSubmitState = {
   status: "idle" | "saving" | "success" | "error"
   message?: string
+  action?: "save" | "submit"
 }
 
 const MIN_PROJECT_IDENTIFIER = 10_000_000
@@ -546,17 +548,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setPermittingChecklist((previous) => previous.filter((item) => item.id !== id))
   }, [])
 
-  const handleSubmitDecisionPayload = useCallback(async () => {
-    if (!hasSavedSnapshot) {
-      setDecisionSubmitState({
-        status: "error",
-        message: "Save the project snapshot before submitting pre-screening data."
-      })
-      return
-    }
-
-    setDecisionSubmitState({ status: "saving" })
-
+  const ensureProjectIdentifier = useCallback((): ProjectFormData => {
     let preparedFormData = formData
     const candidateId = formData.id ? Number.parseInt(formData.id, 10) : Number.NaN
     if (!formData.id || Number.isNaN(candidateId) || !Number.isFinite(candidateId)) {
@@ -566,6 +558,98 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         setFormData(generated)
       }
     }
+    return preparedFormData
+  }, [formData, setFormData])
+
+  const handleSavePreScreeningData = useCallback(async () => {
+    if (!hasSavedSnapshot) {
+      setDecisionSubmitState({
+        status: "error",
+        action: "save",
+        message: "Save the project snapshot before saving pre-screening data."
+      })
+      return
+    }
+
+    setDecisionSubmitState({
+      status: "saving",
+      action: "save",
+      message: "Saving pre-screening data…"
+    })
+
+    const preparedFormData = ensureProjectIdentifier()
+
+    try {
+      const evaluation = await submitDecisionPayload({
+        formData: preparedFormData,
+        geospatialResults,
+        permittingChecklist,
+        createCompletionEvent: false
+      })
+      setDecisionSubmitState({
+        status: "success",
+        action: "save",
+        message: evaluation.isComplete
+          ? "Pre-screening data saved. Ready to submit."
+          : "Pre-screening data saved."
+      })
+    } catch (error) {
+      console.error("Failed to save pre-screening data", error)
+      let message = "Unable to save pre-screening data."
+      if (error instanceof ProjectPersistenceError) {
+        message = error.message
+      } else if (error instanceof Error) {
+        message = error.message
+      }
+      setDecisionSubmitState({ status: "error", action: "save", message })
+    }
+  }, [ensureProjectIdentifier, geospatialResults, permittingChecklist, hasSavedSnapshot])
+
+  const handleSubmitPreScreeningData = useCallback(async () => {
+    if (!hasSavedSnapshot) {
+      setDecisionSubmitState({
+        status: "error",
+        action: "submit",
+        message: "Save the project snapshot before submitting pre-screening data."
+      })
+      return
+    }
+
+    const preparedFormData = ensureProjectIdentifier()
+
+    let evaluation
+    try {
+      evaluation = evaluatePreScreeningData({
+        formData: preparedFormData,
+        geospatialResults,
+        permittingChecklist
+      })
+    } catch (error) {
+      console.error("Failed to evaluate pre-screening data", error)
+      let message = "Unable to submit pre-screening data."
+      if (error instanceof ProjectPersistenceError) {
+        message = error.message
+      } else if (error instanceof Error) {
+        message = error.message
+      }
+      setDecisionSubmitState({ status: "error", action: "submit", message })
+      return
+    }
+
+    if (!evaluation.isComplete) {
+      setDecisionSubmitState({
+        status: "error",
+        action: "submit",
+        message: "Complete all pre-screening data before submitting."
+      })
+      return
+    }
+
+    setDecisionSubmitState({
+      status: "saving",
+      action: "submit",
+      message: "Submitting pre-screening data…"
+    })
 
     try {
       await submitDecisionPayload({
@@ -573,7 +657,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         geospatialResults,
         permittingChecklist
       })
-      setDecisionSubmitState({ status: "success", message: "Pre-screening data submitted." })
+      setDecisionSubmitState({
+        status: "success",
+        action: "submit",
+        message: "Pre-screening data submitted."
+      })
     } catch (error) {
       console.error("Failed to submit pre-screening data", error)
       let message = "Unable to submit pre-screening data."
@@ -582,9 +670,14 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       } else if (error instanceof Error) {
         message = error.message
       }
-      setDecisionSubmitState({ status: "error", message })
+      setDecisionSubmitState({ status: "error", action: "submit", message })
     }
-  }, [formData, geospatialResults, permittingChecklist, setFormData, hasSavedSnapshot])
+  }, [
+    ensureProjectIdentifier,
+    geospatialResults,
+    permittingChecklist,
+    hasSavedSnapshot
+  ])
 
   useCopilotAction(
     {
@@ -1211,7 +1304,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               isRunningGeospatial={isGeospatialRunning}
               hasGeometry={hasGeometry}
               bufferMiles={DEFAULT_BUFFER_MILES}
-              onSubmitPreScreeningData={handleSubmitDecisionPayload}
+              onSavePreScreeningData={handleSavePreScreeningData}
+              onSubmitPreScreeningData={handleSubmitPreScreeningData}
               preScreeningSubmitState={decisionSubmitState}
               isProjectSaving={isSaving}
               canSubmitPreScreening={hasSavedSnapshot}
