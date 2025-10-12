@@ -189,12 +189,25 @@ export type ProjectHierarchy = {
 
 export type LoadedPermittingChecklistItem = Omit<PermittingChecklistItem, "id">
 
+export type PortalProgressState = {
+  projectSnapshot: {
+    initiatedAt?: string
+  }
+  preScreening: {
+    hasDecisionPayloads: boolean
+    initiatedAt?: string
+    completedAt?: string
+    lastActivityAt?: string
+  }
+}
+
 export type LoadedProjectPortalState = {
   formData: ProjectFormData
   geospatialResults: GeospatialResultsState
   permittingChecklist: LoadedPermittingChecklistItem[]
   lastUpdated?: string
   gisUpload: ProjectGisUpload
+  portalProgress: PortalProgressState
 }
 
 export async function saveProjectSnapshot({
@@ -3787,6 +3800,28 @@ export async function loadProcessInformation(
     legalStructure,
     decisionElements
   }
+async function fetchCaseEventsForProcessInstance({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+}): Promise<CaseEventRow[]> {
+  return fetchSupabaseList<CaseEventRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/case_event",
+    "case events",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,parent_process_id,type,last_updated")
+      endpoint.searchParams.set("parent_process_id", `eq.${processInstanceId}`)
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+      endpoint.searchParams.append("order", "last_updated.desc.nullslast")
+      endpoint.searchParams.append("order", "id.desc")
+    }
+  )
 }
 
 async function fetchLatestPreScreeningProcessInstanceRecord({
@@ -4010,6 +4045,12 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     projectId
   })
 
+  let projectInitiatedTimestamp: string | undefined
+  let preScreeningInitiatedTimestamp: string | undefined
+  let preScreeningCompletedTimestamp: string | undefined
+  let lastPreScreeningActivity: string | undefined
+  let hasDecisionPayloads = false
+
   if (processRecord?.id) {
     if (typeof processRecord.last_updated === "string") {
       lastUpdated = pickLatestTimestamp(lastUpdated, processRecord.last_updated)
@@ -4022,9 +4063,14 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
       processInstanceId: processRecord.id
     })
 
+    if (payloads.length > 0) {
+      hasDecisionPayloads = true
+    }
+
     for (const payload of payloads) {
       if (typeof payload.last_updated === "string") {
         lastUpdated = pickLatestTimestamp(lastUpdated, payload.last_updated)
+        lastPreScreeningActivity = pickLatestTimestamp(lastPreScreeningActivity, payload.last_updated)
       }
       if (!payload.evaluation_data || typeof payload.evaluation_data !== "object") {
         continue
@@ -4046,6 +4092,56 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
         permittingChecklist
       })
     }
+
+    const caseEvents = await fetchCaseEventsForProcessInstance({
+      supabaseUrl,
+      supabaseAnonKey,
+      processInstanceId: processRecord.id
+    })
+
+    for (const event of caseEvents) {
+      const eventTimestamp =
+        typeof event.last_updated === "string" ? event.last_updated : undefined
+      if (eventTimestamp) {
+        lastUpdated = pickLatestTimestamp(lastUpdated, eventTimestamp)
+      }
+
+      const eventType = typeof event.type === "string" ? event.type : undefined
+      if (!eventType) {
+        continue
+      }
+
+      if (eventType === CASE_EVENT_TYPES.PROJECT_INITIATED) {
+        projectInitiatedTimestamp = pickLatestTimestamp(
+          projectInitiatedTimestamp,
+          eventTimestamp
+        )
+        continue
+      }
+
+      if (eventType === CASE_EVENT_TYPES.PRE_SCREENING_INITIATED) {
+        preScreeningInitiatedTimestamp = pickLatestTimestamp(
+          preScreeningInitiatedTimestamp,
+          eventTimestamp
+        )
+        lastPreScreeningActivity = pickLatestTimestamp(
+          lastPreScreeningActivity,
+          eventTimestamp
+        )
+        continue
+      }
+
+      if (eventType === CASE_EVENT_TYPES.PRE_SCREENING_COMPLETE) {
+        preScreeningCompletedTimestamp = pickLatestTimestamp(
+          preScreeningCompletedTimestamp,
+          eventTimestamp
+        )
+        lastPreScreeningActivity = pickLatestTimestamp(
+          lastPreScreeningActivity,
+          eventTimestamp
+        )
+      }
+    }
   }
 
   if (!formData.sponsor_contact) {
@@ -4056,11 +4152,24 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     geospatialResults.messages = []
   }
 
+  const portalProgress: PortalProgressState = {
+    projectSnapshot: {
+      initiatedAt: projectInitiatedTimestamp ?? undefined
+    },
+    preScreening: {
+      hasDecisionPayloads,
+      initiatedAt: preScreeningInitiatedTimestamp ?? undefined,
+      completedAt: preScreeningCompletedTimestamp ?? undefined,
+      lastActivityAt: lastPreScreeningActivity ?? undefined
+    }
+  }
+
   return {
     formData,
     geospatialResults,
     permittingChecklist,
     lastUpdated,
-    gisUpload
+    gisUpload,
+    portalProgress
   }
 }

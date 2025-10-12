@@ -35,7 +35,9 @@ import {
   loadProcessInformation,
   PRE_SCREENING_PROCESS_MODEL_ID,
   type LoadedPermittingChecklistItem,
-  type ProcessInformation
+  type ProcessInformation,
+  type LoadedPermittingChecklistItem,
+  type PortalProgressState
 } from "./utils/projectPersistence"
 import { LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
@@ -154,6 +156,15 @@ function createInitialGeospatialResults(): GeospatialResultsState {
   return { nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] }
 }
 
+function createInitialPortalProgress(): PortalProgressState {
+  return {
+    projectSnapshot: {},
+    preScreening: {
+      hasDecisionPayloads: false
+    }
+  }
+}
+
 type PersistedProjectFormState = {
   formData: ProjectFormData
   lastSaved?: string
@@ -161,6 +172,7 @@ type PersistedProjectFormState = {
   permittingChecklist: PermittingChecklistItem[]
   hasSavedSnapshot: boolean
   gisUpload: ProjectGisUpload
+  portalProgress: PortalProgressState
 }
 
 let persistedProjectFormState: PersistedProjectFormState | undefined
@@ -170,6 +182,149 @@ type ProcessInformationState =
   | { status: "loading" }
   | { status: "success"; info: ProcessInformation }
   | { status: "error"; message: string }
+type ProgressStatus = "not-started" | "in-progress" | "complete"
+
+const PROGRESS_STATUS_LABELS: Record<ProgressStatus, string> = {
+  "not-started": "Not started",
+  "in-progress": "In progress",
+  complete: "Complete"
+}
+
+function formatProgressDate(iso?: string): string | undefined {
+  if (!iso) {
+    return undefined
+  }
+  const timestamp = Date.parse(iso)
+  if (Number.isNaN(timestamp)) {
+    return undefined
+  }
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  })
+}
+
+type PortalProgressIndicatorProps = {
+  progress: PortalProgressState
+  hasSavedSnapshot: boolean
+}
+
+function PortalProgressIndicator({ progress, hasSavedSnapshot }: PortalProgressIndicatorProps) {
+  const projectSnapshotComplete = hasSavedSnapshot || !!progress.projectSnapshot.initiatedAt
+  const projectSnapshotStatus: ProgressStatus = projectSnapshotComplete ? "complete" : "not-started"
+  const projectSnapshotDate = formatProgressDate(progress.projectSnapshot.initiatedAt)
+  const projectSnapshotDetail = projectSnapshotComplete
+    ? "Project initiation case event recorded."
+    : "Save the project snapshot to start the process."
+  const projectSnapshotTimestamp = projectSnapshotDate
+    ? `Initiated ${projectSnapshotDate}`
+    : undefined
+
+  const preScreening = progress.preScreening
+  let preScreeningStatus: ProgressStatus = "not-started"
+  if (preScreening.completedAt) {
+    preScreeningStatus = "complete"
+  } else if (preScreening.initiatedAt) {
+    preScreeningStatus = "in-progress"
+  }
+
+  const hasPreScreeningActivity =
+    preScreening.hasDecisionPayloads ||
+    typeof preScreening.initiatedAt === "string" ||
+    typeof preScreening.completedAt === "string"
+
+  const lastActivityTimestamp =
+    preScreening.lastActivityAt ?? preScreening.completedAt ?? preScreening.initiatedAt
+  const lastActivityDate = formatProgressDate(lastActivityTimestamp)
+
+  const preScreeningDetail = (() => {
+    if (preScreeningStatus === "complete") {
+      return lastActivityDate
+        ? `Decision payload submitted ${lastActivityDate}.`
+        : "Decision payload submitted."
+    }
+    if (preScreeningStatus === "in-progress") {
+      return lastActivityDate
+        ? `Pre-screening in progress. Last activity ${lastActivityDate}.`
+        : "Pre-screening in progress."
+    }
+    return "Pre-screening has not started."
+  })()
+
+  let showCaution = false
+  let cautionMessage: string | undefined
+  if (preScreeningStatus !== "complete" && hasPreScreeningActivity && lastActivityTimestamp) {
+    const parsedTimestamp = Date.parse(lastActivityTimestamp)
+    if (!Number.isNaN(parsedTimestamp)) {
+      const oneWeekInMs = 7 * 24 * 60 * 60 * 1000
+      if (Date.now() - parsedTimestamp > oneWeekInMs) {
+        showCaution = true
+        cautionMessage = lastActivityDate
+          ? `No activity since ${lastActivityDate}.`
+          : "No pre-screening activity recorded in the last week."
+      }
+    }
+  }
+
+  return (
+    <section className="portal-progress" aria-label="Project progress">
+      <ProgressPanel
+        name="Project snapshot"
+        status={projectSnapshotStatus}
+        detail={projectSnapshotDetail}
+        timestampLabel={projectSnapshotTimestamp}
+      />
+      <ProgressPanel
+        name="Pre-screening"
+        status={preScreeningStatus}
+        detail={preScreeningDetail}
+        caution={showCaution}
+        cautionMessage={cautionMessage}
+      />
+    </section>
+  )
+}
+
+type ProgressPanelProps = {
+  name: string
+  status: ProgressStatus
+  detail: string
+  timestampLabel?: string
+  caution?: boolean
+  cautionMessage?: string
+}
+
+function ProgressPanel({
+  name,
+  status,
+  detail,
+  timestampLabel,
+  caution,
+  cautionMessage
+}: ProgressPanelProps) {
+  return (
+    <div className={`portal-progress__panel portal-progress__panel--${status}`}>
+      <div className="portal-progress__panel-header">
+        <h2 className="portal-progress__name">{name}</h2>
+      </div>
+      <div className={`portal-progress__status portal-progress__status--${status}`}>
+        <span className="portal-progress__indicator" aria-hidden="true" />
+        <span>{PROGRESS_STATUS_LABELS[status]}</span>
+      </div>
+      {timestampLabel ? <div className="portal-progress__timestamp">{timestampLabel}</div> : null}
+      <p className="portal-progress__detail">{detail}</p>
+      {caution && cautionMessage ? (
+        <div className="portal-progress__notice" role="note">
+          <span className="portal-progress__notice-icon" aria-hidden="true">
+            !
+          </span>
+          <span>{cautionMessage}</span>
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 type ProjectFormWithCopilotProps = {
   showApiKeyWarning: boolean
@@ -612,6 +767,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const [hasSavedSnapshot, setHasSavedSnapshot] = useState<boolean>(() =>
     projectId && persistedProjectFormState ? persistedProjectFormState.hasSavedSnapshot : false
   )
+  const [portalProgress, setPortalProgress] = useState<PortalProgressState>(() =>
+    projectId && persistedProjectFormState
+      ? cloneValue(persistedProjectFormState.portalProgress)
+      : createInitialPortalProgress()
+  )
   const previousProjectIdRef = useRef<string | undefined>(projectId)
   const [projectLoadState, setProjectLoadState] = useState<{
     status: "idle" | "loading" | "error"
@@ -636,6 +796,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setDecisionSubmitState({ status: "idle" })
     setHasSavedSnapshot(false)
     setProjectGisUpload({})
+    setPortalProgress(createInitialPortalProgress())
   }, [
     setFormData,
     setLastSaved,
@@ -645,7 +806,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setIsSaving,
     setDecisionSubmitState,
     setHasSavedSnapshot,
-    setProjectGisUpload
+    setProjectGisUpload,
+    setPortalProgress
   ])
 
   useEffect(() => {
@@ -670,6 +832,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     let isCancelled = false
     setProjectLoadState({ status: "loading" })
     setHasSavedSnapshot(false)
+    setPortalProgress(createInitialPortalProgress())
 
     loadProjectPortalState(parsedId)
       .then((loaded) => {
@@ -689,6 +852,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         )
         setPermittingChecklist(checklistWithIds)
         setProjectGisUpload(cloneValue(loaded.gisUpload ?? {}))
+        setPortalProgress(cloneValue(loaded.portalProgress))
 
         const formattedTimestamp = (() => {
           if (loaded.lastUpdated) {
@@ -721,6 +885,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             : "Unable to load project data."
         setProjectLoadState({ status: "error", message })
         setHasSavedSnapshot(false)
+        setPortalProgress(createInitialPortalProgress())
       })
 
     return () => {
@@ -748,9 +913,18 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       geospatialResults: cloneValue(geospatialResults),
       permittingChecklist: cloneValue(permittingChecklist),
       hasSavedSnapshot,
-      gisUpload: cloneValue(projectGisUpload)
+      gisUpload: cloneValue(projectGisUpload),
+      portalProgress: cloneValue(portalProgress)
     }
-  }, [formData, geospatialResults, lastSaved, permittingChecklist, hasSavedSnapshot, projectGisUpload])
+  }, [
+    formData,
+    geospatialResults,
+    lastSaved,
+    permittingChecklist,
+    hasSavedSnapshot,
+    projectGisUpload,
+    portalProgress
+  ])
 
   const locationFieldDetail = useMemo(
     () => projectFieldDetails.find((field) => field.key === "location_text"),
@@ -1038,6 +1212,16 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           ? "Pre-screening data saved. Ready to submit."
           : "Pre-screening data saved."
       })
+      const nowIso = new Date().toISOString()
+      setPortalProgress((previous) => ({
+        projectSnapshot: { ...previous.projectSnapshot },
+        preScreening: {
+          hasDecisionPayloads: true,
+          initiatedAt: previous.preScreening.initiatedAt ?? nowIso,
+          completedAt: previous.preScreening.completedAt,
+          lastActivityAt: nowIso
+        }
+      }))
     } catch (error) {
       console.error("Failed to save pre-screening data", error)
       let message = "Unable to save pre-screening data."
@@ -1048,7 +1232,13 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       }
       setDecisionSubmitState({ status: "error", action: "save", message })
     }
-  }, [ensureProjectIdentifier, geospatialResults, permittingChecklist, hasSavedSnapshot])
+  }, [
+    ensureProjectIdentifier,
+    geospatialResults,
+    permittingChecklist,
+    hasSavedSnapshot,
+    setPortalProgress
+  ])
 
   const handleSubmitPreScreeningData = useCallback(async () => {
     if (!hasSavedSnapshot) {
@@ -1107,6 +1297,16 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         action: "submit",
         message: "Pre-screening data submitted."
       })
+      const nowIso = new Date().toISOString()
+      setPortalProgress((previous) => ({
+        projectSnapshot: { ...previous.projectSnapshot },
+        preScreening: {
+          hasDecisionPayloads: true,
+          initiatedAt: previous.preScreening.initiatedAt ?? nowIso,
+          completedAt: nowIso,
+          lastActivityAt: nowIso
+        }
+      }))
     } catch (error) {
       console.error("Failed to submit pre-screening data", error)
       let message = "Unable to submit pre-screening data."
@@ -1121,7 +1321,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     ensureProjectIdentifier,
     geospatialResults,
     permittingChecklist,
-    hasSavedSnapshot
+    hasSavedSnapshot,
+    setPortalProgress
   ])
 
   useCopilotAction(
@@ -1324,8 +1525,16 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           uploadedFile: projectGisUpload.uploadedFile ?? null
         }
       })
-      setLastSaved(new Date().toLocaleString())
+      const now = new Date()
+      setLastSaved(now.toLocaleString())
       setHasSavedSnapshot(true)
+      setPortalProgress((previous) => {
+        const initiatedAt = previous.projectSnapshot.initiatedAt ?? now.toISOString()
+        return {
+          projectSnapshot: { initiatedAt },
+          preScreening: { ...previous.preScreening }
+        }
+      })
     } catch (error) {
       console.error("Failed to save project snapshot", error)
       setLastSaved(undefined)
@@ -1666,6 +1875,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               ) : null}
             </div>
           </header>
+
+          <PortalProgressIndicator progress={portalProgress} hasSavedSnapshot={hasSavedSnapshot} />
 
           {projectLoadState.status === "loading" ? (
             <div className="usa-alert usa-alert--info usa-alert--slim" role="status" aria-live="polite">
