@@ -1533,25 +1533,28 @@
 .site-header__inner {
   width: 100%;
   margin: 0;
-  padding: 1.25rem clamp(1.5rem, 10vw, 12rem);
+  padding: 0.75rem clamp(1.5rem, 8vw, 10rem);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
+  gap: 1.25rem;
+  row-gap: 0.5rem;
   flex-wrap: wrap;
   box-sizing: border-box;
 }
 
 .site-header__brand {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  align-items: center;
 }
 
 .site-header__brand-link {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.55rem;
+  row-gap: 0.1rem;
   color: inherit;
   text-decoration: none;
   padding: 0.25rem 0.4rem;
@@ -1576,18 +1579,19 @@
   letter-spacing: -0.01em;
   text-transform: none;
   color: var(--color-heading);
+  line-height: 1.1;
 }
 
 .site-header__tagline {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: color-mix(in srgb, var(--color-text-muted) 85%, var(--color-text) 15%);
   text-transform: none;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.015em;
 }
 
 .site-nav {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.6rem;
   align-items: center;
   margin-left: auto;
   flex-wrap: wrap;
@@ -1597,7 +1601,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.55rem 1.1rem;
+  padding: 0.45rem 1rem;
   border-radius: 999px;
   font-weight: 600;
   color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
