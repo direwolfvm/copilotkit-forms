@@ -99,7 +99,33 @@ type EvaluatePreScreeningDataArgs = {
 
 type DecisionElementRecord = {
   id: number
-  decisionElementId: number
+  createdAt: string | null
+  processModelId: number | null
+  legalStructureId: number | null
+  title: string | null
+  description: string | null
+  measure: string | null
+  threshold: number | null
+  spatial: boolean | null
+  intersect: boolean | null
+  spatialReference: unknown
+  formText: string | null
+  formResponseDescription: string | null
+  formData: unknown
+  evaluationMethod: string | null
+  evaluationDmn: unknown
+  category: string | null
+  processModelInternalReferenceId: string | null
+  parentDecisionElementId: number | null
+  other: unknown
+  expectedEvaluationData: unknown
+  responseData: unknown
+  recordOwnerAgency: string | null
+  dataSourceAgency: string | null
+  dataSourceSystem: string | null
+  dataRecordVersion: string | null
+  lastUpdated: string | null
+  retrievedTimestamp: string | null
 }
 
 type DecisionElementMap = Map<number, DecisionElementRecord>
@@ -1953,9 +1979,104 @@ async function fetchDecisionElements({
   supabaseUrl,
   supabaseAnonKey
 }: FetchDecisionElementsArgs): Promise<DecisionElementMap> {
-  const endpoint = new URL("/rest/v1/process_decision_element", supabaseUrl)
-  endpoint.searchParams.set("select", "id,decision_element")
-  endpoint.searchParams.set("process", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
+  const parseOptionalString = (value: unknown): string | null =>
+    typeof value === "string" ? value : null
+  const parseOptionalBoolean = (value: unknown): boolean | null =>
+    typeof value === "boolean" ? value : null
+  const parseOptionalNumber = (value: unknown): number | null => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value
+    }
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      const parsed = Number.parseFloat(value.trim())
+      return Number.isFinite(parsed) ? parsed : null
+    }
+
+    return null
+  }
+
+  const parseDecisionElementRecord = (entry: unknown): DecisionElementRecord | undefined => {
+    if (!entry || typeof entry !== "object") {
+      return undefined
+    }
+
+    const raw = entry as Record<string, unknown>
+    const id = parseNumericId(raw.id)
+
+    if (typeof id !== "number") {
+      return undefined
+    }
+
+    return {
+      id,
+      createdAt: parseOptionalString(raw.created_at),
+      processModelId: parseNumericId(raw.process_model) ?? null,
+      legalStructureId: parseNumericId(raw.legal_structure_id) ?? null,
+      title: parseOptionalString(raw.title),
+      description: parseOptionalString(raw.description),
+      measure: parseOptionalString(raw.measure),
+      threshold: parseOptionalNumber(raw.threshold),
+      spatial: parseOptionalBoolean(raw.spatial),
+      intersect: parseOptionalBoolean(raw.intersect),
+      spatialReference: raw.spatial_reference ?? null,
+      formText: parseOptionalString(raw.form_text),
+      formResponseDescription: parseOptionalString(raw.form_response_desc),
+      formData: raw.form_data ?? null,
+      evaluationMethod: parseOptionalString(raw.evaluation_method),
+      evaluationDmn: raw.evaluation_dmn ?? null,
+      category: parseOptionalString(raw.category),
+      processModelInternalReferenceId: parseOptionalString(
+        raw.process_model_internal_reference_id
+      ),
+      parentDecisionElementId: parseNumericId(raw.parent_decision_element_id) ?? null,
+      other: raw.other ?? null,
+      expectedEvaluationData: raw.expected_evaluation_data ?? null,
+      responseData: raw.response_data ?? null,
+      recordOwnerAgency: parseOptionalString(raw.record_owner_agency),
+      dataSourceAgency: parseOptionalString(raw.data_source_agency),
+      dataSourceSystem: parseOptionalString(raw.data_source_system),
+      dataRecordVersion: parseOptionalString(raw.data_record_version),
+      lastUpdated: parseOptionalString(raw.last_updated),
+      retrievedTimestamp: parseOptionalString(raw.retrieved_timestamp)
+    }
+  }
+
+  const endpoint = new URL("/rest/v1/decision_element", supabaseUrl)
+  endpoint.searchParams.set(
+    "select",
+    [
+      "id",
+      "created_at",
+      "process_model",
+      "legal_structure_id",
+      "title",
+      "description",
+      "measure",
+      "threshold",
+      "spatial",
+      "intersect",
+      "spatial_reference",
+      "form_text",
+      "form_response_desc",
+      "form_data",
+      "evaluation_method",
+      "evaluation_dmn",
+      "category",
+      "process_model_internal_reference_id",
+      "parent_decision_element_id",
+      "other",
+      "expected_evaluation_data",
+      "response_data",
+      "record_owner_agency",
+      "data_source_agency",
+      "data_source_system",
+      "data_record_version",
+      "last_updated",
+      "retrieved_timestamp"
+    ].join(",")
+  )
+  endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
 
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "GET"
@@ -1979,25 +2100,13 @@ async function fetchDecisionElements({
 
   if (Array.isArray(payload)) {
     for (const entry of payload) {
-      if (!entry || typeof entry !== "object") {
-        continue
-      }
-      const rawId = (entry as { id?: unknown }).id
-      const rawDecisionElementId = (entry as { decision_element?: unknown }).decision_element
-      const processDecisionElementId = parseNumericId(rawId)
-      const decisionElementId = parseNumericId(rawDecisionElementId)
+      const record = parseDecisionElementRecord(entry)
 
-      if (
-        typeof processDecisionElementId !== "number" ||
-        typeof decisionElementId !== "number"
-      ) {
+      if (!record) {
         continue
       }
 
-      map.set(decisionElementId, {
-        id: processDecisionElementId,
-        decisionElementId
-      })
+      map.set(record.id, record)
     }
   }
 
@@ -3399,7 +3508,12 @@ async function fetchDecisionElementTitleMap({
       continue
     }
 
-    map.set(numericId, builder.title)
+    const elementTitle =
+      typeof element.title === "string" && element.title.trim().length > 0
+        ? element.title.trim()
+        : undefined
+
+    map.set(numericId, elementTitle ?? builder.title)
   }
 
   return map
