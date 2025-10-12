@@ -11,6 +11,7 @@ import DeveloperToolsPage from "./DeveloperToolsPage"
 function Layout() {
   const bannerRef = useRef<HTMLElement | null>(null)
   const headerRef = useRef<HTMLElement | null>(null)
+  const bannerVisibleHeightRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -18,10 +19,27 @@ function Layout() {
     }
 
     const root = document.documentElement
-    const updateLayoutMetrics = () => {
+    const updateLayoutMetrics = (visibleBannerHeight?: number) => {
       const bannerHeight = bannerRef.current?.offsetHeight ?? 0
       const headerHeight = headerRef.current?.offsetHeight ?? 0
-      root.style.setProperty("--site-banner-height", `${bannerHeight}px`)
+
+      if (typeof visibleBannerHeight === "number") {
+        bannerVisibleHeightRef.current = visibleBannerHeight
+      }
+
+      const storedVisibleHeight = bannerVisibleHeightRef.current
+      const effectiveBannerHeight =
+        typeof visibleBannerHeight === "number"
+          ? visibleBannerHeight
+          : typeof storedVisibleHeight === "number"
+            ? storedVisibleHeight
+            : bannerHeight
+
+      if (typeof storedVisibleHeight !== "number") {
+        bannerVisibleHeightRef.current = effectiveBannerHeight
+      }
+
+      root.style.setProperty("--site-banner-height", `${Math.max(0, effectiveBannerHeight)}px`)
       root.style.setProperty("--site-header-height", `${headerHeight}px`)
     }
 
@@ -49,10 +67,47 @@ function Layout() {
       }
     }
 
-    window.addEventListener("resize", updateLayoutMetrics)
+    const handleResize = () => {
+      updateLayoutMetrics()
+    }
+
+    window.addEventListener("resize", handleResize)
+
+    let intersectionObserver: IntersectionObserver | undefined
+    let handleScroll: (() => void) | undefined
+
+    if (banner && typeof IntersectionObserver !== "undefined") {
+      intersectionObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            const visibleHeight =
+              entry.isIntersecting || entry.intersectionRatio > 0
+                ? entry.intersectionRect.height
+                : 0
+            updateLayoutMetrics(visibleHeight)
+          })
+        },
+        { threshold: [0, 0.25, 0.5, 0.75, 1] }
+      )
+      intersectionObserver.observe(banner)
+    } else if (banner) {
+      handleScroll = () => {
+        const rect = banner.getBoundingClientRect()
+        const clampedTop = Math.min(Math.max(rect.top, 0), window.innerHeight)
+        const clampedBottom = Math.min(Math.max(rect.bottom, 0), window.innerHeight)
+        const visibleHeight = Math.max(0, clampedBottom - clampedTop)
+        updateLayoutMetrics(visibleHeight)
+      }
+      window.addEventListener("scroll", handleScroll)
+    }
+
     return () => {
       observers.forEach((observer) => observer.disconnect())
-      window.removeEventListener("resize", updateLayoutMetrics)
+      window.removeEventListener("resize", handleResize)
+      intersectionObserver?.disconnect()
+      if (handleScroll) {
+        window.removeEventListener("scroll", handleScroll)
+      }
     }
   }, [])
 
