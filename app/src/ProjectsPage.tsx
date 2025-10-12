@@ -61,17 +61,6 @@ function formatTimestamp(value?: string | null): string | undefined {
   return date.toLocaleString()
 }
 
-function renderEventData(data: unknown): string {
-  if (typeof data === "string") {
-    return data
-  }
-  try {
-    return JSON.stringify(data, null, 2)
-  } catch {
-    return String(data)
-  }
-}
-
 function parseTimestampMillis(value?: string | null): number | undefined {
   if (!value) {
     return undefined
@@ -160,6 +149,18 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
       <details>
         <summary>
           <div className="projects-tree__process-title">
+            <span className="projects-tree__toggle-icon" aria-hidden="true">
+              <svg viewBox="0 0 12 12" focusable="false" aria-hidden="true">
+                <path
+                  d="M4 2.5 8 6l-4 3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
             <span className="projects-tree__process-name">{process.title ?? `Process ${process.id}`}</span>
             {preScreeningStatus ? (
               <StatusIndicator variant={preScreeningStatus.variant} label={preScreeningStatus.label} />
@@ -197,21 +198,10 @@ function CaseEventTree({ event }: { event: CaseEventSummary }) {
 
   return (
     <li className="projects-tree__event">
-      <details>
-        <summary>
-          <span className="projects-tree__event-title">{event.eventType ?? `Event ${event.id}`}</span>
-          {formattedUpdated ? (
-            <span className="projects-tree__summary-meta">Updated {formattedUpdated}</span>
-          ) : null}
-        </summary>
-        <div className="projects-tree__event-body">
-          {event.data ? (
-            <pre className="projects-tree__event-data">{renderEventData(event.data)}</pre>
-          ) : (
-            <p className="projects-tree__empty">No event payload.</p>
-          )}
-        </div>
-      </details>
+      <div className="projects-tree__event-row">
+        <span className="projects-tree__event-title">{event.eventType ?? `Event ${event.id}`}</span>
+        {formattedUpdated ? <span className="projects-tree__event-date">{formattedUpdated}</span> : null}
+      </div>
     </li>
   )
 }
@@ -242,6 +232,18 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
       <details onToggle={handleToggle}>
         <summary>
           <div className="projects-tree__project-summary">
+            <span className="projects-tree__toggle-icon" aria-hidden="true">
+              <svg viewBox="0 0 12 12" focusable="false" aria-hidden="true">
+                <path
+                  d="M4 2.5 8 6l-4 3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
             <Link to={`/portal/${entry.project.id}`} className="projects-tree__project-link">
               {projectTitle}
             </Link>
