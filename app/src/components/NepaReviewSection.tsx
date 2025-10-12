@@ -42,6 +42,8 @@ interface NepaReviewSectionProps {
   }
   isProjectSaving: boolean
   canSubmitPreScreening: boolean
+  onShowProcessInformation: () => void
+  isProcessInformationLoading: boolean
 }
 
 function NepassistSummaryTable({ items }: { items: NepassistSummaryItem[] }) {
@@ -189,7 +191,9 @@ export function NepaReviewSection({
   onSubmitPreScreeningData,
   preScreeningSubmitState,
   isProjectSaving,
-  canSubmitPreScreening
+  canSubmitPreScreening,
+  onShowProcessInformation,
+  isProcessInformationLoading
 }: NepaReviewSectionProps) {
   const categoricalId = useId()
   const conformanceId = useId()
@@ -341,35 +345,51 @@ export function NepaReviewSection({
         ) : null}
       </div>
       <div className="form-panel__footer pre-screening-footer">
-        {submissionStatus}
-        <button
-          type="button"
-          className="usa-button usa-button--outline secondary"
-          onClick={onSavePreScreeningData}
-          disabled={
-            isProjectSaving ||
-            preScreeningSubmitState.status === "saving" ||
-            !canSubmitPreScreening
-          }
-        >
-          {preScreeningSubmitState.status === "saving" && preScreeningSubmitState.action === "save"
-            ? "Saving…"
-            : "Save pre-screening data"}
-        </button>
-        <button
-          type="button"
-          className="usa-button usa-button--outline secondary"
-          onClick={onSubmitPreScreeningData}
-          disabled={
-            isProjectSaving ||
-            preScreeningSubmitState.status === "saving" ||
-            !canSubmitPreScreening
-          }
-        >
-          {preScreeningSubmitState.status === "saving" && preScreeningSubmitState.action === "submit"
-            ? "Submitting…"
-            : "Submit pre-screening data"}
-        </button>
+        <div className="pre-screening-footer__row">
+          <div className="pre-screening-footer__process">
+            <button
+              type="button"
+              className="usa-button usa-button--outline secondary"
+              onClick={onShowProcessInformation}
+              disabled={isProcessInformationLoading}
+            >
+              {isProcessInformationLoading ? "Loading…" : "Process information"}
+            </button>
+          </div>
+          <div className="pre-screening-footer__actions">
+            {submissionStatus}
+            <div className="pre-screening-footer__buttons">
+              <button
+                type="button"
+                className="usa-button usa-button--outline secondary"
+                onClick={onSavePreScreeningData}
+                disabled={
+                  isProjectSaving ||
+                  preScreeningSubmitState.status === "saving" ||
+                  !canSubmitPreScreening
+                }
+              >
+                {preScreeningSubmitState.status === "saving" && preScreeningSubmitState.action === "save"
+                  ? "Saving…"
+                  : "Save pre-screening data"}
+              </button>
+              <button
+                type="button"
+                className="usa-button usa-button--outline secondary"
+                onClick={onSubmitPreScreeningData}
+                disabled={
+                  isProjectSaving ||
+                  preScreeningSubmitState.status === "saving" ||
+                  !canSubmitPreScreening
+                }
+              >
+                {preScreeningSubmitState.status === "saving" && preScreeningSubmitState.action === "submit"
+                  ? "Submitting…"
+                  : "Submit pre-screening data"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   )

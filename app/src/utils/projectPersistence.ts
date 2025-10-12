@@ -12,7 +12,7 @@ import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "../types
 import { summarizeNepassist, summarizeIpac } from "./geospatial"
 
 const DATA_SOURCE_SYSTEM = "project-portal"
-const PRE_SCREENING_PROCESS_MODEL_ID = 1
+export const PRE_SCREENING_PROCESS_MODEL_ID = 1
 const PRE_SCREENING_TITLE_SUFFIX = "Pre-Screening"
 const CASE_EVENT_TYPES = {
   PROJECT_INITIATED: "Project initiated",
@@ -97,7 +97,7 @@ type EvaluatePreScreeningDataArgs = {
   permittingChecklist: PermittingChecklistItem[]
 }
 
-type DecisionElementRecord = {
+export type DecisionElementRecord = {
   id: number
   createdAt: string | null
   processModelId: number | null
@@ -129,6 +129,34 @@ type DecisionElementRecord = {
 }
 
 type DecisionElementMap = Map<number, DecisionElementRecord>
+
+type ProcessModelRecord = {
+  id: number
+  title: string | null
+  description: string | null
+  notes: string | null
+  screeningDescription: string | null
+  agency: string | null
+  legalStructureId: number | null
+  legalStructureText: string | null
+  lastUpdated: string | null
+}
+
+type LegalStructureRecord = {
+  id: number
+  title: string | null
+  citation: string | null
+  description: string | null
+  issuingAuthority: string | null
+  url: string | null
+  effectiveDate: string | null
+}
+
+export type ProcessInformation = {
+  processModel: ProcessModelRecord
+  legalStructure?: LegalStructureRecord
+  decisionElements: DecisionElementRecord[]
+}
 
 export type CaseEventSummary = {
   id: number
@@ -2015,11 +2043,13 @@ async function fetchExistingProcessInstanceId({
 type FetchDecisionElementsArgs = {
   supabaseUrl: string
   supabaseAnonKey: string
+  processModelId?: number
 }
 
 async function fetchDecisionElements({
   supabaseUrl,
-  supabaseAnonKey
+  supabaseAnonKey,
+  processModelId
 }: FetchDecisionElementsArgs): Promise<DecisionElementMap> {
   const parseOptionalString = (value: unknown): string | null =>
     typeof value === "string" ? value : null
@@ -2118,7 +2148,11 @@ async function fetchDecisionElements({
       "retrieved_timestamp"
     ].join(",")
   )
-  endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
+  const resolvedProcessModelId =
+    typeof processModelId === "number" && Number.isFinite(processModelId)
+      ? processModelId
+      : PRE_SCREENING_PROCESS_MODEL_ID
+  endpoint.searchParams.set("process_model", `eq.${resolvedProcessModelId}`)
 
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "GET"
@@ -3582,6 +3616,190 @@ async function fetchProcessDecisionPayloadRows({
   )
 }
 
+async function fetchProcessModelRecord({
+  supabaseUrl,
+  supabaseAnonKey,
+  processModelId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processModelId: number
+}): Promise<ProcessModelRecord | undefined> {
+  const rows = await fetchSupabaseList<Record<string, unknown>>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_model",
+    "process model",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        [
+          "id",
+          "title",
+          "description",
+          "notes",
+          "screening_description",
+          "agency",
+          "legal_structure_id",
+          "legal_structure_text",
+          "last_updated"
+        ].join(",")
+      )
+      endpoint.searchParams.set("id", `eq.${processModelId}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+
+  const raw = rows[0]
+  if (!raw || typeof raw !== "object") {
+    return undefined
+  }
+
+  const parseOptionalString = (value: unknown): string | null =>
+    typeof value === "string" ? value : null
+
+  const id = parseNumericId((raw as Record<string, unknown>).id)
+  if (typeof id !== "number") {
+    return undefined
+  }
+
+  const record: ProcessModelRecord = {
+    id,
+    title: parseOptionalString((raw as Record<string, unknown>).title),
+    description: parseOptionalString((raw as Record<string, unknown>).description),
+    notes: parseOptionalString((raw as Record<string, unknown>).notes),
+    screeningDescription: parseOptionalString(
+      (raw as Record<string, unknown>).screening_description
+    ),
+    agency: parseOptionalString((raw as Record<string, unknown>).agency),
+    legalStructureId:
+      parseNumericId((raw as Record<string, unknown>).legal_structure_id) ?? null,
+    legalStructureText: parseOptionalString(
+      (raw as Record<string, unknown>).legal_structure_text
+    ),
+    lastUpdated: parseOptionalString((raw as Record<string, unknown>).last_updated)
+  }
+
+  return record
+}
+
+async function fetchLegalStructureRecord({
+  supabaseUrl,
+  supabaseAnonKey,
+  legalStructureId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  legalStructureId: number
+}): Promise<LegalStructureRecord | undefined> {
+  const rows = await fetchSupabaseList<Record<string, unknown>>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/legal_structure",
+    "legal structure",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        [
+          "id",
+          "title",
+          "citation",
+          "description",
+          "issuing_authority",
+          "url",
+          "effective_date"
+        ].join(",")
+      )
+      endpoint.searchParams.set("id", `eq.${legalStructureId}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+
+  const raw = rows[0]
+  if (!raw || typeof raw !== "object") {
+    return undefined
+  }
+
+  const parseOptionalString = (value: unknown): string | null =>
+    typeof value === "string" ? value : null
+
+  const id = parseNumericId((raw as Record<string, unknown>).id)
+  if (typeof id !== "number") {
+    return undefined
+  }
+
+  const record: LegalStructureRecord = {
+    id,
+    title: parseOptionalString((raw as Record<string, unknown>).title),
+    citation: parseOptionalString((raw as Record<string, unknown>).citation),
+    description: parseOptionalString((raw as Record<string, unknown>).description),
+    issuingAuthority: parseOptionalString(
+      (raw as Record<string, unknown>).issuing_authority
+    ),
+    url: parseOptionalString((raw as Record<string, unknown>).url),
+    effectiveDate: parseOptionalString((raw as Record<string, unknown>).effective_date)
+  }
+
+  return record
+}
+
+export async function loadProcessInformation(
+  processModelId: number
+): Promise<ProcessInformation> {
+  if (!Number.isFinite(processModelId)) {
+    throw new ProjectPersistenceError("Process model identifier must be numeric.")
+  }
+
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const processModel = await fetchProcessModelRecord({
+    supabaseUrl,
+    supabaseAnonKey,
+    processModelId
+  })
+
+  if (!processModel) {
+    throw new ProjectPersistenceError(`Process model ${processModelId} was not found.`)
+  }
+
+  let legalStructure: LegalStructureRecord | undefined
+  if (typeof processModel.legalStructureId === "number") {
+    legalStructure = await fetchLegalStructureRecord({
+      supabaseUrl,
+      supabaseAnonKey,
+      legalStructureId: processModel.legalStructureId
+    })
+  }
+
+  const decisionElementMap = await fetchDecisionElements({
+    supabaseUrl,
+    supabaseAnonKey,
+    processModelId
+  })
+
+  const decisionElements = Array.from(decisionElementMap.values()).filter((element) => {
+    if (!element) {
+      return false
+    }
+    if (typeof element.processModelId === "number") {
+      return element.processModelId === processModelId
+    }
+    return true
+  })
+
+  decisionElements.sort((a, b) => a.id - b.id)
+
+  return {
+    processModel,
+    legalStructure,
+    decisionElements
+  }
 async function fetchCaseEventsForProcessInstance({
   supabaseUrl,
   supabaseAnonKey,
