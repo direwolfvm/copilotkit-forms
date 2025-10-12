@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react"
-import { NavLink, Navigate, Outlet, Route, Routes } from "react-router-dom"
+import { useEffect, useRef, useState } from "react"
+import { NavLink, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom"
 
 import "./App.css"
 import HomePage from "./HomePage"
@@ -14,6 +14,8 @@ function Layout() {
   const bannerRef = useRef<HTMLElement | null>(null)
   const headerRef = useRef<HTMLElement | null>(null)
   const bannerVisibleHeightRef = useRef<number | undefined>(undefined)
+  const [isNavOpen, setIsNavOpen] = useState(false)
+  const location = useLocation()
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -113,6 +115,28 @@ function Layout() {
     }
   }, [])
 
+  useEffect(() => {
+    setIsNavOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (!isNavOpen || typeof window === "undefined") {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsNavOpen(false)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isNavOpen])
+
   return (
     <div className="site-shell">
       <section ref={bannerRef} className="site-banner" aria-label="Website disclaimer">
@@ -167,7 +191,27 @@ function Layout() {
               <span className="site-header__tagline">(an unofficial demo)</span>
             </NavLink>
           </div>
-          <nav className="site-nav" aria-label="Primary">
+          <button
+            type="button"
+            className="site-nav-toggle"
+            aria-expanded={isNavOpen}
+            aria-controls="site-nav-primary"
+            onClick={() => {
+              setIsNavOpen((previous) => !previous)
+            }}
+          >
+            <span className="site-nav-toggle__icon" aria-hidden="true">
+              <span className="site-nav-toggle__bar" />
+              <span className="site-nav-toggle__bar" />
+              <span className="site-nav-toggle__bar" />
+            </span>
+            <span className="site-nav-toggle__label">{isNavOpen ? "Close" : "Menu"}</span>
+          </button>
+          <nav
+            id="site-nav-primary"
+            className={`site-nav${isNavOpen ? " site-nav--open" : ""}`}
+            aria-label="Primary"
+          >
             <NavLink
               to="/projects"
               className={({ isActive }) =>
