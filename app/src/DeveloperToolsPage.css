@@ -40,6 +40,27 @@
   line-height: 1.7;
 }
 
+.developer-tools__callout {
+  margin: 2rem 3.25rem 0;
+  padding: 1.5rem 1.75rem;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  background: color-mix(in srgb, #f8f5ff 65%, var(--surface) 35%);
+  box-shadow: var(--shadow-subtle);
+}
+
+.developer-tools__callout h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: color-mix(in srgb, #4b3a88 85%, var(--color-heading) 15%);
+}
+
+.developer-tools__callout p {
+  margin: 0.75rem 0 0;
+  color: color-mix(in srgb, var(--color-text-muted) 75%, var(--color-text) 25%);
+  line-height: 1.6;
+}
+
 .swagger-section {
   padding: 2.75rem 3.25rem 0;
 }
@@ -202,9 +223,14 @@
   }
 
   .developer-tools__intro,
+  .developer-tools__callout,
   .swagger-section {
     padding-left: 1.5rem;
     padding-right: 1.5rem;
+  }
+
+  .developer-tools__callout {
+    margin: 1.5rem 0 0;
   }
 
   .swagger-panel {
