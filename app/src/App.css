@@ -1859,6 +1859,14 @@
   display: none;
 }
 
+.projects-tree details > summary .projects-tree__toggle-icon {
+  transform: rotate(0deg);
+}
+
+.projects-tree details[open] > summary .projects-tree__toggle-icon {
+  transform: rotate(90deg);
+}
+
 .projects-tree details[open] > summary {
   border-bottom: 1px solid var(--border);
   margin-bottom: 0.75rem;
@@ -1871,6 +1879,29 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem 0.75rem;
+}
+
+.projects-tree__toggle-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent 20%);
+  background: color-mix(in srgb, var(--surface-muted) 60%, white 40%);
+  color: color-mix(in srgb, var(--color-text-muted) 60%, var(--color-text) 40%);
+  transition: transform 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+.projects-tree__toggle-icon svg {
+  width: 0.55rem;
+  height: 0.55rem;
+}
+
+.projects-tree details[open] > summary .projects-tree__toggle-icon {
+  color: var(--accent-dark);
 }
 
 .projects-tree__process-name {
@@ -1895,8 +1926,7 @@
 }
 
 .projects-tree__project-body,
-.projects-tree__process-body,
-.projects-tree__event-body {
+.projects-tree__process-body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -2021,9 +2051,30 @@
   margin: 0;
 }
 
+.projects-tree__event {
+  list-style: none;
+  background: color-mix(in srgb, var(--surface-muted) 88%, white 12%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.75rem 1.25rem;
+}
+
+.projects-tree__event-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .projects-tree__event-title {
   font-weight: 600;
   color: var(--color-heading);
+}
+
+.projects-tree__event-date {
+  font-size: 0.9rem;
+  color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
+  white-space: nowrap;
 }
 
 .projects-tree__latest-event {
@@ -2105,16 +2156,6 @@
 
 .status-indicator__text {
   white-space: nowrap;
-}
-
-.projects-tree__event-data {
-  background: rgba(17, 24, 39, 0.08);
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
-  overflow-x: auto;
-  font-size: 0.9rem;
-  font-family: "Source Code Pro", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-  max-height: 18rem;
 }
 
 @media (max-width: 768px) {
