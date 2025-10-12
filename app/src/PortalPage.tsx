@@ -1134,19 +1134,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   }, [formData, setFormData])
 
   const ensureProcessInformation = useCallback(async () => {
-    let shouldFetch = false
-
-    setProcessInformationState((current) => {
-      if (current.status === "success" || current.status === "loading") {
-        return current
-      }
-      shouldFetch = true
-      return { status: "loading" }
-    })
-
-    if (!shouldFetch) {
+    if (processInformationState.status === "success" || processInformationState.status === "loading") {
       return
     }
+
+    setProcessInformationState({ status: "loading" })
 
     try {
       const info = await loadProcessInformation(PRE_SCREENING_PROCESS_MODEL_ID)
@@ -1164,7 +1156,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           : "Unable to load process information."
       setProcessInformationState({ status: "error", message })
     }
-  }, [loadProcessInformation])
+  }, [loadProcessInformation, processInformationState.status])
 
   const handleShowProcessInformation = useCallback(() => {
     setProcessModalOpen(true)
