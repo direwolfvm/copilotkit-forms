@@ -8,6 +8,7 @@ import { ProjectsPage } from "./ProjectsPage"
 import ResourceCheckPage from "./ResourceCheckPage"
 import DeveloperToolsPage from "./DeveloperToolsPage"
 import SettingsPage from "./SettingsPage"
+import AboutPage from "./AboutPage"
 
 function Layout() {
   const bannerRef = useRef<HTMLElement | null>(null)
@@ -200,6 +201,14 @@ function Layout() {
               Developer Tools
             </NavLink>
             <NavLink
+              to="/about"
+              className={({ isActive }) =>
+                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
+              }
+            >
+              About
+            </NavLink>
+            <NavLink
               to="/settings"
               aria-label="Settings"
               className={({ isActive }) =>
@@ -242,6 +251,7 @@ function App() {
         </Route>
         <Route path="resource-check" element={<ResourceCheckPage />} />
         <Route path="developer-tools" element={<DeveloperToolsPage />} />
+        <Route path="about" element={<AboutPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
