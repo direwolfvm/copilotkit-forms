@@ -213,6 +213,14 @@ function Layout() {
             aria-label="Primary"
           >
             <NavLink
+              to="/about"
+              className={({ isActive }) =>
+                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
+              }
+            >
+              About
+            </NavLink>
+            <NavLink
               to="/projects"
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
@@ -243,14 +251,6 @@ function Layout() {
               }
             >
               Developer Tools
-            </NavLink>
-            <NavLink
-              to="/about"
-              className={({ isActive }) =>
-                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
-              }
-            >
-              About
             </NavLink>
             <NavLink
               to="/settings"

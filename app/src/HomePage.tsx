@@ -26,6 +26,23 @@ const cards = [
   }
 ]
 
+const featurePanels = [
+  {
+    title: "About HelpPermit.me",
+    description:
+      "Learn about the ideas behind this demo and how these tools can support more efficient permitting and environmental review processes.",
+    to: "/about",
+    linkLabel: "Read about the project"
+  },
+  {
+    title: "Developer tools",
+    description:
+      "Explore the developer console to see how the CopilotKit integrations power AI-assisted workflows across the HelpPermit.me experience.",
+    to: "/developer-tools",
+    linkLabel: "Open developer tools"
+  }
+]
+
 function noopGeometryChange() {
   // The home page only preloads the ArcGIS resources.
 }
@@ -50,6 +67,23 @@ export default function HomePage() {
             <Link to={card.to} className="home-card__action">
               <span>{card.linkLabel}</span>
               <span aria-hidden="true" className="home-card__action-icon">
+                →
+              </span>
+            </Link>
+          </article>
+        ))}
+      </section>
+
+      <section className="home__feature-panels" aria-label="Dive deeper into HelpPermit.me">
+        {featurePanels.map((panel) => (
+          <article key={panel.title} className="home-panel">
+            <div className="home-panel__content">
+              <h2 className="home-panel__title">{panel.title}</h2>
+              <p className="home-panel__body">{panel.description}</p>
+            </div>
+            <Link to={panel.to} className="home-panel__action">
+              <span>{panel.linkLabel}</span>
+              <span aria-hidden="true" className="home-panel__action-icon">
                 →
               </span>
             </Link>
