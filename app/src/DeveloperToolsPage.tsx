@@ -176,12 +176,11 @@ const sectionDocs: SectionDoc[] = [
   }
 ]
 
-function DeveloperToolsContent() {
-  const publicApiKey = getPublicApiKey()
-  const runtimeUrl = getRuntimeUrl()
-  const effectiveRuntimeUrl = runtimeUrl || COPILOT_CLOUD_CHAT_URL
-  const hasCopilotConfiguration = Boolean(publicApiKey || runtimeUrl)
+interface DeveloperToolsContentProps {
+  hasCopilotConfiguration: boolean
+}
 
+function DeveloperToolsContent({ hasCopilotConfiguration }: DeveloperToolsContentProps) {
   const copilotInstructions = useMemo(
     () =>
       [
@@ -303,27 +302,30 @@ function DeveloperToolsContent() {
   )
 
   if (!hasCopilotConfiguration) {
-    return (
-      <CopilotKit publicApiKey={publicApiKey || undefined} runtimeUrl={effectiveRuntimeUrl || undefined}>
-        {pageContent}
-      </CopilotKit>
-    )
+    return pageContent
   }
 
   return (
-    <CopilotKit publicApiKey={publicApiKey || undefined} runtimeUrl={effectiveRuntimeUrl || undefined}>
-      <CopilotSidebar
-        instructions={copilotInstructions}
-        defaultOpen
-        clickOutsideToClose={false}
-        labels={{ title: "Developer tools copilot" }}
-      >
-        {pageContent}
-      </CopilotSidebar>
-    </CopilotKit>
+    <CopilotSidebar
+      instructions={copilotInstructions}
+      defaultOpen
+      clickOutsideToClose={false}
+      labels={{ title: "Developer tools copilot" }}
+    >
+      {pageContent}
+    </CopilotSidebar>
   )
 }
 
 export default function DeveloperToolsPage() {
-  return <DeveloperToolsContent />
+  const publicApiKey = getPublicApiKey()
+  const runtimeUrl = getRuntimeUrl()
+  const effectiveRuntimeUrl = runtimeUrl || COPILOT_CLOUD_CHAT_URL
+  const hasCopilotConfiguration = Boolean(publicApiKey || runtimeUrl)
+
+  return (
+    <CopilotKit publicApiKey={publicApiKey || undefined} runtimeUrl={effectiveRuntimeUrl || undefined}>
+      <DeveloperToolsContent hasCopilotConfiguration={hasCopilotConfiguration} />
+    </CopilotKit>
+  )
 }
