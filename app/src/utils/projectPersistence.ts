@@ -3800,6 +3800,7 @@ export async function loadProcessInformation(
     legalStructure,
     decisionElements
   }
+}
 async function fetchCaseEventsForProcessInstance({
   supabaseUrl,
   supabaseAnonKey,

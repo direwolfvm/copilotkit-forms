@@ -34,7 +34,6 @@ import {
   loadProjectPortalState,
   loadProcessInformation,
   PRE_SCREENING_PROCESS_MODEL_ID,
-  type LoadedPermittingChecklistItem,
   type ProcessInformation,
   type LoadedPermittingChecklistItem,
   type PortalProgressState
