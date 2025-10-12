@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
-import type { ChangeEvent } from "react"
+import type { ChangeEvent, ReactNode } from "react"
 import Form from "@rjsf/core"
 import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
@@ -32,7 +32,10 @@ import {
   submitDecisionPayload,
   evaluatePreScreeningData,
   loadProjectPortalState,
-  type LoadedPermittingChecklistItem
+  loadProcessInformation,
+  PRE_SCREENING_PROCESS_MODEL_ID,
+  type LoadedPermittingChecklistItem,
+  type ProcessInformation
 } from "./utils/projectPersistence"
 import { LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
@@ -162,6 +165,12 @@ type PersistedProjectFormState = {
 
 let persistedProjectFormState: PersistedProjectFormState | undefined
 
+type ProcessInformationState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; info: ProcessInformation }
+  | { status: "error"; message: string }
+
 type ProjectFormWithCopilotProps = {
   showApiKeyWarning: boolean
 }
@@ -190,8 +199,387 @@ function RuntimeSelectionControl() {
   )
 }
 
+function formatDisplayDate(timestamp?: string | null) {
+  if (!timestamp) {
+    return undefined
+  }
+
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) {
+    return undefined
+  }
+
+  return date.toLocaleString()
+}
+
+function formatDisplayDateOnly(dateString?: string | null) {
+  if (!dateString) {
+    return undefined
+  }
+
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) {
+    return undefined
+  }
+
+  return date.toLocaleDateString()
+}
+
+type DefinitionField = {
+  label: string
+  value?: ReactNode
+}
+
+function DefinitionList({ fields }: { fields: DefinitionField[] }) {
+  const items = fields.filter((field) => {
+    const value = field.value
+    if (value === undefined || value === null) {
+      return false
+    }
+
+    if (typeof value === "string") {
+      return value.trim().length > 0
+    }
+
+    return true
+  })
+
+  if (!items.length) {
+    return <p className="process-info-section__empty">No additional metadata is available.</p>
+  }
+
+  return (
+    <dl className="process-info-definition-list">
+      {items.map((field) => (
+        <div key={field.label} className="process-info-definition">
+          <dt>{field.label}</dt>
+          <dd>{field.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function ProcessInformationDetails({ info }: { info: ProcessInformation }) {
+  const { processModel, legalStructure, decisionElements } = info
+
+  const processTitle =
+    processModel.title && processModel.title.trim().length > 0
+      ? processModel.title.trim()
+      : `Process model ${processModel.id}`
+
+  const processDescription =
+    processModel.description && processModel.description.trim().length > 0
+      ? processModel.description
+      : "No description has been provided for this process model."
+
+  const processFields: DefinitionField[] = [
+    { label: "Model identifier", value: processModel.id.toString() }
+  ]
+
+  const addProcessField = (label: string, value?: string | null) => {
+    if (!value) {
+      return
+    }
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return
+    }
+    processFields.push({ label, value: trimmed })
+  }
+
+  addProcessField("Agency", processModel.agency)
+  addProcessField("Screening guidance", processModel.screeningDescription)
+  addProcessField("Legal reference", processModel.legalStructureText)
+  addProcessField("Notes", processModel.notes)
+
+  const formattedProcessUpdated = formatDisplayDate(processModel.lastUpdated)
+  if (formattedProcessUpdated) {
+    processFields.push({ label: "Last updated", value: formattedProcessUpdated })
+  }
+
+  let legalStructureSection: ReactNode
+  if (legalStructure) {
+    const legalTitle =
+      legalStructure.title && legalStructure.title.trim().length > 0
+        ? legalStructure.title.trim()
+        : `Legal structure ${legalStructure.id}`
+
+    const legalDescription =
+      legalStructure.description && legalStructure.description.trim().length > 0
+        ? legalStructure.description
+        : undefined
+
+    const legalFields: DefinitionField[] = [
+      { label: "Record identifier", value: legalStructure.id.toString() }
+    ]
+
+    const addLegalField = (label: string, value?: string | null) => {
+      if (!value) {
+        return
+      }
+      const trimmed = value.trim()
+      if (!trimmed) {
+        return
+      }
+      legalFields.push({ label, value: trimmed })
+    }
+
+    addLegalField("Citation", legalStructure.citation)
+    addLegalField("Issuing authority", legalStructure.issuingAuthority)
+
+    const formattedEffectiveDate = formatDisplayDateOnly(legalStructure.effectiveDate)
+    if (formattedEffectiveDate) {
+      legalFields.push({ label: "Effective date", value: formattedEffectiveDate })
+    }
+
+    if (legalStructure.url && legalStructure.url.trim().length > 0) {
+      const href = legalStructure.url.trim()
+      legalFields.push({
+        label: "Reference URL",
+        value: (
+          <a href={href} target="_blank" rel="noreferrer">
+            {href}
+          </a>
+        )
+      })
+    }
+
+    legalStructureSection = (
+      <section className="process-info-section">
+        <h3>{legalTitle}</h3>
+        {legalDescription ? (
+          <p className="process-info-section__description">{legalDescription}</p>
+        ) : null}
+        <DefinitionList fields={legalFields} />
+      </section>
+    )
+  } else {
+    const legalReferenceText =
+      processModel.legalStructureText && processModel.legalStructureText.trim().length > 0
+        ? processModel.legalStructureText.trim()
+        : undefined
+
+    legalStructureSection = (
+      <section className="process-info-section">
+        <h3>Legal framework</h3>
+        <p className="process-info-section__empty">
+          Detailed legal structure information is not available.
+          {legalReferenceText ? ` Reference: ${legalReferenceText}` : ""}
+        </p>
+      </section>
+    )
+  }
+
+  const decisionItems = decisionElements.map((element) => {
+    const elementTitle =
+      element.title && element.title.trim().length > 0
+        ? element.title.trim()
+        : `Decision element ${element.id}`
+    const elementDescription =
+      element.description && element.description.trim().length > 0
+        ? element.description
+        : undefined
+
+    const elementFields: DefinitionField[] = [
+      { label: "Element identifier", value: element.id.toString() }
+    ]
+
+    const addElementField = (label: string, value?: string | null) => {
+      if (!value) {
+        return
+      }
+      const trimmed = value.trim()
+      if (!trimmed) {
+        return
+      }
+      elementFields.push({ label, value: trimmed })
+    }
+
+    addElementField("Category", element.category)
+    addElementField("Measure", element.measure)
+
+    if (typeof element.threshold === "number" && Number.isFinite(element.threshold)) {
+      elementFields.push({ label: "Threshold", value: element.threshold.toString() })
+    }
+
+    if (typeof element.spatial === "boolean") {
+      elementFields.push({ label: "Spatial", value: element.spatial ? "Yes" : "No" })
+    }
+
+    if (typeof element.intersect === "boolean") {
+      elementFields.push({
+        label: "Requires intersection",
+        value: element.intersect ? "Yes" : "No"
+      })
+    }
+
+    addElementField("Form prompt", element.formText)
+    addElementField("Response guidance", element.formResponseDescription)
+    addElementField("Evaluation method", element.evaluationMethod)
+
+    const formattedElementUpdated = formatDisplayDate(element.lastUpdated)
+    if (formattedElementUpdated) {
+      elementFields.push({ label: "Last updated", value: formattedElementUpdated })
+    }
+
+    return (
+      <li key={element.id} className="process-info-decision">
+        <h4>{elementTitle}</h4>
+        {elementDescription ? (
+          <p className="process-info-decision__description">{elementDescription}</p>
+        ) : null}
+        <DefinitionList fields={elementFields} />
+      </li>
+    )
+  })
+
+  const decisionDescription = decisionElements.length
+    ? `This process model includes ${
+        decisionElements.length === 1
+          ? "one decision element"
+          : `${decisionElements.length} decision elements`
+      } that guide the pre-screening review.`
+    : null
+
+  return (
+    <>
+      <section className="process-info-section">
+        <h3>{processTitle}</h3>
+        <p className="process-info-section__description">{processDescription}</p>
+        <DefinitionList fields={processFields} />
+      </section>
+      {legalStructureSection}
+      <section className="process-info-section">
+        <h3>Decision elements</h3>
+        {decisionDescription ? (
+          <p className="process-info-section__description">{decisionDescription}</p>
+        ) : (
+          <p className="process-info-section__empty">
+            No decision elements are linked to this process model.
+          </p>
+        )}
+        {decisionElements.length ? (
+          <ul className="process-info-decision-list">{decisionItems}</ul>
+        ) : null}
+      </section>
+    </>
+  )
+}
+
+interface ProcessInformationModalProps {
+  isOpen: boolean
+  state: ProcessInformationState
+  onDismiss: () => void
+  onRetry: () => void
+}
+
+function ProcessInformationModal({
+  isOpen,
+  state,
+  onDismiss,
+  onRetry
+}: ProcessInformationModalProps) {
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        onDismiss()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isOpen, onDismiss])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const { body } = document
+    if (!body) {
+      return
+    }
+
+    const previousOverflow = body.style.overflow
+    body.style.overflow = "hidden"
+
+    return () => {
+      body.style.overflow = previousOverflow
+    }
+  }, [isOpen])
+
+  if (!isOpen) {
+    return null
+  }
+
+  let content: ReactNode
+  if (state.status === "loading" || state.status === "idle") {
+    content = (
+      <p className="process-info-modal__status" role="status" aria-live="polite">
+        Loading process information…
+      </p>
+    )
+  } else if (state.status === "error") {
+    content = (
+      <div className="process-info-modal__error" role="alert">
+        <p>{state.message}</p>
+        <div className="process-info-modal__actions">
+          <button
+            type="button"
+            className="usa-button usa-button--outline secondary"
+            onClick={onRetry}
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    )
+  } else if (state.status === "success") {
+    content = <ProcessInformationDetails info={state.info} />
+  } else {
+    content = null
+  }
+
+  return (
+    <div className="process-info-modal__backdrop" role="presentation" onClick={onDismiss}>
+      <div
+        className="process-info-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="process-info-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="process-info-modal__header">
+          <div>
+            <p className="process-info-modal__eyebrow">Pre-screening process</p>
+            <h2 id="process-info-modal-title">Process information</h2>
+          </div>
+          <button
+            type="button"
+            className="process-info-modal__close"
+            onClick={onDismiss}
+            aria-label="Close process information dialog"
+          >
+            ×
+          </button>
+        </header>
+        <div className="process-info-modal__body">{content}</div>
+      </div>
+    </div>
+  )
+}
+
 function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotProps) {
   const { projectId } = useParams<{ projectId?: string }>()
+  const isMountedRef = useRef(true)
   const [formData, setFormData] = useState<ProjectFormData>(() => {
     if (!projectId) {
       return createEmptyProjectData()
@@ -214,6 +602,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const [permittingChecklist, setPermittingChecklist] = useState<PermittingChecklistItem[]>(() =>
     projectId && persistedProjectFormState ? cloneValue(persistedProjectFormState.permittingChecklist) : []
   )
+  const [processInformationState, setProcessInformationState] = useState<ProcessInformationState>({
+    status: "idle"
+  })
+  const [isProcessModalOpen, setProcessModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>(undefined)
   const [decisionSubmitState, setDecisionSubmitState] = useState<DecisionSubmitState>({ status: "idle" })
@@ -225,6 +617,13 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     status: "idle" | "loading" | "error"
     message?: string
   }>({ status: "idle" })
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   const resetPortalState = useCallback(() => {
     persistedProjectFormState = undefined
@@ -560,6 +959,52 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     }
     return preparedFormData
   }, [formData, setFormData])
+
+  const ensureProcessInformation = useCallback(async () => {
+    let shouldFetch = false
+
+    setProcessInformationState((current) => {
+      if (current.status === "success" || current.status === "loading") {
+        return current
+      }
+      shouldFetch = true
+      return { status: "loading" }
+    })
+
+    if (!shouldFetch) {
+      return
+    }
+
+    try {
+      const info = await loadProcessInformation(PRE_SCREENING_PROCESS_MODEL_ID)
+      if (!isMountedRef.current) {
+        return
+      }
+      setProcessInformationState({ status: "success", info })
+    } catch (error) {
+      if (!isMountedRef.current) {
+        return
+      }
+      const message =
+        error instanceof ProjectPersistenceError
+          ? error.message
+          : "Unable to load process information."
+      setProcessInformationState({ status: "error", message })
+    }
+  }, [loadProcessInformation])
+
+  const handleShowProcessInformation = useCallback(() => {
+    setProcessModalOpen(true)
+    void ensureProcessInformation()
+  }, [ensureProcessInformation])
+
+  const handleRetryProcessInformation = useCallback(() => {
+    void ensureProcessInformation()
+  }, [ensureProcessInformation])
+
+  const handleCloseProcessModal = useCallback(() => {
+    setProcessModalOpen(false)
+  }, [])
 
   const handleSavePreScreeningData = useCallback(async () => {
     if (!hasSavedSnapshot) {
@@ -1309,10 +1754,18 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               preScreeningSubmitState={decisionSubmitState}
               isProjectSaving={isSaving}
               canSubmitPreScreening={hasSavedSnapshot}
+              onShowProcessInformation={handleShowProcessInformation}
+              isProcessInformationLoading={processInformationState.status === "loading"}
             />
           </section>
         </div>
       </main>
+      <ProcessInformationModal
+        isOpen={isProcessModalOpen}
+        state={processInformationState}
+        onDismiss={handleCloseProcessModal}
+        onRetry={handleRetryProcessInformation}
+      />
     </CopilotSidebar>
   )
 }
