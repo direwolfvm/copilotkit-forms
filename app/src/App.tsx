@@ -6,6 +6,7 @@ import HomePage from "./HomePage"
 import PortalPage from "./PortalPage"
 import { ProjectsPage } from "./ProjectsPage"
 import ResourceCheckPage from "./ResourceCheckPage"
+import DeveloperToolsPage from "./DeveloperToolsPage"
 
 function Layout() {
   const bannerRef = useRef<HTMLElement | null>(null)
@@ -122,6 +123,14 @@ function Layout() {
             >
               Resource Check
             </NavLink>
+            <NavLink
+              to="/developer-tools"
+              className={({ isActive }) =>
+                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
+              }
+            >
+              Developer Tools
+            </NavLink>
           </nav>
         </div>
       </header>
@@ -143,6 +152,7 @@ function App() {
           <Route path=":projectId" element={<PortalPage />} />
         </Route>
         <Route path="resource-check" element={<ResourceCheckPage />} />
+        <Route path="developer-tools" element={<DeveloperToolsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
