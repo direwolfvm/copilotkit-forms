@@ -13,11 +13,9 @@ export default function AboutPage() {
             Permitting Technology Action Plan to life (absolutely no connection to official CEQ, FYI).
           </p>
           <p>
-            The site weaves together a React front end, a Supabase data layer, and Copilot-assisted workflows to show how an online portal might work, including project initiation and tracking through a pre-screening process. Visitors can intake a new project through the portal, watch it appear
-            It delves deep into implementing the data standards, including in the projects dashboard with case events and decision payloads, and users can try out features like running resource screenings that log
-            geospatial findings back to the same data model. Every interaction reads or writes structured records that follow
-            the CEQ schema, demonstrating how agencies can orchestrate intake, tracking, and analytics without bespoke
-            systems.
+            The site weaves together a React front end, a Supabase data layer, and Copilot-assisted workflows to show how an online portal might work, including project initiation and tracking through a pre-screening process. Visitors start by trying geospatial screening, starting a project on the portal, and tracking their projects in the dashboard.
+            Every interaction reads or writes structured records that follow
+            the CEQ schema, demonstrating how agencies can orchestrate intake, tracking, and analytics with standards-based systems and automated processing.
           </p>
           <p>
             It illustrates how modern permitting systems can be <strong>data-driven</strong>, <strong>interoperable</strong>, and
