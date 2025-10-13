@@ -1768,6 +1768,12 @@
   gap: 1.75rem;
 }
 
+@media (min-width: 900px) {
+  .home__cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .home-card {
   background: var(--surface-muted);
   border: 1px solid var(--border);
