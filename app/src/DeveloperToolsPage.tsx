@@ -36,7 +36,7 @@ const sectionDocs: SectionDoc[] = [
     id: "process-model",
     title: "1. Process model",
     summary:
-      "Process models describe how an agency evaluates a project. The modal in the project portal summarizes the owning agency, legal authorities, and the latest screening guidance for the pre-screening workflow.",
+      "Process models describe how an agency evaluates a project. In the project portal, the information option at the bottom of the page summarizes in plain language how this works.  This sections shows how to retrieve this information via API.  It summarizes the owning agency, legal authorities, and the latest screening guidance for the pre-screening workflow.",
     endpoints: [
       {
         title: "Retrieve process model details",
@@ -230,8 +230,7 @@ function DeveloperToolsContent({ hasCopilotConfiguration }: DeveloperToolsConten
         <p className="developer-tools__eyebrow">Developer tools</p>
         <h1 id="developer-tools-heading">Supabase integration guide</h1>
         <p>
-          Supabase exposes a REST interface for every table in our database. This page explains how HelpPermit.me reads and
-          writes data through that interface while keeping API keys secured on the server.
+          Supabase exposes a REST interface for every table in our database. This page explains how you can interact with this data and build your own applications on top of the data structure.
         </p>
       </header>
 
