@@ -71,6 +71,10 @@ is available.
   - `updateProjectForm` lets the AI assistant populate structured fields directly, handling type
     coercion for numeric coordinates and nested sponsor contact details.
   - `resetProjectForm` clears the data back to a blank template using `createEmptyProjectData()`.
+- **Runtime selection controls** – The Settings page renders
+  [`RuntimeSelectionControl`](src/components/RuntimeSelectionControl.tsx), allowing you to switch
+  CopilotKit sessions between the hosted Copilot Cloud and the local Permitting ADK proxy at
+  `/api/custom-adk/agent`.
 - **Context sharing** – `useCopilotReadable` exposes both the structured JSON payload and a
   human-readable summary so the Copilot can reason about the current project state.
 

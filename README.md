@@ -60,6 +60,8 @@ npm install
 - A CEQ Project entity schema expressed with RJSF, including helper text for each field
 - A responsive layout with a live project summary panel
 - CopilotKit actions that let the AI assistant populate or reset form fields on your behalf
+- A settings view with a runtime selector that can flip between the hosted Copilot Cloud and the
+  local Permitting ADK proxy exposed at `/api/custom-adk`
 
 Refer to [`app/README.md`](app/README.md) for a detailed feature breakdown and configuration
 options.
