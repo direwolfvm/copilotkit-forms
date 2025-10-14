@@ -551,41 +551,72 @@ export async function saveProjectReportDocument({
     `${timestamp.replace(/[^\d]/g, "")}-report.pdf`
   ].join("/")
 
-  const storageEndpoint = new URL(
-    `/storage/v1/object/${encodeURIComponent(DOCUMENT_STORAGE_BUCKET)}/${encodeURIComponent(
-      objectPath
-    )}`,
-    supabaseUrl
-  )
+  let storageObjectPath = objectPath
+  let uploadPayload: unknown
 
-  const { url: storageUrl, init: storageInit } = buildSupabaseFetchRequest(storageEndpoint, supabaseAnonKey, {
-    method: "POST",
-    headers: {
-      "content-type": "application/pdf",
-      "x-upsert": "true"
-    },
-    body: blob
-  })
+  if (shouldUseSupabaseProxy()) {
+    const uploadUrl = `/api/storage/upload?bucket=${encodeURIComponent(
+      DOCUMENT_STORAGE_BUCKET
+    )}&object=${encodeURIComponent(objectPath)}`
 
-  const uploadResponse = await fetch(storageUrl, storageInit)
-  const uploadResponseText = await uploadResponse.text()
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/pdf"
+      },
+      body: blob
+    })
+    const uploadResponseText = await uploadResponse.text()
 
-  if (!uploadResponse.ok) {
-    const errorDetail = extractErrorDetail(uploadResponseText)
-    throw new ProjectPersistenceError(
-      errorDetail
-        ? `Failed to upload report (${uploadResponse.status}): ${errorDetail}`
-        : `Failed to upload report (${uploadResponse.status}).`
+    if (!uploadResponse.ok) {
+      const errorDetail = extractErrorDetail(uploadResponseText)
+      throw new ProjectPersistenceError(
+        errorDetail
+          ? `Failed to upload report (${uploadResponse.status}): ${errorDetail}`
+          : `Failed to upload report (${uploadResponse.status}).`
+      )
+    }
+
+    uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
+  } else {
+    const storageEndpoint = new URL(
+      `/storage/v1/object/${encodeURIComponent(DOCUMENT_STORAGE_BUCKET)}/${encodeURIComponent(
+        objectPath
+      )}`,
+      supabaseUrl
     )
+
+    const { url: storageUrl, init: storageInit } = buildSupabaseFetchRequest(
+      storageEndpoint,
+      supabaseAnonKey,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/pdf",
+          "x-upsert": "true"
+        },
+        body: blob
+      }
+    )
+
+    const uploadResponse = await fetch(storageUrl, storageInit)
+    const uploadResponseText = await uploadResponse.text()
+
+    if (!uploadResponse.ok) {
+      const errorDetail = extractErrorDetail(uploadResponseText)
+      throw new ProjectPersistenceError(
+        errorDetail
+          ? `Failed to upload report (${uploadResponse.status}): ${errorDetail}`
+          : `Failed to upload report (${uploadResponse.status}).`
+      )
+    }
+
+    uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
   }
 
-  let storageObjectPath = objectPath
-  const uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
-  if (uploadPayload && typeof uploadPayload === "object" && "Key" in uploadPayload) {
-    const keyValue = (uploadPayload as Record<string, unknown>).Key
-    if (typeof keyValue === "string" && keyValue.length > 0) {
-      storageObjectPath = keyValue
-    }
+  const resolvedStorageKey = extractStorageObjectKey(uploadPayload)
+  if (resolvedStorageKey) {
+    storageObjectPath = resolvedStorageKey
   }
 
   const documentEndpoint = new URL("/rest/v1/document", supabaseUrl)
