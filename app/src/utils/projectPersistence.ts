@@ -38,6 +38,7 @@ function buildSupabaseFetchRequest(
   const headers = new Headers(init.headers ?? undefined)
 
   let url: string
+
   if (shouldUseSupabaseProxy()) {
     headers.delete("apikey")
     headers.delete("authorization")
@@ -396,6 +397,8 @@ export async function uploadSupportingDocument({
   let storageObjectPath = objectPath
   let uploadPayload: unknown
 
+  const filePayload = new Uint8Array(await file.arrayBuffer())
+
   if (shouldUseSupabaseProxy()) {
     const uploadUrl = `/api/storage/upload?bucket=${encodeURIComponent(
       DOCUMENT_STORAGE_BUCKET
@@ -406,7 +409,7 @@ export async function uploadSupportingDocument({
       headers: {
         "content-type": file.type || "application/octet-stream"
       },
-      body: file
+      body: filePayload
     })
     const uploadResponseText = await uploadResponse.text()
 
@@ -437,7 +440,7 @@ export async function uploadSupportingDocument({
           "content-type": file.type || "application/octet-stream",
           "x-upsert": "true"
         },
-        body: file
+        body: filePayload
       }
     )
 
@@ -554,6 +557,8 @@ export async function saveProjectReportDocument({
   let storageObjectPath = objectPath
   let uploadPayload: unknown
 
+  const blobPayload = new Uint8Array(await blob.arrayBuffer())
+
   if (shouldUseSupabaseProxy()) {
     const uploadUrl = `/api/storage/upload?bucket=${encodeURIComponent(
       DOCUMENT_STORAGE_BUCKET
@@ -564,7 +569,7 @@ export async function saveProjectReportDocument({
       headers: {
         "content-type": "application/pdf"
       },
-      body: blob
+      body: blobPayload
     })
     const uploadResponseText = await uploadResponse.text()
 
@@ -595,7 +600,7 @@ export async function saveProjectReportDocument({
           "content-type": "application/pdf",
           "x-upsert": "true"
         },
-        body: blob
+        body: blobPayload
       }
     )
 
