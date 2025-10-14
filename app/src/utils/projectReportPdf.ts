@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts } from "pdf-lib"
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 import type { ProjectFormData } from "../schema/projectSchema"
 import type { PermittingChecklistItem } from "../components/PermittingChecklistSection"
 import type { PortalProgressState } from "./projectPersistence"
@@ -11,9 +11,11 @@ export type ProjectReportPdfInput = {
 }
 
 const PAGE_MARGIN = 48
-const LINE_HEIGHT = 16
-const SECTION_SPACING = 20
+const LINE_HEIGHT = 18
 const SMALL_GAP = 8
+const SECTION_GAP = 28
+const SUBSECTION_GAP = 18
+const LABEL_COLUMN_WIDTH = 140
 
 export async function createProjectReportPdf({
   project,
@@ -43,51 +45,70 @@ export async function createProjectReportPdf({
     }
   }
 
+  const drawDivider = () => {
+    ensureSpace(SMALL_GAP)
+    page.drawRectangle({
+      x: PAGE_MARGIN,
+      y: cursorY - 2,
+      width: pageWidth - PAGE_MARGIN * 2,
+      height: 1,
+      color: rgb(0.85, 0.85, 0.85)
+    })
+    cursorY -= SMALL_GAP
+  }
+
   const drawHeading = (text: string) => {
-    ensureSpace(24)
+    ensureSpace(SECTION_GAP)
     page.drawText(text, {
       x: PAGE_MARGIN,
       y: cursorY,
       size: 18,
       font: boldFont
     })
-    cursorY -= SECTION_SPACING
+    cursorY -= SECTION_GAP - SMALL_GAP
+    drawDivider()
   }
 
   const drawSubheading = (text: string) => {
-    ensureSpace(18)
+    ensureSpace(SUBSECTION_GAP)
     page.drawText(text, {
       x: PAGE_MARGIN,
       y: cursorY,
       size: 14,
       font: boldFont
     })
-    cursorY -= SMALL_GAP
+    cursorY -= SUBSECTION_GAP
   }
 
-  const drawParagraph = (text: string, fontSize = 12) => {
-    const lines = wrapText(text, regularFont, fontSize, pageWidth - PAGE_MARGIN * 2)
+  const drawParagraph = (text: string, fontSize = 12, indent = 0) => {
+    const availableWidth = pageWidth - PAGE_MARGIN * 2 - indent
+    const lines = wrapText(text, regularFont, fontSize, availableWidth)
     const lineHeight = Math.max(LINE_HEIGHT, fontSize + 4)
     for (const line of lines) {
       ensureSpace(lineHeight)
       page.drawText(line, {
-        x: PAGE_MARGIN,
+        x: PAGE_MARGIN + indent,
         y: cursorY,
         size: fontSize,
         font: regularFont
       })
       cursorY -= lineHeight
     }
-    cursorY += lineHeight
     cursorY -= SMALL_GAP
   }
 
   const drawKeyValue = (label: string, value: string) => {
-    const valueLines = wrapText(value, regularFont, 12, pageWidth - PAGE_MARGIN * 2 - 90)
+    const labelText = `${label}:`
+    const valueLines = wrapText(
+      value,
+      regularFont,
+      12,
+      pageWidth - PAGE_MARGIN * 2 - LABEL_COLUMN_WIDTH
+    )
     valueLines.forEach((line, index) => {
       ensureSpace(LINE_HEIGHT)
       if (index === 0) {
-        page.drawText(`${label}:`, {
+        page.drawText(labelText, {
           x: PAGE_MARGIN,
           y: cursorY,
           size: 12,
@@ -95,14 +116,55 @@ export async function createProjectReportPdf({
         })
       }
       page.drawText(line, {
-        x: PAGE_MARGIN + 80,
+        x: PAGE_MARGIN + LABEL_COLUMN_WIDTH,
         y: cursorY,
         size: 12,
         font: regularFont
       })
       cursorY -= LINE_HEIGHT
     })
-    cursorY += LINE_HEIGHT
+    cursorY -= SMALL_GAP
+  }
+
+  const drawLabeledParagraph = (label: string, value: string) => {
+    ensureSpace(LINE_HEIGHT)
+    page.drawText(`${label}:`, {
+      x: PAGE_MARGIN,
+      y: cursorY,
+      size: 12,
+      font: boldFont
+    })
+    cursorY -= LINE_HEIGHT
+    drawParagraph(value)
+  }
+
+  const drawBulletedText = (text: string, indent = 0) => {
+    const bulletX = PAGE_MARGIN + indent
+    const textIndent = 16
+    const lines = wrapText(
+      text,
+      regularFont,
+      12,
+      pageWidth - PAGE_MARGIN * 2 - indent - textIndent
+    )
+    lines.forEach((line, index) => {
+      ensureSpace(LINE_HEIGHT)
+      if (index === 0) {
+        page.drawText("•", {
+          x: bulletX,
+          y: cursorY,
+          size: 12,
+          font: regularFont
+        })
+      }
+      page.drawText(line, {
+        x: bulletX + textIndent,
+        y: cursorY,
+        size: 12,
+        font: regularFont
+      })
+      cursorY -= LINE_HEIGHT
+    })
     cursorY -= SMALL_GAP
   }
 
@@ -116,12 +178,15 @@ export async function createProjectReportPdf({
   drawKeyValue("Lead agency", renderValue(project.lead_agency))
   drawKeyValue("Sponsor", renderValue(project.sponsor))
 
-  drawParagraph(`Description: ${renderValue(project.description)}`)
+  drawLabeledParagraph("Description", renderValue(project.description))
 
   drawSubheading("Location")
-  drawParagraph(`Narrative: ${renderValue(project.location_text)}`)
+  drawLabeledParagraph("Narrative", renderValue(project.location_text))
   if (typeof project.location_lat === "number" && typeof project.location_lon === "number") {
-    drawParagraph(`Coordinates: ${project.location_lat}, ${project.location_lon}`)
+    drawLabeledParagraph(
+      "Coordinates",
+      `${project.location_lat.toFixed(6)}, ${project.location_lon.toFixed(6)}`
+    )
   }
 
   if (project.sponsor_contact) {
@@ -134,23 +199,23 @@ export async function createProjectReportPdf({
     ) {
       drawSubheading("Sponsor contact")
       if (contact.name) {
-        drawParagraph(`Name: ${contact.name}`)
+        drawLabeledParagraph("Name", contact.name)
       }
       if (contact.organization) {
-        drawParagraph(`Organization: ${contact.organization}`)
+        drawLabeledParagraph("Organization", contact.organization)
       }
       if (contact.email) {
-        drawParagraph(`Email: ${contact.email}`)
+        drawLabeledParagraph("Email", contact.email)
       }
       if (contact.phone) {
-        drawParagraph(`Phone: ${contact.phone}`)
+        drawLabeledParagraph("Phone", contact.phone)
       }
     }
   }
 
   drawSubheading("Pre-screening status")
   const preScreeningStatus = determinePreScreeningStatus(portalProgress)
-  drawParagraph(`Status: ${preScreeningStatus.status}`)
+  drawLabeledParagraph("Status", preScreeningStatus.status)
   if (preScreeningStatus.detail) {
     drawParagraph(preScreeningStatus.detail)
   }
@@ -162,10 +227,10 @@ export async function createProjectReportPdf({
     const completed = permittingChecklist.filter((item) => item.completed).length
     drawParagraph(`${completed} of ${permittingChecklist.length} items completed.`)
     for (const item of permittingChecklist) {
-      const prefix = item.completed ? "• [x]" : "• [ ]"
-      drawParagraph(`${prefix} ${item.label}`)
+      const prefix = item.completed ? "[x]" : "[ ]"
+      drawBulletedText(`${prefix} ${item.label}`)
       if (item.notes) {
-        drawParagraph(`   Notes: ${item.notes}`)
+        drawParagraph(`Notes: ${item.notes}`, 12, 32)
       }
     }
   }
