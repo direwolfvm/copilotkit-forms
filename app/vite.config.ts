@@ -178,7 +178,7 @@ function createStorageProxyMiddleware() {
       res.setHeader('Content-Type', 'application/json')
       res.setHeader('Cache-Control', 'no-store')
       res.end(JSON.stringify({ key: result?.key ?? objectKey }))
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof StorageUploadError) {
         sendJson(res, error.status ?? 500, { error: error.message })
         return
