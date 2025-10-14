@@ -208,6 +208,7 @@ export type LoadedProjectPortalState = {
   lastUpdated?: string
   gisUpload: ProjectGisUpload
   portalProgress: PortalProgressState
+  preScreeningProcessId?: number
 }
 
 export async function saveProjectSnapshot({
@@ -315,6 +316,147 @@ export async function saveProjectSnapshot({
   })
 
   return processInstanceId
+}
+
+type UploadSupportingDocumentArgs = {
+  file: File
+  title: string
+  projectId: number
+  projectTitle?: string | null
+  parentProcessId?: number
+}
+
+const DOCUMENT_STORAGE_BUCKET = "permit-documents"
+
+export async function uploadSupportingDocument({
+  file,
+  title,
+  projectId,
+  projectTitle,
+  parentProcessId
+}: UploadSupportingDocumentArgs): Promise<void> {
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  if (!Number.isFinite(projectId)) {
+    throw new ProjectPersistenceError(
+      "A numeric project identifier is required to upload supporting documents."
+    )
+  }
+
+  if (typeof parentProcessId !== "number" || !Number.isFinite(parentProcessId)) {
+    throw new ProjectPersistenceError(
+      "Save the project snapshot before uploading documents so the pre-screening process can be identified."
+    )
+  }
+
+  const sanitizedTitle = typeof title === "string" ? title.trim() : ""
+  if (!sanitizedTitle) {
+    throw new ProjectPersistenceError("Document title is required.")
+  }
+
+  const timestamp = new Date().toISOString()
+  const safeFileName = createSafeFileName(file.name)
+  const uniqueSuffix = Math.random().toString(36).slice(2, 8)
+  const objectSegments = [
+    `project-${projectId}`,
+    `process-${parentProcessId}`,
+    `${timestamp.replace(/[^\d]/g, "")}-${uniqueSuffix}-${safeFileName}`
+  ]
+  const objectPath = objectSegments.join("/")
+
+  const storageEndpoint = new URL(
+    `/storage/v1/object/${encodeURIComponent(DOCUMENT_STORAGE_BUCKET)}/${encodeURIComponent(
+      objectPath
+    )}`,
+    supabaseUrl
+  )
+
+  const { url: storageUrl, init: storageInit } = buildSupabaseFetchRequest(
+    storageEndpoint,
+    supabaseAnonKey,
+    {
+      method: "POST",
+      headers: {
+        "content-type": file.type || "application/octet-stream",
+        "x-upsert": "true"
+      },
+      body: file
+    }
+  )
+
+  const uploadResponse = await fetch(storageUrl, storageInit)
+  const uploadResponseText = await uploadResponse.text()
+
+  if (!uploadResponse.ok) {
+    const errorDetail = extractErrorDetail(uploadResponseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to upload document file (${uploadResponse.status}): ${errorDetail}`
+        : `Failed to upload document file (${uploadResponse.status}).`
+    )
+  }
+
+  let storageObjectPath = objectPath
+  const uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
+  if (uploadPayload && typeof uploadPayload === "object" && "Key" in uploadPayload) {
+    const keyValue = (uploadPayload as Record<string, unknown>).Key
+    if (typeof keyValue === "string" && keyValue.length > 0) {
+      storageObjectPath = keyValue
+    }
+  }
+
+  const documentEndpoint = new URL("/rest/v1/document", supabaseUrl)
+
+  const documentPayload = stripUndefined({
+    parent_process_id: parentProcessId,
+    title: sanitizedTitle,
+    document_type: "supporting-document",
+    data_source_system: DATA_SOURCE_SYSTEM,
+    last_updated: timestamp,
+    url: storageObjectPath,
+    other: stripUndefined({
+      storage_bucket: DOCUMENT_STORAGE_BUCKET,
+      storage_object_path: storageObjectPath,
+      file_name: file.name,
+      file_size: file.size,
+      mime_type: file.type || undefined,
+      project_id: projectId,
+      project_title: projectTitle ?? undefined,
+      uploaded_at: timestamp
+    })
+  })
+
+  const { url: documentUrl, init: documentInit } = buildSupabaseFetchRequest(
+    documentEndpoint,
+    supabaseAnonKey,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify(documentPayload)
+    }
+  )
+
+  const documentResponse = await fetch(documentUrl, documentInit)
+  const documentResponseText = await documentResponse.text()
+
+  if (!documentResponse.ok) {
+    const errorDetail = extractErrorDetail(documentResponseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to save document metadata (${documentResponse.status}): ${errorDetail}`
+        : `Failed to save document metadata (${documentResponse.status}).`
+    )
+  }
 }
 
 function buildProjectRecord({
@@ -2941,6 +3083,28 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
   return result as T
 }
 
+function createSafeFileName(fileName: string): string {
+  if (typeof fileName !== "string" || fileName.trim().length === 0) {
+    return "document"
+  }
+
+  const trimmed = fileName.trim()
+  const lastDotIndex = trimmed.lastIndexOf(".")
+  const baseName = lastDotIndex > 0 ? trimmed.slice(0, lastDotIndex) : trimmed
+  const extension = lastDotIndex > 0 ? trimmed.slice(lastDotIndex + 1) : ""
+
+  const sanitizedBase = baseName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+
+  const finalBase = sanitizedBase.length > 0 ? sanitizedBase : "document"
+  const sanitizedExtension = extension ? extension.replace(/[^a-z0-9]+/gi, "").toLowerCase() : ""
+
+  return sanitizedExtension ? `${finalBase}.${sanitizedExtension}` : finalBase
+}
+
 type ProjectRow = {
   id?: number | string | null
   created_at?: string | null
@@ -4046,6 +4210,10 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     projectId
   })
 
+  let preScreeningProcessId: number | undefined = processRecord?.id
+    ? parseNumericId(processRecord.id)
+    : undefined
+
   let projectInitiatedTimestamp: string | undefined
   let preScreeningInitiatedTimestamp: string | undefined
   let preScreeningCompletedTimestamp: string | undefined
@@ -4171,6 +4339,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     permittingChecklist,
     lastUpdated,
     gisUpload,
-    portalProgress
+    portalProgress,
+    preScreeningProcessId
   }
 }

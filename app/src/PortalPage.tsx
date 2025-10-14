@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
-import type { ReactNode } from "react"
+import type { ChangeEvent, FormEvent, ReactNode } from "react"
 import Form from "@rjsf/core"
 import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
@@ -37,7 +37,8 @@ import {
   PRE_SCREENING_PROCESS_MODEL_ID,
   type ProcessInformation,
   type LoadedPermittingChecklistItem,
-  type PortalProgressState
+  type PortalProgressState,
+  uploadSupportingDocument
 } from "./utils/projectPersistence"
 import { LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
@@ -59,6 +60,42 @@ const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
 )
 
 type UpdatesPayload = Record<string, unknown>
+
+const SUPPORTED_DOCUMENT_EXTENSIONS = ["pdf", "docx", "jpg", "jpeg", "png"] as const
+const SUPPORTED_DOCUMENT_ACCEPT = [
+  "application/pdf",
+  ".pdf",
+  ".docx",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/jpeg",
+  ".jpg",
+  ".jpeg",
+  "image/png",
+  ".png"
+].join(",")
+
+const SUPPORTED_DOCUMENT_EXTENSION_SET = new Set<SupportedDocumentExtension>(
+  SUPPORTED_DOCUMENT_EXTENSIONS
+)
+
+type SupportedDocumentExtension = (typeof SUPPORTED_DOCUMENT_EXTENSIONS)[number]
+type DocumentUploadStatus = { type: "success" | "error"; message: string }
+type DocumentUploadInput = { title: string; file: File }
+
+function extractFileExtension(fileName: string): SupportedDocumentExtension | undefined {
+  if (typeof fileName !== "string") {
+    return undefined
+  }
+  const trimmed = fileName.trim()
+  const match = /\.([a-z0-9]+)$/i.exec(trimmed)
+  if (!match) {
+    return undefined
+  }
+  const extension = match[1].toLowerCase()
+  return SUPPORTED_DOCUMENT_EXTENSION_SET.has(extension as SupportedDocumentExtension)
+    ? (extension as SupportedDocumentExtension)
+    : undefined
+}
 
 type LocationFieldKey = "location_text" | "location_lat" | "location_lon" | "location_object"
 type LocationFieldUpdates =
@@ -156,6 +193,7 @@ type PersistedProjectFormState = {
   hasSavedSnapshot: boolean
   gisUpload: ProjectGisUpload
   portalProgress: PortalProgressState
+  preScreeningProcessId?: number
 }
 
 let persistedProjectFormState: PersistedProjectFormState | undefined
@@ -266,6 +304,216 @@ function PortalProgressIndicator({ progress, hasSavedSnapshot }: PortalProgressI
         cautionMessage={cautionMessage}
       />
     </section>
+  )
+}
+
+interface DocumentUploadModalProps {
+  isOpen: boolean
+  onDismiss: () => void
+  onSubmit: (input: DocumentUploadInput) => Promise<void>
+}
+
+function DocumentUploadModal({ isOpen, onDismiss, onSubmit }: DocumentUploadModalProps) {
+  const titleInputRef = useRef<HTMLInputElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [title, setTitle] = useState("")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [error, setError] = useState<string | undefined>(undefined)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        onDismiss()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isOpen, onDismiss])
+
+  useEffect(() => {
+    if (!isOpen) {
+      setTitle("")
+      setSelectedFile(null)
+      setError(undefined)
+      setIsSubmitting(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+      return
+    }
+
+    const { body } = document
+    if (body) {
+      const previousOverflow = body.style.overflow
+      body.style.overflow = "hidden"
+      return () => {
+        body.style.overflow = previousOverflow
+      }
+    }
+    return undefined
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+    requestAnimationFrame(() => {
+      titleInputRef.current?.focus()
+    })
+  }, [isOpen])
+
+  const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files && event.target.files.length > 0 ? event.target.files[0] : null
+    if (!file) {
+      setSelectedFile(null)
+      return
+    }
+
+    const extension = extractFileExtension(file.name)
+    if (!extension) {
+      setError("Unsupported file type. Upload a PDF, DOCX, JPG, or PNG file.")
+      setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+      return
+    }
+
+    setSelectedFile(file)
+    setError(undefined)
+  }, [])
+
+  const handleSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const trimmedTitle = title.trim()
+
+      if (!trimmedTitle) {
+        setError("Enter a document title.")
+        return
+      }
+
+      if (!selectedFile) {
+        setError("Choose a file to upload.")
+        return
+      }
+
+      const extension = extractFileExtension(selectedFile.name)
+      if (!extension) {
+        setError("Unsupported file type. Upload a PDF, DOCX, JPG, or PNG file.")
+        return
+      }
+
+      setIsSubmitting(true)
+      setError(undefined)
+
+      try {
+        await onSubmit({ title: trimmedTitle, file: selectedFile })
+        setTitle("")
+        setSelectedFile(null)
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ""
+        }
+        onDismiss()
+      } catch (submissionError) {
+        if (submissionError instanceof ProjectPersistenceError) {
+          setError(submissionError.message)
+        } else if (submissionError instanceof Error) {
+          setError(submissionError.message)
+        } else {
+          setError("Unable to upload document.")
+        }
+      } finally {
+        setIsSubmitting(false)
+      }
+    },
+    [onSubmit, selectedFile, title, onDismiss]
+  )
+
+  if (!isOpen) {
+    return null
+  }
+
+  const selectedFileName = selectedFile?.name ?? ""
+
+  return (
+    <div className="document-upload-modal__backdrop" role="presentation" onClick={onDismiss}>
+      <div
+        className="document-upload-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="document-upload-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="document-upload-modal__header">
+          <h2 id="document-upload-modal-title">Upload supporting document</h2>
+          <button
+            type="button"
+            className="document-upload-modal__close"
+            onClick={onDismiss}
+            aria-label="Close upload dialog"
+          >
+            ×
+          </button>
+        </header>
+        <form className="document-upload-modal__form" onSubmit={handleSubmit} noValidate>
+          <div className="document-upload-modal__field">
+            <label htmlFor="document-upload-title">Document title</label>
+            <input
+              id="document-upload-title"
+              ref={titleInputRef}
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              required
+              maxLength={200}
+            />
+          </div>
+          <div className="document-upload-modal__field">
+            <label htmlFor="document-upload-file">File</label>
+            <input
+              id="document-upload-file"
+              ref={fileInputRef}
+              type="file"
+              accept={SUPPORTED_DOCUMENT_ACCEPT}
+              onChange={handleFileChange}
+              required
+            />
+            {selectedFileName ? (
+              <p className="document-upload-modal__filename" aria-live="polite">
+                Selected file: {selectedFileName}
+              </p>
+            ) : null}
+          </div>
+          {error ? (
+            <p className="document-upload-modal__error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="document-upload-modal__actions">
+            <button
+              type="button"
+              className="usa-button usa-button--outline secondary"
+              onClick={onDismiss}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="usa-button primary" disabled={isSubmitting}>
+              {isSubmitting ? "Uploading…" : "Upload document"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
 
@@ -716,10 +964,17 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const [permittingChecklist, setPermittingChecklist] = useState<PermittingChecklistItem[]>(() =>
     projectId && persistedProjectFormState ? cloneValue(persistedProjectFormState.permittingChecklist) : []
   )
+  const [preScreeningProcessId, setPreScreeningProcessId] = useState<number | undefined>(() =>
+    projectId && persistedProjectFormState ? persistedProjectFormState.preScreeningProcessId : undefined
+  )
   const [processInformationState, setProcessInformationState] = useState<ProcessInformationState>({
     status: "idle"
   })
   const [isProcessModalOpen, setProcessModalOpen] = useState(false)
+  const [isDocumentModalOpen, setDocumentModalOpen] = useState(false)
+  const [documentUploadStatus, setDocumentUploadStatus] = useState<DocumentUploadStatus | undefined>(
+    undefined
+  )
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>(undefined)
   const [decisionSubmitState, setDecisionSubmitState] = useState<DecisionSubmitState>({ status: "idle" })
@@ -731,6 +986,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       ? cloneValue(persistedProjectFormState.portalProgress)
       : createInitialPortalProgress()
   )
+  const canUploadDocument =
+    typeof preScreeningProcessId === "number" && Number.isFinite(preScreeningProcessId)
   const previousProjectIdRef = useRef<string | undefined>(projectId)
   const [projectLoadState, setProjectLoadState] = useState<{
     status: "idle" | "loading" | "error"
@@ -756,6 +1013,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setHasSavedSnapshot(false)
     setProjectGisUpload({})
     setPortalProgress(createInitialPortalProgress())
+    setPreScreeningProcessId(undefined)
+    setDocumentModalOpen(false)
+    setDocumentUploadStatus(undefined)
   }, [
     setFormData,
     setLastSaved,
@@ -766,7 +1026,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setDecisionSubmitState,
     setHasSavedSnapshot,
     setProjectGisUpload,
-    setPortalProgress
+    setPortalProgress,
+    setPreScreeningProcessId,
+    setDocumentModalOpen,
+    setDocumentUploadStatus
   ])
 
   useEffect(() => {
@@ -792,6 +1055,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setProjectLoadState({ status: "loading" })
     setHasSavedSnapshot(false)
     setPortalProgress(createInitialPortalProgress())
+    setPreScreeningProcessId(undefined)
+    setDocumentUploadStatus(undefined)
+    setDocumentModalOpen(false)
 
     loadProjectPortalState(parsedId)
       .then((loaded) => {
@@ -812,6 +1078,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         setPermittingChecklist(checklistWithIds)
         setProjectGisUpload(cloneValue(loaded.gisUpload ?? {}))
         setPortalProgress(cloneValue(loaded.portalProgress))
+        setPreScreeningProcessId(loaded.preScreeningProcessId)
 
         const formattedTimestamp = (() => {
           if (loaded.lastUpdated) {
@@ -845,6 +1112,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         setProjectLoadState({ status: "error", message })
         setHasSavedSnapshot(false)
         setPortalProgress(createInitialPortalProgress())
+        setPreScreeningProcessId(undefined)
+        setDocumentUploadStatus(undefined)
+        setDocumentModalOpen(false)
       })
 
     return () => {
@@ -873,7 +1143,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       permittingChecklist: cloneValue(permittingChecklist),
       hasSavedSnapshot,
       gisUpload: cloneValue(projectGisUpload),
-      portalProgress: cloneValue(portalProgress)
+      portalProgress: cloneValue(portalProgress),
+      preScreeningProcessId
     }
   }, [
     formData,
@@ -882,7 +1153,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     permittingChecklist,
     hasSavedSnapshot,
     projectGisUpload,
-    portalProgress
+    portalProgress,
+    preScreeningProcessId
   ])
 
   const locationFieldDetail = useMemo(
@@ -1466,7 +1738,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setDecisionSubmitState((previous) => (previous.status === "idle" ? previous : { status: "idle" }))
 
     try {
-      await saveProjectSnapshot({
+      const processId = await saveProjectSnapshot({
         formData: next,
         geospatialResults,
         gisUpload: {
@@ -1476,6 +1748,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           uploadedFile: projectGisUpload.uploadedFile ?? null
         }
       })
+      setPreScreeningProcessId(processId)
       const now = new Date()
       setLastSaved(now.toLocaleString())
       setHasSavedSnapshot(true)
@@ -1501,6 +1774,53 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       setIsSaving(false)
     }
   }
+
+  const handleOpenDocumentModal = useCallback(() => {
+    if (!canUploadDocument) {
+      return
+    }
+    setDocumentModalOpen(true)
+  }, [canUploadDocument])
+
+  const handleCloseDocumentModal = useCallback(() => {
+    setDocumentModalOpen(false)
+  }, [])
+
+  const handleDocumentUpload = useCallback(
+    async ({ title, file }: DocumentUploadInput) => {
+      const normalizedId = typeof formData?.id === "string" ? formData.id.trim() : ""
+      const projectIdValue = normalizedId.length > 0 ? Number.parseInt(normalizedId, 10) : Number.NaN
+
+      if (!Number.isFinite(projectIdValue)) {
+        const error = new ProjectPersistenceError(
+          "A numeric project identifier is required before uploading documents."
+        )
+        setDocumentUploadStatus({ type: "error", message: error.message })
+        throw error
+      }
+
+      try {
+        await uploadSupportingDocument({
+          title,
+          file,
+          projectId: projectIdValue,
+          projectTitle: typeof formData?.title === "string" ? formData.title : null,
+          parentProcessId: preScreeningProcessId
+        })
+        setDocumentUploadStatus({ type: "success", message: "Document uploaded successfully." })
+      } catch (uploadError) {
+        const message =
+          uploadError instanceof ProjectPersistenceError
+            ? uploadError.message
+            : uploadError instanceof Error
+            ? uploadError.message
+            : "Unable to upload document."
+        setDocumentUploadStatus({ type: "error", message })
+        throw uploadError
+      }
+    },
+    [formData?.id, formData?.title, preScreeningProcessId]
+  )
 
   const handleReset = () => {
     resetPortalState()
@@ -1884,9 +2204,34 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               liveValidate
             >
               <div className="form-panel__actions">
-                <button type="submit" className="usa-button primary" disabled={isSaving}>
-                  {isSaving ? "Saving…" : "Save project snapshot"}
-                </button>
+                {documentUploadStatus ? (
+                  <span
+                    className={`form-panel__status-message status${
+                      documentUploadStatus.type === "error" ? " status--error" : ""
+                    }`}
+                    aria-live="polite"
+                  >
+                    {documentUploadStatus.message}
+                  </span>
+                ) : null}
+                <div className="form-panel__actions-group">
+                  <button type="submit" className="usa-button primary" disabled={isSaving}>
+                    {isSaving ? "Saving…" : "Save project snapshot"}
+                  </button>
+                  <button
+                    type="button"
+                    className="usa-button usa-button--outline secondary"
+                    onClick={handleOpenDocumentModal}
+                    disabled={!canUploadDocument}
+                    title={
+                      !canUploadDocument
+                        ? "Save the project snapshot before uploading documents."
+                        : undefined
+                    }
+                  >
+                    Upload supporting document
+                  </button>
+                </div>
               </div>
             </Form>
           </div>
@@ -1921,6 +2266,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           </section>
         </div>
       </main>
+      <DocumentUploadModal
+        isOpen={isDocumentModalOpen}
+        onDismiss={handleCloseDocumentModal}
+        onSubmit={handleDocumentUpload}
+      />
       <ProcessInformationModal
         isOpen={isProcessModalOpen}
         state={processInformationState}
