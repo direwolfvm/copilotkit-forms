@@ -33,12 +33,14 @@ import {
   submitDecisionPayload,
   evaluatePreScreeningData,
   loadProjectPortalState,
+  loadSupportingDocumentsForProcess,
   loadProcessInformation,
   PRE_SCREENING_PROCESS_MODEL_ID,
   type ProcessInformation,
   type LoadedPermittingChecklistItem,
   type PortalProgressState,
   type ProjectReportSummary,
+  type SupportingDocumentSummary,
   uploadSupportingDocument,
   saveProjectReportDocument
 } from "./utils/projectPersistence"
@@ -198,6 +200,7 @@ type PersistedProjectFormState = {
   portalProgress: PortalProgressState
   preScreeningProcessId?: number
   projectReport?: ProjectReportSummary
+  supportingDocuments: SupportingDocumentSummary[]
 }
 
 let persistedProjectFormState: PersistedProjectFormState | undefined
@@ -309,6 +312,34 @@ function PortalProgressIndicator({ progress, hasSavedSnapshot }: PortalProgressI
       />
     </section>
   )
+}
+
+function formatDocumentTimestamp(iso?: string): string | undefined {
+  if (!iso) {
+    return undefined
+  }
+  const timestamp = Date.parse(iso)
+  if (Number.isNaN(timestamp)) {
+    return undefined
+  }
+  return new Date(timestamp).toLocaleString()
+}
+
+function formatFileSize(bytes?: number): string | undefined {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes <= 0) {
+    return undefined
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  let value = bytes
+  let unitIndex = 0
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+
+  const formatted = value >= 10 || unitIndex === 0 ? Math.round(value).toString() : value.toFixed(1)
+  return `${formatted} ${units[unitIndex]}`
 }
 
 interface DocumentUploadModalProps {
@@ -974,6 +1005,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const [projectReport, setProjectReport] = useState<ProjectReportSummary | undefined>(() =>
     projectId && persistedProjectFormState ? cloneValue(persistedProjectFormState.projectReport) : undefined
   )
+  const [supportingDocuments, setSupportingDocuments] = useState<SupportingDocumentSummary[]>(() =>
+    projectId && persistedProjectFormState
+      ? cloneValue(persistedProjectFormState.supportingDocuments ?? [])
+      : []
+  )
   const [processInformationState, setProcessInformationState] = useState<ProcessInformationState>({
     status: "idle"
   })
@@ -1027,6 +1063,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setDocumentModalOpen(false)
     setDocumentUploadStatus(undefined)
     setProjectReport(undefined)
+    setSupportingDocuments([])
     setIsGeneratingReport(false)
     setReportError(undefined)
   }, [
@@ -1044,6 +1081,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setDocumentModalOpen,
     setDocumentUploadStatus,
     setProjectReport,
+    setSupportingDocuments,
     setIsGeneratingReport,
     setReportError
   ])
@@ -1075,6 +1113,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setDocumentUploadStatus(undefined)
     setDocumentModalOpen(false)
     setProjectReport(undefined)
+    setSupportingDocuments([])
     setReportError(undefined)
     setIsGeneratingReport(false)
 
@@ -1099,6 +1138,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         setPortalProgress(cloneValue(loaded.portalProgress))
         setPreScreeningProcessId(loaded.preScreeningProcessId)
         setProjectReport(loaded.projectReport ? cloneValue(loaded.projectReport) : undefined)
+        setSupportingDocuments(cloneValue(loaded.supportingDocuments ?? []))
 
         const formattedTimestamp = (() => {
           if (loaded.lastUpdated) {
@@ -1136,6 +1176,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         setDocumentUploadStatus(undefined)
         setDocumentModalOpen(false)
         setProjectReport(undefined)
+        setSupportingDocuments([])
         setReportError(undefined)
         setIsGeneratingReport(false)
       })
@@ -1157,6 +1198,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setProjectLoadState,
     setProjectGisUpload,
     setProjectReport,
+    setSupportingDocuments,
     setReportError,
     setIsGeneratingReport
   ])
@@ -1171,7 +1213,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       gisUpload: cloneValue(projectGisUpload),
       portalProgress: cloneValue(portalProgress),
       preScreeningProcessId,
-      projectReport: cloneValue(projectReport)
+      projectReport: cloneValue(projectReport),
+      supportingDocuments: cloneValue(supportingDocuments)
     }
   }, [
     formData,
@@ -1182,7 +1225,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     projectGisUpload,
     portalProgress,
     preScreeningProcessId,
-    projectReport
+    projectReport,
+    supportingDocuments
   ])
 
   const locationFieldDetail = useMemo(
@@ -1847,6 +1891,14 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           parentProcessId: preScreeningProcessId
         })
         setDocumentUploadStatus({ type: "success", message: "Document uploaded successfully." })
+        if (typeof preScreeningProcessId === "number" && Number.isFinite(preScreeningProcessId)) {
+          try {
+            const refreshedDocuments = await loadSupportingDocumentsForProcess(preScreeningProcessId)
+            setSupportingDocuments(refreshedDocuments)
+          } catch (refreshError) {
+            console.warn("Failed to refresh supporting documents", refreshError)
+          }
+        }
       } catch (uploadError) {
         const message =
           uploadError instanceof ProjectPersistenceError
@@ -1858,7 +1910,12 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         throw uploadError
       }
     },
-    [formData?.id, formData?.title, preScreeningProcessId]
+    [
+      formData?.id,
+      formData?.title,
+      preScreeningProcessId,
+      loadSupportingDocumentsForProcess
+    ]
   )
 
   const handleGenerateProjectReport = useCallback(async () => {
@@ -2385,6 +2442,41 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
                     Upload supporting document
                   </button>
                 </div>
+                {supportingDocuments.length > 0 ? (
+                  <div className="supporting-documents" aria-live="polite">
+                    <p className="supporting-documents__heading">Uploaded documents</p>
+                    <ul className="supporting-documents__list">
+                      {supportingDocuments.map((document) => {
+                        const uploadedAt = formatDocumentTimestamp(document.uploadedAt)
+                        const fileSizeLabel = formatFileSize(document.fileSize)
+                        const metaParts: string[] = []
+                        if (document.fileName) {
+                          metaParts.push(document.fileName)
+                        }
+                        if (fileSizeLabel) {
+                          metaParts.push(fileSizeLabel)
+                        }
+                        if (uploadedAt) {
+                          metaParts.push(`Uploaded ${uploadedAt}`)
+                        }
+                        const metaText = metaParts.join(" • ")
+                        return (
+                          <li key={document.id} className="supporting-documents__item">
+                            <a
+                              className="supporting-documents__link"
+                              href={document.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {document.title}
+                            </a>
+                            {metaText ? <span className="supporting-documents__meta">{metaText}</span> : null}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
             </Form>
           </div>
