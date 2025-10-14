@@ -14,6 +14,7 @@
     "test:bench": "vitest bench"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.908.0",
     "@tmcw/togeojson": "^5.4.0",
     "@copilotkit/react-core": "^1.10.5",
     "@copilotkit/react-ui": "^1.10.5",

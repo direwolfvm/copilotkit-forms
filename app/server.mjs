@@ -6,6 +6,10 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "url";
 
 import { callIpacProxy, callNepassistProxy, ProxyError } from "./server/geospatialProxy.js";
+import {
+  createSupabaseStorageUploader,
+  StorageUploadError,
+} from "./server/storageProxy.js";
 
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -14,6 +18,8 @@ const port = parseInt(process.env.PORT ?? "8080", 10);
 const customAdkBaseUrl =
   normalizeEnvValue(process.env.COPILOTKIT_CUSTOM_ADK_URL) ??
   "https://permitting-adk-650621702399.us-east4.run.app";
+const storageUploader = createSupabaseStorageUploader(process.env);
+const storageUploadLimit = storageUploader.maxUploadBytes;
 
 function resolveSupabaseUrl() {
   return (
@@ -204,6 +210,19 @@ async function proxySupabaseRequest(req, res) {
     console.error("Supabase proxy error", error);
     res.status(502).json({ error: "Failed to reach Supabase" });
   }
+}
+
+function resolveUploadQueryValue(value) {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+
+  if (Array.isArray(value) && value.length > 0) {
+    const [first] = value;
+    return typeof first === "string" ? first : undefined;
+  }
+
+  return undefined;
 }
 
 function shouldHandleGraphqlCustomAdk(req) {
@@ -631,6 +650,95 @@ function buildGraphqlResponseFromEvents(events, threadId, runId) {
     metaEvents: [],
   };
 }
+
+app.post(
+  "/api/storage/upload",
+  express.raw({ type: "*/*", limit: storageUploadLimit }),
+  async (req, res) => {
+    if (!storageUploader.isConfigured()) {
+      res.setHeader("Cache-Control", "no-store");
+      res
+        .status(500)
+        .json({
+          error: "Supabase storage credentials are not configured",
+          message: "Supabase storage credentials are not configured",
+        });
+      return;
+    }
+
+    const bucket =
+      resolveUploadQueryValue(req.query?.bucket) ??
+      resolveUploadQueryValue(req.query?.bucketName);
+    const objectKey =
+      resolveUploadQueryValue(req.query?.object) ??
+      resolveUploadQueryValue(req.query?.key) ??
+      resolveUploadQueryValue(req.query?.path);
+
+    if (!bucket || !objectKey) {
+      res.setHeader("Cache-Control", "no-store");
+      res
+        .status(400)
+        .json({
+          error: "Missing bucket or object key",
+          message: "Missing bucket or object key",
+        });
+      return;
+    }
+
+    const payload = Buffer.isBuffer(req.body)
+      ? req.body
+      : typeof req.body === "string"
+      ? Buffer.from(req.body)
+      : ArrayBuffer.isView(req.body)
+      ? Buffer.from(req.body.buffer, req.body.byteOffset ?? 0, req.body.byteLength)
+      : undefined;
+
+    if (!payload || payload.length === 0) {
+      res.setHeader("Cache-Control", "no-store");
+      res
+        .status(400)
+        .json({
+          error: "File payload is required",
+          message: "File payload is required",
+        });
+      return;
+    }
+
+    const contentTypeHeader = req.get("content-type");
+    const contentType =
+      typeof contentTypeHeader === "string" && contentTypeHeader.trim().length > 0
+        ? contentTypeHeader
+        : undefined;
+
+    try {
+      const result = await storageUploader.upload({
+        bucket,
+        objectKey,
+        body: payload,
+        contentType,
+      });
+
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).json({ key: result?.key ?? objectKey });
+    } catch (error) {
+      res.setHeader("Cache-Control", "no-store");
+
+      if (error instanceof StorageUploadError) {
+        res.status(error.status ?? 500).json({
+          error: error.message,
+          message: error.message,
+        });
+        return;
+      }
+
+      console.error("Supabase storage upload error", error);
+      res.status(502).json({
+        error: "Failed to upload object to Supabase storage",
+        message: "Failed to upload object to Supabase storage",
+      });
+    }
+  }
+);
 
 app.use("/api/supabase", proxySupabaseRequest);
 
