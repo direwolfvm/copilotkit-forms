@@ -170,6 +170,8 @@ async function proxySupabaseRequest(req, res) {
       headers.set("content-type", "application/json");
     } else if (typeof req.body === "string" || req.body instanceof Buffer) {
       body = req.body;
+    } else {
+      body = await readRawRequestBody(req);
     }
   }
 
@@ -204,6 +206,27 @@ async function proxySupabaseRequest(req, res) {
     console.error("Supabase proxy error", error);
     res.status(502).json({ error: "Failed to reach Supabase" });
   }
+}
+
+async function readRawRequestBody(req) {
+  if (!req.readable || req.readableEnded) {
+    return undefined;
+  }
+
+  const chunks = [];
+
+  return new Promise((resolve, reject) => {
+    req.on("error", reject);
+    req.on("aborted", () => {
+      reject(new Error("Client aborted the request while reading the body."));
+    });
+    req.on("data", (chunk) => {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    });
+    req.on("end", () => {
+      resolve(chunks.length > 0 ? Buffer.concat(chunks) : Buffer.alloc(0));
+    });
+  });
 }
 
 function shouldHandleGraphqlCustomAdk(req) {
