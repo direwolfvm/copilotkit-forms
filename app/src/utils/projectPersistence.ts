@@ -393,45 +393,72 @@ export async function uploadSupportingDocument({
   ]
   const objectPath = objectSegments.join("/")
 
-  const storageEndpoint = new URL(
-    `/storage/v1/object/${encodeURIComponent(DOCUMENT_STORAGE_BUCKET)}/${encodeURIComponent(
-      objectPath
-    )}`,
-    supabaseUrl
-  )
+  let storageObjectPath = objectPath
+  let uploadPayload: unknown
 
-  const { url: storageUrl, init: storageInit } = buildSupabaseFetchRequest(
-    storageEndpoint,
-    supabaseAnonKey,
-    {
+  if (shouldUseSupabaseProxy()) {
+    const uploadUrl = `/api/storage/upload?bucket=${encodeURIComponent(
+      DOCUMENT_STORAGE_BUCKET
+    )}&object=${encodeURIComponent(objectPath)}`
+
+    const uploadResponse = await fetch(uploadUrl, {
       method: "POST",
       headers: {
-        "content-type": file.type || "application/octet-stream",
-        "x-upsert": "true"
+        "content-type": file.type || "application/octet-stream"
       },
       body: file
+    })
+    const uploadResponseText = await uploadResponse.text()
+
+    if (!uploadResponse.ok) {
+      const errorDetail = extractErrorDetail(uploadResponseText)
+      throw new ProjectPersistenceError(
+        errorDetail
+          ? `Failed to upload document file (${uploadResponse.status}): ${errorDetail}`
+          : `Failed to upload document file (${uploadResponse.status}).`
+      )
     }
-  )
 
-  const uploadResponse = await fetch(storageUrl, storageInit)
-  const uploadResponseText = await uploadResponse.text()
-
-  if (!uploadResponse.ok) {
-    const errorDetail = extractErrorDetail(uploadResponseText)
-    throw new ProjectPersistenceError(
-      errorDetail
-        ? `Failed to upload document file (${uploadResponse.status}): ${errorDetail}`
-        : `Failed to upload document file (${uploadResponse.status}).`
+    uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
+  } else {
+    const storageEndpoint = new URL(
+      `/storage/v1/object/${encodeURIComponent(DOCUMENT_STORAGE_BUCKET)}/${encodeURIComponent(
+        objectPath
+      )}`,
+      supabaseUrl
     )
+
+    const { url: storageUrl, init: storageInit } = buildSupabaseFetchRequest(
+      storageEndpoint,
+      supabaseAnonKey,
+      {
+        method: "POST",
+        headers: {
+          "content-type": file.type || "application/octet-stream",
+          "x-upsert": "true"
+        },
+        body: file
+      }
+    )
+
+    const uploadResponse = await fetch(storageUrl, storageInit)
+    const uploadResponseText = await uploadResponse.text()
+
+    if (!uploadResponse.ok) {
+      const errorDetail = extractErrorDetail(uploadResponseText)
+      throw new ProjectPersistenceError(
+        errorDetail
+          ? `Failed to upload document file (${uploadResponse.status}): ${errorDetail}`
+          : `Failed to upload document file (${uploadResponse.status}).`
+      )
+    }
+
+    uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
   }
 
-  let storageObjectPath = objectPath
-  const uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
-  if (uploadPayload && typeof uploadPayload === "object" && "Key" in uploadPayload) {
-    const keyValue = (uploadPayload as Record<string, unknown>).Key
-    if (typeof keyValue === "string" && keyValue.length > 0) {
-      storageObjectPath = keyValue
-    }
+  const resolvedStorageKey = extractStorageObjectKey(uploadPayload)
+  if (resolvedStorageKey) {
+    storageObjectPath = resolvedStorageKey
   }
 
   const documentEndpoint = new URL("/rest/v1/document", supabaseUrl)
@@ -3046,6 +3073,23 @@ function safeJsonParse(text: string): unknown {
   }
 }
 
+function extractStorageObjectKey(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") {
+    return undefined
+  }
+
+  const record = payload as Record<string, unknown>
+
+  const candidates = [record.key, record.Key, record.path, record.Path]
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate
+    }
+  }
+
+  return undefined
+}
+
 function extractErrorDetail(responseText: string): string | undefined {
   if (!responseText) {
     return undefined
@@ -4473,7 +4517,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     projectId
   })
 
-  let preScreeningProcessId: number | undefined = processRecord?.id
+  const preScreeningProcessId: number | undefined = processRecord?.id
     ? parseNumericId(processRecord.id)
     : undefined
 
