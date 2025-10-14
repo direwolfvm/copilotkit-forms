@@ -38,7 +38,9 @@ import {
   type ProcessInformation,
   type LoadedPermittingChecklistItem,
   type PortalProgressState,
-  uploadSupportingDocument
+  type ProjectReportSummary,
+  uploadSupportingDocument,
+  saveProjectReportDocument
 } from "./utils/projectPersistence"
 import { LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
@@ -52,6 +54,7 @@ import {
 } from "./utils/geospatial"
 import { majorPermits } from "./utils/majorPermits"
 import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "./types/gis"
+import { createProjectReportPdf } from "./utils/projectReportPdf"
 
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
 
@@ -194,6 +197,7 @@ type PersistedProjectFormState = {
   gisUpload: ProjectGisUpload
   portalProgress: PortalProgressState
   preScreeningProcessId?: number
+  projectReport?: ProjectReportSummary
 }
 
 let persistedProjectFormState: PersistedProjectFormState | undefined
@@ -967,6 +971,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const [preScreeningProcessId, setPreScreeningProcessId] = useState<number | undefined>(() =>
     projectId && persistedProjectFormState ? persistedProjectFormState.preScreeningProcessId : undefined
   )
+  const [projectReport, setProjectReport] = useState<ProjectReportSummary | undefined>(() =>
+    projectId && persistedProjectFormState ? cloneValue(persistedProjectFormState.projectReport) : undefined
+  )
   const [processInformationState, setProcessInformationState] = useState<ProcessInformationState>({
     status: "idle"
   })
@@ -986,8 +993,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       ? cloneValue(persistedProjectFormState.portalProgress)
       : createInitialPortalProgress()
   )
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false)
+  const [reportError, setReportError] = useState<string | undefined>(undefined)
   const canUploadDocument =
     typeof preScreeningProcessId === "number" && Number.isFinite(preScreeningProcessId)
+  const canGenerateReport = canUploadDocument && hasSavedSnapshot
   const previousProjectIdRef = useRef<string | undefined>(projectId)
   const [projectLoadState, setProjectLoadState] = useState<{
     status: "idle" | "loading" | "error"
@@ -1016,6 +1026,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setPreScreeningProcessId(undefined)
     setDocumentModalOpen(false)
     setDocumentUploadStatus(undefined)
+    setProjectReport(undefined)
+    setIsGeneratingReport(false)
+    setReportError(undefined)
   }, [
     setFormData,
     setLastSaved,
@@ -1029,7 +1042,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setPortalProgress,
     setPreScreeningProcessId,
     setDocumentModalOpen,
-    setDocumentUploadStatus
+    setDocumentUploadStatus,
+    setProjectReport,
+    setIsGeneratingReport,
+    setReportError
   ])
 
   useEffect(() => {
@@ -1058,6 +1074,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setPreScreeningProcessId(undefined)
     setDocumentUploadStatus(undefined)
     setDocumentModalOpen(false)
+    setProjectReport(undefined)
+    setReportError(undefined)
+    setIsGeneratingReport(false)
 
     loadProjectPortalState(parsedId)
       .then((loaded) => {
@@ -1079,6 +1098,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         setProjectGisUpload(cloneValue(loaded.gisUpload ?? {}))
         setPortalProgress(cloneValue(loaded.portalProgress))
         setPreScreeningProcessId(loaded.preScreeningProcessId)
+        setProjectReport(loaded.projectReport ? cloneValue(loaded.projectReport) : undefined)
 
         const formattedTimestamp = (() => {
           if (loaded.lastUpdated) {
@@ -1115,6 +1135,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         setPreScreeningProcessId(undefined)
         setDocumentUploadStatus(undefined)
         setDocumentModalOpen(false)
+        setProjectReport(undefined)
+        setReportError(undefined)
+        setIsGeneratingReport(false)
       })
 
     return () => {
@@ -1132,7 +1155,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     setDecisionSubmitState,
     setHasSavedSnapshot,
     setProjectLoadState,
-    setProjectGisUpload
+    setProjectGisUpload,
+    setProjectReport,
+    setReportError,
+    setIsGeneratingReport
   ])
 
   useEffect(() => {
@@ -1144,7 +1170,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       hasSavedSnapshot,
       gisUpload: cloneValue(projectGisUpload),
       portalProgress: cloneValue(portalProgress),
-      preScreeningProcessId
+      preScreeningProcessId,
+      projectReport: cloneValue(projectReport)
     }
   }, [
     formData,
@@ -1154,7 +1181,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     hasSavedSnapshot,
     projectGisUpload,
     portalProgress,
-    preScreeningProcessId
+    preScreeningProcessId,
+    projectReport
   ])
 
   const locationFieldDetail = useMemo(
@@ -1184,6 +1212,17 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       {} as Partial<Record<NepaFieldKey, { title?: string; description?: string; placeholder?: string; rows?: number }>>
     )
   }, [])
+
+  const formattedReportTimestamp = useMemo(() => {
+    if (!projectReport?.generatedAt) {
+      return undefined
+    }
+    const parsed = Date.parse(projectReport.generatedAt)
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed).toLocaleString()
+    }
+    return projectReport.generatedAt
+  }, [projectReport?.generatedAt])
 
   const assignProjectField = (
     target: ProjectFormData,
@@ -1822,6 +1861,64 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     [formData?.id, formData?.title, preScreeningProcessId]
   )
 
+  const handleGenerateProjectReport = useCallback(async () => {
+    if (isGeneratingReport) {
+      return
+    }
+
+    const normalizedId = typeof formData?.id === "string" ? formData.id.trim() : ""
+    const projectIdValue = normalizedId.length > 0 ? Number.parseInt(normalizedId, 10) : Number.NaN
+
+    if (!Number.isFinite(projectIdValue)) {
+      setReportError("Save the project snapshot before generating a report.")
+      return
+    }
+
+    if (typeof preScreeningProcessId !== "number" || !Number.isFinite(preScreeningProcessId)) {
+      setReportError("Pre-screening must be initialized before generating a report.")
+      return
+    }
+
+    setIsGeneratingReport(true)
+    setReportError(undefined)
+
+    try {
+      const generatedAt = new Date()
+      const pdfBytes = await createProjectReportPdf({
+        project: formData,
+        permittingChecklist,
+        portalProgress,
+        generatedAt
+      })
+      const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" })
+      const saved = await saveProjectReportDocument({
+        blob: pdfBlob,
+        projectId: projectIdValue,
+        projectTitle: typeof formData.title === "string" ? formData.title : null,
+        parentProcessId: preScreeningProcessId,
+        generatedAt: generatedAt.toISOString()
+      })
+      setProjectReport(saved)
+    } catch (error) {
+      console.error("Failed to generate project report", error)
+      const message =
+        error instanceof ProjectPersistenceError
+          ? error.message
+          : error instanceof Error
+          ? error.message
+          : "Unable to generate report."
+      setReportError(message)
+    } finally {
+      setIsGeneratingReport(false)
+    }
+  }, [
+    formData,
+    isGeneratingReport,
+    permittingChecklist,
+    portalProgress,
+    preScreeningProcessId
+  ])
+
   const handleReset = () => {
     resetPortalState()
   }
@@ -2179,6 +2276,58 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
 
           <section className="content">
             <ProjectSummary data={formData} />
+            <div className="summary-panel__actions">
+              <div className="summary-panel__buttons">
+                <button
+                  type="button"
+                  className="usa-button usa-button--outline secondary"
+                  onClick={handleGenerateProjectReport}
+                  disabled={!canGenerateReport || isGeneratingReport}
+                  title={
+                    !canGenerateReport
+                      ? "Save the project snapshot to enable report generation."
+                      : undefined
+                  }
+                >
+                  {isGeneratingReport ? "Generating…" : "Generate PDF"}
+                </button>
+                {projectReport ? (
+                  <a
+                    className="usa-button"
+                    href={projectReport.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View latest PDF
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="usa-button"
+                    disabled
+                    title="Generate a report to enable the download."
+                  >
+                    View latest PDF
+                  </button>
+                )}
+              </div>
+              <div className="summary-panel__status-group" aria-live="polite">
+                {isGeneratingReport ? (
+                  <span className="summary-panel__status">Generating report…</span>
+                ) : projectReport?.generatedAt ? (
+                  <span className="summary-panel__status">
+                    {formattedReportTimestamp
+                      ? `Generated ${formattedReportTimestamp}`
+                      : `Generated ${projectReport.generatedAt}`}
+                  </span>
+                ) : null}
+                {reportError ? (
+                  <span className="summary-panel__status summary-panel__status--error" role="alert">
+                    {reportError}
+                  </span>
+                ) : null}
+              </div>
+            </div>
             {locationFieldDetail ? (
               <LocationSection
               title={locationFieldDetail.title}

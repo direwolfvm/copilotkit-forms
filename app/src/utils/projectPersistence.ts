@@ -12,6 +12,7 @@ import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "../types
 import { summarizeNepassist, summarizeIpac } from "./geospatial"
 
 const DATA_SOURCE_SYSTEM = "project-portal"
+const PROJECT_REPORT_DOCUMENT_TYPE = "project-report"
 export const PRE_SCREENING_PROCESS_MODEL_ID = 1
 const PRE_SCREENING_TITLE_SUFFIX = "Pre-Screening"
 const CASE_EVENT_TYPES = {
@@ -95,6 +96,20 @@ type EvaluatePreScreeningDataArgs = {
   formData: ProjectFormData
   geospatialResults: GeospatialResultsState
   permittingChecklist: PermittingChecklistItem[]
+}
+
+type SaveProjectReportDocumentArgs = {
+  blob: Blob
+  projectId: number
+  projectTitle: string | null
+  parentProcessId: number
+  generatedAt: string
+}
+
+type FetchLatestProjectReportArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  parentProcessId: number
 }
 
 export type DecisionElementRecord = {
@@ -201,6 +216,12 @@ export type PortalProgressState = {
   }
 }
 
+export type ProjectReportSummary = {
+  title: string
+  url: string
+  generatedAt?: string
+}
+
 export type LoadedProjectPortalState = {
   formData: ProjectFormData
   geospatialResults: GeospatialResultsState
@@ -209,6 +230,7 @@ export type LoadedProjectPortalState = {
   gisUpload: ProjectGisUpload
   portalProgress: PortalProgressState
   preScreeningProcessId?: number
+  projectReport?: ProjectReportSummary
 }
 
 export async function saveProjectSnapshot({
@@ -483,6 +505,137 @@ export async function uploadSupportingDocument({
         ? `Failed to save document metadata (${documentResponse.status}): ${errorDetail}`
         : `Failed to save document metadata (${documentResponse.status}).`
     )
+  }
+}
+
+export async function saveProjectReportDocument({
+  blob,
+  projectId,
+  projectTitle,
+  parentProcessId,
+  generatedAt
+}: SaveProjectReportDocumentArgs): Promise<ProjectReportSummary> {
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  if (!Number.isFinite(projectId)) {
+    throw new ProjectPersistenceError(
+      "A numeric project identifier is required to generate a project report."
+    )
+  }
+
+  if (!Number.isFinite(parentProcessId)) {
+    throw new ProjectPersistenceError(
+      "Save the project snapshot before generating a project report."
+    )
+  }
+
+  const parsedTimestamp = Date.parse(generatedAt)
+  const timestamp = Number.isNaN(parsedTimestamp)
+    ? new Date().toISOString()
+    : new Date(parsedTimestamp).toISOString()
+  const safeTitle = typeof projectTitle === "string" && projectTitle.trim().length > 0
+    ? projectTitle.trim()
+    : `Project ${projectId}`
+  const documentTitle = `${safeTitle} — Project report`
+  const safeFileName = createSafeFileName(`${safeTitle} project report.pdf`)
+  const objectPath = [
+    `project-${projectId}`,
+    `process-${parentProcessId}`,
+    `${timestamp.replace(/[^\d]/g, "")}-report.pdf`
+  ].join("/")
+
+  const storageEndpoint = new URL(
+    `/storage/v1/object/${encodeURIComponent(DOCUMENT_STORAGE_BUCKET)}/${encodeURIComponent(
+      objectPath
+    )}`,
+    supabaseUrl
+  )
+
+  const { url: storageUrl, init: storageInit } = buildSupabaseFetchRequest(storageEndpoint, supabaseAnonKey, {
+    method: "POST",
+    headers: {
+      "content-type": "application/pdf",
+      "x-upsert": "true"
+    },
+    body: blob
+  })
+
+  const uploadResponse = await fetch(storageUrl, storageInit)
+  const uploadResponseText = await uploadResponse.text()
+
+  if (!uploadResponse.ok) {
+    const errorDetail = extractErrorDetail(uploadResponseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to upload report (${uploadResponse.status}): ${errorDetail}`
+        : `Failed to upload report (${uploadResponse.status}).`
+    )
+  }
+
+  let storageObjectPath = objectPath
+  const uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
+  if (uploadPayload && typeof uploadPayload === "object" && "Key" in uploadPayload) {
+    const keyValue = (uploadPayload as Record<string, unknown>).Key
+    if (typeof keyValue === "string" && keyValue.length > 0) {
+      storageObjectPath = keyValue
+    }
+  }
+
+  const documentEndpoint = new URL("/rest/v1/document", supabaseUrl)
+
+  const documentPayload = stripUndefined({
+    parent_process_id: parentProcessId,
+    title: documentTitle,
+    document_type: PROJECT_REPORT_DOCUMENT_TYPE,
+    data_source_system: DATA_SOURCE_SYSTEM,
+    last_updated: timestamp,
+    url: storageObjectPath,
+    other: stripUndefined({
+      storage_bucket: DOCUMENT_STORAGE_BUCKET,
+      storage_object_path: storageObjectPath,
+      file_name: safeFileName,
+      file_size: blob.size,
+      mime_type: "application/pdf",
+      project_id: projectId,
+      project_title: safeTitle,
+      report_generated_at: timestamp,
+      uploaded_at: timestamp
+    })
+  })
+
+  const { url: documentUrl, init: documentInit } = buildSupabaseFetchRequest(documentEndpoint, supabaseAnonKey, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(documentPayload)
+  })
+
+  const documentResponse = await fetch(documentUrl, documentInit)
+  const documentResponseText = await documentResponse.text()
+
+  if (!documentResponse.ok) {
+    const errorDetail = extractErrorDetail(documentResponseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to record report metadata (${documentResponse.status}): ${errorDetail}`
+        : `Failed to record report metadata (${documentResponse.status}).`
+    )
+  }
+
+  const publicUrl = buildPublicStorageUrl(supabaseUrl, DOCUMENT_STORAGE_BUCKET, storageObjectPath)
+  return {
+    title: documentTitle,
+    url: publicUrl,
+    generatedAt: timestamp
   }
 }
 
@@ -3149,6 +3302,31 @@ function createSafeFileName(fileName: string): string {
   return sanitizedExtension ? `${finalBase}.${sanitizedExtension}` : finalBase
 }
 
+function buildPublicStorageUrl(supabaseUrl: string, bucket: string, objectPath: string): string {
+  const encodedPath = objectPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+  return new URL(
+    `/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`,
+    supabaseUrl
+  ).toString()
+}
+
+function parseDocumentOther(value: unknown): Record<string, unknown> {
+  if (!value) {
+    return {}
+  }
+  if (typeof value === "string") {
+    const parsed = safeJsonParse(value)
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {}
+  }
+  if (typeof value === "object") {
+    return value as Record<string, unknown>
+  }
+  return {}
+}
+
 type ProjectRow = {
   id?: number | string | null
   created_at?: string | null
@@ -3199,6 +3377,16 @@ type ProcessDecisionPayloadRow = {
   process_decision_element?: number | null
   evaluation_data?: unknown
   last_updated?: string | null
+}
+
+type DocumentRow = {
+  parent_process_id?: number | null
+  title?: string | null
+  document_type?: string | null
+  data_source_system?: string | null
+  last_updated?: string | null
+  url?: string | null
+  other?: unknown
 }
 
 type ProjectOtherRecord = {
@@ -3824,6 +4012,81 @@ async function fetchProcessDecisionPayloadRows({
   )
 }
 
+async function fetchLatestProjectReportDocument({
+  supabaseUrl,
+  supabaseAnonKey,
+  parentProcessId
+}: FetchLatestProjectReportArgs): Promise<ProjectReportSummary | undefined> {
+  const params = new URLSearchParams({
+    select: "title,last_updated,url,other",
+    parent_process_id: `eq.${parentProcessId}`,
+    document_type: `eq.${PROJECT_REPORT_DOCUMENT_TYPE}`,
+    data_source_system: `eq.${DATA_SOURCE_SYSTEM}`,
+    order: "last_updated.desc",
+    limit: "1"
+  })
+
+  const endpoint = new URL(`/rest/v1/document?${params.toString()}`, supabaseUrl)
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "GET",
+    headers: { Accept: "application/json" }
+  })
+
+  const response = await fetch(url, init)
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to load project report (${response.status}): ${errorDetail}`
+        : `Failed to load project report (${response.status}).`
+    )
+  }
+
+  if (!responseText) {
+    return undefined
+  }
+
+  const payload = safeJsonParse(responseText)
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return undefined
+  }
+
+  const row = payload[0] as DocumentRow
+  const other = parseDocumentOther(row.other)
+
+  const storageObjectPath = (() => {
+    if (typeof row.url === "string" && row.url.length > 0) {
+      return row.url
+    }
+    const candidate = other.storage_object_path
+    return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined
+  })()
+
+  if (!storageObjectPath) {
+    return undefined
+  }
+
+  const storageBucket =
+    typeof other.storage_bucket === "string" && other.storage_bucket.length > 0
+      ? other.storage_bucket
+      : DOCUMENT_STORAGE_BUCKET
+
+  const generatedAt = (() => {
+    const candidate = other.report_generated_at
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate
+    }
+    return typeof row.last_updated === "string" ? row.last_updated : undefined
+  })()
+
+  const title = typeof row.title === "string" && row.title.length > 0 ? row.title : "Project report"
+  const publicUrl = buildPublicStorageUrl(supabaseUrl, storageBucket, storageObjectPath)
+
+  return { title, url: publicUrl, generatedAt }
+}
+
 async function fetchProcessModelRecord({
   supabaseUrl,
   supabaseAnonKey,
@@ -4263,6 +4526,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
   let preScreeningCompletedTimestamp: string | undefined
   let lastPreScreeningActivity: string | undefined
   let hasDecisionPayloads = false
+  let projectReport: ProjectReportSummary | undefined
 
   if (processRecord?.id) {
     if (typeof processRecord.last_updated === "string") {
@@ -4355,6 +4619,16 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
         )
       }
     }
+
+    try {
+      projectReport = await fetchLatestProjectReportDocument({
+        supabaseUrl,
+        supabaseAnonKey,
+        parentProcessId: processRecord.id
+      })
+    } catch (reportError) {
+      console.warn("Failed to load project report metadata", reportError)
+    }
   }
 
   if (!formData.sponsor_contact) {
@@ -4384,6 +4658,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     lastUpdated,
     gisUpload,
     portalProgress,
-    preScreeningProcessId
+    preScreeningProcessId,
+    projectReport
   }
 }
