@@ -225,7 +225,7 @@ schemaProperties.sponsor_contact = {
 export const projectSchema: RJSFSchema = {
   title: "Project Information",
   description:
-    "Capture the attributes required by the Council on Environmental Quality (CEQ) project entity standard.",
+    "Start your project by populating the data fields below and saving the snapshot..",
   type: "object",
   properties: schemaProperties,
   required: ["title", "lead_agency", "description"]
