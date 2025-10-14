@@ -3259,12 +3259,19 @@ function createSafeFileName(fileName: string): string {
 }
 
 function buildPublicStorageUrl(supabaseUrl: string, bucket: string, objectPath: string): string {
-  const encodedPath = objectPath
+  const trimmedObjectPath = objectPath.trim().replace(/^\/+/, "")
+  const normalizedPath = trimmedObjectPath.startsWith(`${bucket}/`)
+    ? trimmedObjectPath.slice(bucket.length + 1)
+    : trimmedObjectPath
+  const encodedPath = normalizedPath
     .split("/")
+    .filter((segment) => segment.length > 0)
     .map((segment) => encodeURIComponent(segment))
     .join("/")
   return new URL(
-    `/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`,
+    encodedPath
+      ? `/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`
+      : `/storage/v1/object/public/${encodeURIComponent(bucket)}`,
     supabaseUrl
   ).toString()
 }
