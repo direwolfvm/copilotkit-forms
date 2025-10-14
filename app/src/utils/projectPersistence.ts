@@ -13,6 +13,7 @@ import { summarizeNepassist, summarizeIpac } from "./geospatial"
 
 const DATA_SOURCE_SYSTEM = "project-portal"
 const PROJECT_REPORT_DOCUMENT_TYPE = "project-report"
+const SUPPORTING_DOCUMENT_TYPE = "supporting-document"
 export const PRE_SCREENING_PROCESS_MODEL_ID = 1
 const PRE_SCREENING_TITLE_SUFFIX = "Pre-Screening"
 const CASE_EVENT_TYPES = {
@@ -222,6 +223,16 @@ export type ProjectReportSummary = {
   generatedAt?: string
 }
 
+export type SupportingDocumentSummary = {
+  id: number
+  title: string
+  url: string
+  uploadedAt?: string
+  fileName?: string
+  fileSize?: number
+  mimeType?: string
+}
+
 export type LoadedProjectPortalState = {
   formData: ProjectFormData
   geospatialResults: GeospatialResultsState
@@ -231,6 +242,7 @@ export type LoadedProjectPortalState = {
   portalProgress: PortalProgressState
   preScreeningProcessId?: number
   projectReport?: ProjectReportSummary
+  supportingDocuments: SupportingDocumentSummary[]
 }
 
 export async function saveProjectSnapshot({
@@ -439,7 +451,7 @@ export async function uploadSupportingDocument({
   const documentPayload = stripUndefined({
     parent_process_id: parentProcessId,
     title: sanitizedTitle,
-    document_type: "supporting-document",
+    document_type: SUPPORTING_DOCUMENT_TYPE,
     data_source_system: DATA_SOURCE_SYSTEM,
     last_updated: timestamp,
     url: storageObjectPath,
@@ -3290,6 +3302,94 @@ function parseDocumentOther(value: unknown): Record<string, unknown> {
   return {}
 }
 
+function buildSupportingDocumentSummary(
+  row: DocumentRow,
+  supabaseUrl: string
+): SupportingDocumentSummary | undefined {
+  const id = parseNumericId(row.id)
+  if (typeof id !== "number") {
+    return undefined
+  }
+
+  const other = parseDocumentOther(row.other)
+
+  const storageObjectPath = (() => {
+    if (typeof row.url === "string" && row.url.length > 0) {
+      return row.url
+    }
+    const candidate = other.storage_object_path
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate
+    }
+    return undefined
+  })()
+
+  if (!storageObjectPath) {
+    return undefined
+  }
+
+  const storageBucket =
+    typeof other.storage_bucket === "string" && other.storage_bucket.length > 0
+      ? other.storage_bucket
+      : DOCUMENT_STORAGE_BUCKET
+
+  const title = (() => {
+    const fromRow = typeof row.title === "string" ? row.title.trim() : ""
+    if (fromRow.length > 0) {
+      return fromRow
+    }
+    const fileName = typeof other.file_name === "string" ? other.file_name.trim() : ""
+    if (fileName.length > 0) {
+      return fileName
+    }
+    return `Document ${id}`
+  })()
+
+  const uploadedAt = (() => {
+    const candidate = other.uploaded_at
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate
+    }
+    return typeof row.last_updated === "string" ? row.last_updated : undefined
+  })()
+
+  const fileSize = (() => {
+    const candidate = other.file_size
+    if (typeof candidate === "number" && Number.isFinite(candidate) && candidate >= 0) {
+      return candidate
+    }
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      const parsed = Number.parseInt(candidate, 10)
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        return parsed
+      }
+    }
+    return undefined
+  })()
+
+  const mimeType = (() => {
+    const candidate = other.mime_type
+    return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined
+  })()
+
+  const fileName = (() => {
+    const candidate = other.file_name
+    return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined
+  })()
+
+  const url = buildPublicStorageUrl(supabaseUrl, storageBucket, storageObjectPath)
+
+  return {
+    id,
+    title,
+    url,
+    uploadedAt,
+    fileName,
+    fileSize,
+    mimeType
+  }
+}
+
 type ProjectRow = {
   id?: number | string | null
   created_at?: string | null
@@ -3343,6 +3443,7 @@ type ProcessDecisionPayloadRow = {
 }
 
 type DocumentRow = {
+  id?: number | string | null
   parent_process_id?: number | null
   title?: string | null
   document_type?: string | null
@@ -4050,6 +4151,57 @@ async function fetchLatestProjectReportDocument({
   return { title, url: publicUrl, generatedAt }
 }
 
+async function fetchSupportingDocumentSummaries({
+  supabaseUrl,
+  supabaseAnonKey,
+  parentProcessId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  parentProcessId: number
+}): Promise<SupportingDocumentSummary[]> {
+  const params = new URLSearchParams({
+    select: "id,title,last_updated,url,other",
+    parent_process_id: `eq.${parentProcessId}`,
+    document_type: `eq.${SUPPORTING_DOCUMENT_TYPE}`,
+    data_source_system: `eq.${DATA_SOURCE_SYSTEM}`,
+    order: "last_updated.desc"
+  })
+
+  const endpoint = new URL(`/rest/v1/document?${params.toString()}`, supabaseUrl)
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "GET",
+    headers: { Accept: "application/json" }
+  })
+
+  const response = await fetch(url, init)
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to load supporting documents (${response.status}): ${errorDetail}`
+        : `Failed to load supporting documents (${response.status}).`
+    )
+  }
+
+  if (!responseText) {
+    return []
+  }
+
+  const payload = safeJsonParse(responseText)
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return []
+  }
+
+  const summaries = (payload as DocumentRow[])
+    .map((row) => buildSupportingDocumentSummary(row, supabaseUrl))
+    .filter((summary): summary is SupportingDocumentSummary => Boolean(summary))
+
+  return summaries
+}
+
 async function fetchProcessModelRecord({
   supabaseUrl,
   supabaseAnonKey,
@@ -4490,6 +4642,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
   let lastPreScreeningActivity: string | undefined
   let hasDecisionPayloads = false
   let projectReport: ProjectReportSummary | undefined
+  let supportingDocuments: SupportingDocumentSummary[] = []
 
   if (processRecord?.id) {
     if (typeof processRecord.last_updated === "string") {
@@ -4592,6 +4745,16 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     } catch (reportError) {
       console.warn("Failed to load project report metadata", reportError)
     }
+
+    try {
+      supportingDocuments = await fetchSupportingDocumentSummaries({
+        supabaseUrl,
+        supabaseAnonKey,
+        parentProcessId: processRecord.id
+      })
+    } catch (documentsError) {
+      console.warn("Failed to load supporting documents", documentsError)
+    }
   }
 
   if (!formData.sponsor_contact) {
@@ -4622,6 +4785,32 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     gisUpload,
     portalProgress,
     preScreeningProcessId,
-    projectReport
+    projectReport,
+    supportingDocuments
   }
+}
+
+export async function loadSupportingDocumentsForProcess(
+  parentProcessId: number
+): Promise<SupportingDocumentSummary[]> {
+  if (!Number.isFinite(parentProcessId)) {
+    throw new ProjectPersistenceError(
+      "Save the project snapshot before viewing supporting documents so the pre-screening process can be identified."
+    )
+  }
+
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  return fetchSupportingDocumentSummaries({
+    supabaseUrl,
+    supabaseAnonKey,
+    parentProcessId
+  })
 }
