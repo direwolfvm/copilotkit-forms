@@ -1890,7 +1890,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         portalProgress,
         generatedAt
       })
-      const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" })
+      const pdfBuffer = pdfBytes.buffer.slice(
+        pdfBytes.byteOffset,
+        pdfBytes.byteOffset + pdfBytes.byteLength
+      ) as ArrayBuffer
+      const pdfBlob = new Blob([pdfBuffer], { type: "application/pdf" })
       const saved = await saveProjectReportDocument({
         blob: pdfBlob,
         projectId: projectIdValue,
