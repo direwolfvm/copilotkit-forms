@@ -1327,6 +1327,36 @@
   gap: 1.5rem;
 }
 
+.summary-panel__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.summary-panel__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.summary-panel__status-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.summary-panel__status {
+  color: var(--color-text-muted);
+}
+
+.summary-panel__status--error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
 .location-section {
   background: var(--surface-muted);
   border: 1px solid var(--border);
