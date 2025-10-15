@@ -18,7 +18,7 @@ export default function AboutPage() {
             the CEQ schema, demonstrating how agencies can orchestrate intake, tracking, and analytics with standards-based systems and automated processing.
           </p>
           <p>
-            It illustrates how modern permitting systems can be <strong>data-driven</strong>, <strong>interoperable</strong>, and
+            It illustrates how modern permitting systems can be <strong>data-driven</strong>, <strong>interoperable</strong>, and 
             <strong>transparent</strong>—showing how standards-based design can simplify complex review processes.
           </p>
         </header>
