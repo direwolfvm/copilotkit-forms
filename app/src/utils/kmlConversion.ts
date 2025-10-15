@@ -223,14 +223,14 @@ export async function parseUploadedGisFile(file: File): Promise<ParsedGisUpload>
     let geoJsonText: string
     try {
       geoJsonText = decodeArrayBuffer(buffer)
-    } catch (error) {
+    } catch {
       throw new Error("Unable to read the uploaded GeoJSON file.")
     }
 
     let parsedGeoJson: any
     try {
       parsedGeoJson = JSON.parse(geoJsonText)
-    } catch (error) {
+    } catch {
       throw new Error("The uploaded GeoJSON file is not valid JSON.")
     }
 
