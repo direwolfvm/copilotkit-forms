@@ -1599,6 +1599,41 @@
   background: none;
 }
 
+.site-footer {
+  margin-top: auto;
+  padding: 2rem clamp(1.5rem, 10vw, 12rem);
+  background: color-mix(in srgb, var(--surface) 96%, var(--surface-muted) 4%);
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  color: color-mix(in srgb, var(--color-text-muted) 75%, var(--color-text) 25%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  font-size: 0.95rem;
+}
+
+.site-footer__message,
+.site-footer__copyright {
+  margin: 0;
+}
+
+.site-footer__link {
+  color: var(--accent-dark);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 0.1em;
+  text-decoration-color: color-mix(in srgb, var(--accent-dark) 75%, transparent);
+}
+
+.site-footer__link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 35%, white 65%);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.site-footer__link:hover {
+  text-decoration-color: var(--accent-dark);
+}
+
 .site-banner {
   background: color-mix(in srgb, var(--surface) 92%, white 8%);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
@@ -1944,7 +1979,7 @@
 }
 
 .site-main {
-  flex: 1;
+  flex: 1 0 auto;
   padding: var(--layout-site-main-padding-top) 0 var(--layout-site-main-padding-bottom);
 }
 
