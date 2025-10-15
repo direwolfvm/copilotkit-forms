@@ -83,6 +83,17 @@ is available.
 - `npm run dev` – start the Vite dev server with HMR.
 - `npm run build` – type-check and produce a production build.
 - `npm run preview` – preview the production build locally.
+- `npm test` – run the Vitest suite in watch mode (append `-- --run` to exit after a single pass).
+- `npm run test:run` – run the Vitest suite once in CI-friendly mode.
+
+## Testing
+
+Unit tests exercise core UI components and the geospatial helpers that prepare Resource Check payloads
+for NEPA Assist/IPaC as well as the Copilot summary builders. Run them from the root of this Vite app:
+
+```bash
+npm test -- --run
+```
 
 ## Customization tips
 

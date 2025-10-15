@@ -33,6 +33,19 @@ No Copilot API key is required to test the UI—the sidebar simply displays an i
 of streaming AI responses. Supabase credentials are required if you want to exercise the persistence
 APIs that save projects back to the hosted database.
 
+## Testing
+
+Run the Vitest suite from the `app/` directory to validate the UI components and geospatial
+utilities:
+
+```bash
+cd app
+npm test -- --run
+```
+
+The tests include coverage for the Resource Check helpers that normalize GeoJSON payloads and format
+Copilot-readable geospatial summaries.
+
 ### Supabase configuration
 
 The application can persist project snapshots, geospatial results, and permitting checklist details
