@@ -29,7 +29,7 @@ interface SectionDoc {
   endpoints: EndpointDoc[]
 }
 
-const API_BASE_PLACEHOLDER = "https://<your-project>.supabase.co/rest/v1"
+const API_BASE_PLACEHOLDER = "https://yiggjfcwpagbupsmueax.supabase.co/rest/v1"
 
 const sectionDocs: SectionDoc[] = [
   {
