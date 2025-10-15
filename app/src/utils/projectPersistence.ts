@@ -4632,7 +4632,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     projectId
   })
 
-  let preScreeningProcessId: number | undefined = processRecord?.id
+  const preScreeningProcessId: number | undefined = processRecord?.id
     ? parseNumericId(processRecord.id)
     : undefined
 
