@@ -16,6 +16,7 @@ function Layout() {
   const bannerVisibleHeightRef = useRef<number | undefined>(undefined)
   const [isNavOpen, setIsNavOpen] = useState(false)
   const location = useLocation()
+  const currentYear = new Date().getFullYear()
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -272,6 +273,30 @@ function Layout() {
       <main className="site-main">
         <Outlet />
       </main>
+      <footer className="site-footer" aria-label="Site footer">
+        <p className="site-footer__message">
+          Mostly built by a robot!{' '}
+          <a
+            className="site-footer__link"
+            href="https://chatgpt.com/codex"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            Codex
+          </a>{' '}
+          (and other AI tools) made this, with help and guidance from its human{' '}
+          <a
+            className="site-footer__link"
+            href="https://github.com/direwolfvm"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            expert
+          </a>
+          ...
+        </p>
+        <p className="site-footer__copyright">© {currentYear} HelpPermit.me. All rights reserved.</p>
+      </footer>
     </div>
   )
 }
