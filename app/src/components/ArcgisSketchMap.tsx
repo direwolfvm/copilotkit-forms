@@ -11,7 +11,7 @@ import {
 import type { GeometryChange, GeometrySource, UploadedGisFile } from "../types/gis"
 import { parseUploadedGisFile } from "../utils/kmlConversion"
 
-const DEFAULT_VIEW_CENTER: [number, number] = [0, 90]
+const DEFAULT_VIEW_CENTER: [number, number] = [-98, 39]
 const DEFAULT_VIEW_ZOOM = 3
 
 type ArcgisSketchMapProps = {
@@ -451,7 +451,7 @@ export function ArcgisSketchMap({
     }
     return createElement(
       "arcgis-map",
-      { basemap: "topo-vector", center: "0,90", zoom: "4" },
+      { basemap: "topo-vector", center: "-98,39", zoom: "4" },
       createElement("arcgis-search", { slot: "widgets", position: "top-left", key: "search" }),
       createElement("arcgis-sketch", {
         key: "sketch",
