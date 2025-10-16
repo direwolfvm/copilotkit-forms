@@ -1973,9 +1973,9 @@
 
 .site-nav__link--active {
   color: var(--accent-contrast);
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-  border-color: color-mix(in srgb, var(--accent-dark) 60%, transparent);
-  box-shadow: 0 14px 32px -20px rgba(7, 29, 66, 0.55);
+  background: linear-gradient(135deg, var(--holiday-red) 0%, var(--holiday-red-dark) 100%);
+  border-color: color-mix(in srgb, var(--holiday-red-dark) 60%, transparent);
+  box-shadow: 0 14px 32px -20px rgba(199, 54, 47, 0.55);
 }
 
 .site-main {
