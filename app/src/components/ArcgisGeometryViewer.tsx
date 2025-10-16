@@ -221,7 +221,7 @@ export function ArcgisGeometryViewer({ geometry }: ArcgisGeometryViewerProps) {
     if (!isReady) {
       return <div className="projects-map__loading">Loading map…</div>
     }
-    return createElement("arcgis-map", { basemap: "topo-vector", center: "-98,39", zoom: "4" })
+    return createElement("arcgis-map", { basemap: "topo-vector", center: "-140,80", zoom: "4" })
   }, [isReady])
 
   return (
