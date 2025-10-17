@@ -18,8 +18,7 @@ export default function AboutPage() {
             the CEQ schema, demonstrating how agencies can orchestrate intake, tracking, and analytics with standards-based systems and automated processing.
           </p>
           <p>
-            It illustrates how modern permitting systems can be <strong>data-driven</strong>, <strong>interoperable</strong>, and 
-            <strong>transparent</strong>—showing how standards-based design can simplify complex review processes.
+            It illustrates how modern permitting systems can be <strong>data-driven</strong>, <strong>interoperable</strong>, and <strong>transparent</strong> —showing how standards-based design can simplify complex review processes.
           </p>
         </header>
 
@@ -220,8 +219,7 @@ export default function AboutPage() {
         <section className="about-page__section" aria-labelledby="about-importance-heading">
           <h2 id="about-importance-heading">Why This Matters</h2>
           <p>
-            By showing a working prototype built directly on CEQ’s standards, HelpPermit.me provides a <strong>reference architecture</strong>
-            for the next generation of permitting technology:
+            By showing a working prototype built directly on CEQ’s standards, HelpPermit.me provides a <strong>reference architecture</strong> for the next generation of permitting technology:
           </p>
           <ul className="about-page__list">
             <li>Demonstrates a modern, API-first approach</li>
