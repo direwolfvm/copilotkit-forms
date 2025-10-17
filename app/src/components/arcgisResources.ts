@@ -1,6 +1,6 @@
 const ARCGIS_VERSION = "4.33"
 const ARCGIS_JS_URL = `https://js.arcgis.com/${ARCGIS_VERSION}/`
-const ARCGIS_COMPONENTS_URL = `https://js.arcgis.com/${ARCGIS_VERSION}/map-components/`
+const ARCGIS_COMPONENTS_URL = `https://js.arcgis.com/map-components/${ARCGIS_VERSION}/arcgis-map-components.esm.js`
 const ARCGIS_CSS_URL = `https://js.arcgis.com/${ARCGIS_VERSION}/esri/themes/light/main.css`
 
 type ArcgisSymbol = Record<string, any>
