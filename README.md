@@ -60,6 +60,20 @@ exposes a `/api/supabase` proxy so the browser never stores the raw credentials.
 are absent, Supabase-dependent UI features will surface descriptive errors explaining that
 credentials need to be configured.
 
+#### Provisioning the Supabase database
+
+The optional persistence APIs expect the Permit Intelligence Center schema and seed data outlined
+in [`database-schema/README.md`](database-schema/README.md). At a high level you will:
+
+1. Apply `prod.sql` to bootstrap the schema and base data set.
+2. Run the `schema-v1.0.0-to-1.2.0.sql` migration to match the structure used by this project.
+3. Import the CSV exports so lookup tables resolve to human-readable values.
+4. Create a `permit-documents` storage bucket (or adjust the name in the code) and review the
+   associated access policies.
+
+The database README also documents upstream sources and provides guidance on enabling Supabase's RLS
+features before exposing the anon/public key to untrusted clients.
+
 If `npm run dev` fails after upgrading dependencies, clear any cached artifacts and reinstall:
 
 ```bash
