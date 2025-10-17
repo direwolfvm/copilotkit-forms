@@ -1,7 +1,10 @@
 # Permitting demo project
 
 This repository hosts a React application that demonstrates how CopilotKit can collaborate with a
-react-jsonschema-form (RJSF) experience to help users move through a permitting process.  This project uses data standards and public plans from the Council on Environmental Quality (CEQ), but otherwise has no association with CEQ.  
+react-jsonschema-form (RJSF) experience to help users move through a permitting process. This is a
+community-built demo that is not a U.S. government project. It uses publicly available data
+standards and plans from the Council on Environmental Quality (CEQ), but it is neither sponsored
+by nor formally associated with CEQ.
 
 The interactive form lives in [`app/`](app/) and pairs structured data entry with a Copilot sidebar
 that can read the current form state, suggest updates, and apply changes directly through
