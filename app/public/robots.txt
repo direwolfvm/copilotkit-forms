@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /
+
+# Prevent indexing on Google Cloud deployment by disallowing all crawling.
