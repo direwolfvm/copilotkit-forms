@@ -2,15 +2,15 @@
 applications:
   - name: copilotkit-forms
     path: app
-    memory: 1G
+    memory: 4G
+    staging_memory: 4G
     instances: 1
     buildpacks:
       - nodejs_buildpack
-    command: npm run build && npm run start
+    command: npm run start
     env:
       NODE_ENV: production
-      NPM_CONFIG_PRODUCTION: false
-      VITE_COPILOTKIT_PUBLIC_API_KEY: ""
-      VITE_SUPABASE_URL: ""
-      VITE_SUPABASE_ANON_KEY: ""
-      VITE_COPILOTKIT_RUNTIME_URL: ""
+      NPM_CONFIG_PRODUCTION: true
+    health-check-type: http
+    health-check-http-endpoint: /
+    timeout: 180
