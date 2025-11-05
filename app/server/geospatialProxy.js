@@ -1,7 +1,7 @@
 const DEFAULT_BUFFER_MILES = 0.1;
 const NEPA_ARCGIS_URL = "https://nepassisttool.epa.gov/nepassist/api/arcgis/geometry/buffer";
 const NEPA_BROKER_URL = "https://nepassisttool.epa.gov/nepassist/nepaRESTbroker.aspx";
-const IPAC_URL = "https://ipacb.ecosphere.fws.gov/location/api/resources";
+const IPAC_URL = "https://ipac.ecosphere.fws.gov/location/api/resources";
 const USER_AGENT = "copilotkit-forms-geospatial-proxy/1.0";
 
 class ProxyError extends Error {
