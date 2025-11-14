@@ -25,6 +25,7 @@
     "express": "^4.21.2",
     "jszip": "^3.10.1",
     "pdf-lib": "^1.17.1",
+    "recharts": "^2.12.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.4"

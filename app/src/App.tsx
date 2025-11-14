@@ -9,6 +9,7 @@ import ResourceCheckPage from "./ResourceCheckPage"
 import DeveloperToolsPage from "./DeveloperToolsPage"
 import SettingsPage from "./SettingsPage"
 import AboutPage from "./AboutPage"
+import AnalyticsPage from "./AnalyticsPage"
 
 function Layout() {
   const bannerRef = useRef<HTMLElement | null>(null)
@@ -230,6 +231,14 @@ function Layout() {
               Projects
             </NavLink>
             <NavLink
+              to="/analytics"
+              className={({ isActive }) =>
+                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
+              }
+            >
+              Analytics
+            </NavLink>
+            <NavLink
               to="/portal"
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
@@ -307,6 +316,7 @@ function App() {
       <Route element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="projects" element={<ProjectsPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="portal">
           <Route index element={<PortalPage />} />
           <Route path=":projectId" element={<PortalPage />} />

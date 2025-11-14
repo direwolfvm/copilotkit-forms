@@ -198,6 +198,206 @@ export type ProjectSummary = {
   geometry?: string | null
 }
 
+export type PreScreeningAnalyticsPoint = {
+  date: string
+  completionCount: number | null
+  averageCompletionDays: number | null
+  durationSampleSize: number
+  durationTotalDays: number | null
+}
+
+export async function loadPreScreeningAnalytics(): Promise<PreScreeningAnalyticsPoint[]> {
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const processRows = await fetchSupabaseList<ProcessInstanceRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_instance",
+    "process instances",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        ["id", "created_at", "last_updated", "process_model", "data_source_system"].join(",")
+      )
+      endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+    }
+  )
+
+  const processIds = processRows
+    .map((row) => parseNumericId(row.id))
+    .filter((id): id is number => typeof id === "number")
+
+  if (processIds.length === 0) {
+    return []
+  }
+
+  const caseEvents = await fetchSupabaseList<CaseEventRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/case_event",
+    "case events",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,parent_process_id,type,last_updated")
+      endpoint.searchParams.set("parent_process_id", `in.(${processIds.join(",")})`)
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+    }
+  )
+
+  const eventsByProcess = new Map<number, CaseEventRow[]>()
+  for (const event of caseEvents) {
+    const processId = parseNumericId(event.parent_process_id)
+    if (typeof processId !== "number") {
+      continue
+    }
+    const events = eventsByProcess.get(processId)
+    if (events) {
+      events.push(event)
+    } else {
+      eventsByProcess.set(processId, [event])
+    }
+  }
+
+  const parseTimestampMillis = (value?: string | null): number | undefined => {
+    if (!value) {
+      return undefined
+    }
+    const timestamp = new Date(value).getTime()
+    if (!Number.isFinite(timestamp)) {
+      return undefined
+    }
+    return timestamp
+  }
+
+  const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+  const dayKeyFromMillis = (timestamp: number): string => {
+    const date = new Date(timestamp)
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+      .toISOString()
+      .slice(0, 10)
+  }
+
+  type Aggregate = { count: number; durationSum: number; durationCount: number }
+  const aggregatesByDate = new Map<string, Aggregate>()
+
+  for (const processId of processIds) {
+    const events = eventsByProcess.get(processId)
+    if (!events || events.length === 0) {
+      continue
+    }
+
+    const sorted = [...events].sort((a, b) => {
+      const aTime = parseTimestampMillis(a.last_updated)
+      const bTime = parseTimestampMillis(b.last_updated)
+      if (typeof aTime !== "number" && typeof bTime !== "number") {
+        return 0
+      }
+      if (typeof aTime !== "number") {
+        return 1
+      }
+      if (typeof bTime !== "number") {
+        return -1
+      }
+      return aTime - bTime
+    })
+
+    const completionEvent = sorted.find(
+      (event) =>
+        typeof event.type === "string" &&
+        event.type === CASE_EVENT_TYPES.PRE_SCREENING_COMPLETE &&
+        typeof parseTimestampMillis(event.last_updated) === "number"
+    )
+
+    if (!completionEvent) {
+      continue
+    }
+
+    const completionMillis = parseTimestampMillis(completionEvent.last_updated)
+    if (typeof completionMillis !== "number") {
+      continue
+    }
+
+    const completionDateKey = dayKeyFromMillis(completionMillis)
+    const aggregate = aggregatesByDate.get(completionDateKey) ?? {
+      count: 0,
+      durationSum: 0,
+      durationCount: 0
+    }
+
+    aggregate.count += 1
+
+    for (let index = sorted.length - 1; index >= 0; index -= 1) {
+      const event = sorted[index]
+      const eventTimestamp = parseTimestampMillis(event.last_updated)
+      if (typeof eventTimestamp !== "number" || eventTimestamp > completionMillis) {
+        continue
+      }
+      if (event.type === CASE_EVENT_TYPES.PRE_SCREENING_INITIATED) {
+        const durationDays = (completionMillis - eventTimestamp) / MS_PER_DAY
+        if (Number.isFinite(durationDays) && durationDays >= 0) {
+          aggregate.durationSum += durationDays
+          aggregate.durationCount += 1
+        }
+        break
+      }
+    }
+
+    aggregatesByDate.set(completionDateKey, aggregate)
+  }
+
+  if (aggregatesByDate.size === 0) {
+    return []
+  }
+
+  const sortedDateKeys = [...aggregatesByDate.keys()].sort()
+  const points: PreScreeningAnalyticsPoint[] = []
+
+  const firstDate = sortedDateKeys[0]
+  const lastDate = sortedDateKeys[sortedDateKeys.length - 1]
+  const cursor = new Date(`${firstDate}T00:00:00Z`)
+  const end = new Date(`${lastDate}T00:00:00Z`)
+
+  while (cursor.getTime() <= end.getTime()) {
+    const dateKey = cursor.toISOString().slice(0, 10)
+    const aggregate = aggregatesByDate.get(dateKey)
+
+    if (aggregate) {
+      const average =
+        aggregate.durationCount > 0
+          ? Math.round((aggregate.durationSum / aggregate.durationCount) * 100) / 100
+          : null
+
+      points.push({
+        date: dateKey,
+        completionCount: aggregate.count > 0 ? aggregate.count : null,
+        averageCompletionDays: average,
+        durationSampleSize: aggregate.durationCount,
+        durationTotalDays: aggregate.durationCount > 0 ? aggregate.durationSum : null
+      })
+    } else {
+      points.push({
+        date: dateKey,
+        completionCount: null,
+        averageCompletionDays: null,
+        durationSampleSize: 0,
+        durationTotalDays: null
+      })
+    }
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+
+  return points
+}
+
 export type ProjectHierarchy = {
   project: ProjectSummary
   processes: ProjectProcessSummary[]
