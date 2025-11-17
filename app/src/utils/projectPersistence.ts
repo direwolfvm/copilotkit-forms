@@ -982,7 +982,10 @@ async function submitDecisionPayloadRecords({
   records
 }: SubmitDecisionPayloadRecordsArgs): Promise<void> {
   const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
-  endpoint.searchParams.set("on_conflict", "process,process_decision_element")
+  endpoint.searchParams.set(
+    "on_conflict",
+    "process,process_decision_element,data_source_system"
+  )
 
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "POST",
