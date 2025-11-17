@@ -981,52 +981,12 @@ async function submitDecisionPayloadRecords({
   processInstanceId,
   records
 }: SubmitDecisionPayloadRecordsArgs): Promise<void> {
-  const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
-  endpoint.searchParams.set(
-    "on_conflict",
-    "process,process_decision_element,data_source_system"
-  )
-
-  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=representation"
-    },
-    body: JSON.stringify(records)
+  await replaceProcessDecisionPayloadRecords({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    records
   })
-  const response = await fetch(url, init)
-
-  const responseText = await response.text()
-
-  if (response.ok) {
-    return
-  }
-
-  const errorDetail = extractErrorDetail(responseText)
-
-  if (response.status === 400) {
-    if (!isMissingOnConflictConstraintError(errorDetail)) {
-      console.warn(
-        "Unexpected 400 when upserting process_decision_payload records; retrying with delete-and-insert workflow.",
-        { errorDetail }
-      )
-    }
-
-    await replaceProcessDecisionPayloadRecords({
-      supabaseUrl,
-      supabaseAnonKey,
-      processInstanceId,
-      records
-    })
-    return
-  }
-
-  throw new ProjectPersistenceError(
-    errorDetail
-      ? `Failed to submit pre-screening data (${response.status}): ${errorDetail}`
-      : `Failed to submit pre-screening data (${response.status}).`
-  )
 }
 
 type ReplaceProcessDecisionPayloadRecordsArgs = {
@@ -1111,35 +1071,6 @@ async function deleteExistingProcessDecisionPayloadRecords({
     errorDetail
       ? `Failed to remove existing pre-screening data (${deleteResponse.status}): ${errorDetail}`
       : `Failed to remove existing pre-screening data (${deleteResponse.status}).`
-  )
-}
-
-function isMissingOnConflictConstraintError(errorDetail?: string): boolean {
-  if (!errorDetail) {
-    return false
-  }
-
-  // Supabase/PostgREST error messages differ slightly depending on the underlying
-  // Postgres version and configuration. Normalize the message and search for the
-  // common fragments that indicate the ON CONFLICT clause could not be matched to
-  // a unique constraint so we can fall back to the delete-and-insert workflow.
-  const normalizedDetail = errorDetail.toLowerCase()
-
-  const conflictPhrases = [
-    "no unique or exclusion constraint",
-    "could not find a unique",
-    "could not find constraint",
-    "match on_conflict",
-    "matches no on conflict specification",
-    "unique or primary key to match on_conflict"
-  ]
-
-  if (conflictPhrases.some((phrase) => normalizedDetail.includes(phrase))) {
-    return true
-  }
-
-  return (
-    normalizedDetail.includes("on conflict") && normalizedDetail.includes("unique constraint")
   )
 }
 
@@ -4288,20 +4219,59 @@ async function fetchDecisionElementTitleMap({
 async function fetchProcessDecisionPayloadRows({
   supabaseUrl,
   supabaseAnonKey,
-  processInstanceId
+  processInstanceId,
+  projectId,
+  decisionElementIds
 }: {
   supabaseUrl: string
   supabaseAnonKey: string
-  processInstanceId: number
+  processInstanceId?: number
+  projectId?: number
+  decisionElementIds: number[]
 }): Promise<ProcessDecisionPayloadRow[]> {
+  const processFilters: Array<{ column: string; value: string }> = []
+
+  if (typeof processInstanceId === "number") {
+    processFilters.push({ column: "process", value: `eq.${processInstanceId}` })
+  }
+  if (typeof projectId === "number") {
+    processFilters.push({ column: "project", value: `eq.${projectId}` })
+  }
+
+  if (processFilters.length === 0) {
+    return []
+  }
+
   return fetchSupabaseList<ProcessDecisionPayloadRow>(
     supabaseUrl,
     supabaseAnonKey,
     "/rest/v1/process_decision_payload",
     "decision payloads",
     (endpoint) => {
-      endpoint.searchParams.set("select", "process_decision_element,evaluation_data,last_updated")
-      endpoint.searchParams.set("process", `eq.${processInstanceId}`)
+      endpoint.searchParams.set(
+        "select",
+        "process_decision_element,evaluation_data,last_updated"
+      )
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+
+      if (decisionElementIds.length > 0) {
+        endpoint.searchParams.set(
+          "process_decision_element",
+          `in.(${decisionElementIds.join(",")})`
+        )
+      }
+
+      if (processFilters.length === 1) {
+        const [filter] = processFilters
+        endpoint.searchParams.set(filter.column, filter.value)
+        return
+      }
+
+      const orFilter = processFilters
+        .map(({ column, value }) => `${column}.${value}`)
+        .join(",")
+
+      endpoint.searchParams.set("or", `(${orFilter})`)
     }
   )
 }
@@ -4871,6 +4841,10 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     ? parseNumericId(processRecord.id)
     : undefined
 
+  const decisionElementIds = DECISION_ELEMENT_BUILDERS.map(
+    (builder) => builder.decisionElementId
+  ).filter((id): id is number => typeof id === "number")
+
   let projectInitiatedTimestamp: string | undefined
   let preScreeningInitiatedTimestamp: string | undefined
   let preScreeningCompletedTimestamp: string | undefined
@@ -4879,21 +4853,21 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
   let projectReport: ProjectReportSummary | undefined
   let supportingDocuments: SupportingDocumentSummary[] = []
 
-  if (processRecord?.id) {
-    if (typeof processRecord.last_updated === "string") {
-      lastUpdated = pickLatestTimestamp(lastUpdated, processRecord.last_updated)
-    }
+  if (processRecord?.last_updated && typeof processRecord.last_updated === "string") {
+    lastUpdated = pickLatestTimestamp(lastUpdated, processRecord.last_updated)
+  }
 
+  const payloads = await fetchProcessDecisionPayloadRows({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId: preScreeningProcessId,
+    projectId,
+    decisionElementIds
+  })
+
+  if (payloads.length > 0) {
+    hasDecisionPayloads = true
     const titleMap = await fetchDecisionElementTitleMap({ supabaseUrl, supabaseAnonKey })
-    const payloads = await fetchProcessDecisionPayloadRows({
-      supabaseUrl,
-      supabaseAnonKey,
-      processInstanceId: processRecord.id
-    })
-
-    if (payloads.length > 0) {
-      hasDecisionPayloads = true
-    }
 
     for (const payload of payloads) {
       if (typeof payload.last_updated === "string") {
@@ -4920,11 +4894,13 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
         permittingChecklist
       })
     }
+  }
 
+  if (typeof preScreeningProcessId === "number") {
     const caseEvents = await fetchCaseEventsForProcessInstance({
       supabaseUrl,
       supabaseAnonKey,
-      processInstanceId: processRecord.id
+      processInstanceId: preScreeningProcessId
     })
 
     for (const event of caseEvents) {
@@ -4975,7 +4951,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
       projectReport = await fetchLatestProjectReportDocument({
         supabaseUrl,
         supabaseAnonKey,
-        parentProcessId: processRecord.id
+        parentProcessId: preScreeningProcessId
       })
     } catch (reportError) {
       console.warn("Failed to load project report metadata", reportError)
@@ -4985,7 +4961,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
       supportingDocuments = await fetchSupportingDocumentSummaries({
         supabaseUrl,
         supabaseAnonKey,
-        parentProcessId: processRecord.id
+        parentProcessId: preScreeningProcessId
       })
     } catch (documentsError) {
       console.warn("Failed to load supporting documents", documentsError)
