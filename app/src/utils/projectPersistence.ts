@@ -1684,6 +1684,14 @@ async function createCaseEvent({
   if (!response.ok) {
     const errorDetail = extractErrorDetail(responseText)
 
+    if (response.status === 400) {
+      console.warn(
+        `Case event request returned 400 for process ${processInstanceId}. Proceeding without recording the event.`,
+        errorDetail || responseText
+      )
+      return
+    }
+
     throw new ProjectPersistenceError(
       errorDetail
         ? `Failed to record "${eventType}" case event (${response.status}): ${errorDetail}`
@@ -4618,19 +4626,24 @@ async function fetchCaseEventsForProcessInstance({
   supabaseAnonKey: string
   processInstanceId: number
 }): Promise<CaseEventRow[]> {
-  return fetchSupabaseList<CaseEventRow>(
-    supabaseUrl,
-    supabaseAnonKey,
-    "/rest/v1/case_event",
-    "case events",
-    (endpoint) => {
-      endpoint.searchParams.set("select", "id,parent_process_id,type,last_updated")
-      endpoint.searchParams.set("parent_process_id", `eq.${processInstanceId}`)
-      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
-      endpoint.searchParams.append("order", "last_updated.desc.nullslast")
-      endpoint.searchParams.append("order", "id.desc")
-    }
-  )
+  try {
+    return await fetchSupabaseList<CaseEventRow>(
+      supabaseUrl,
+      supabaseAnonKey,
+      "/rest/v1/case_event",
+      "case events",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "id,parent_process_id,type,last_updated")
+        endpoint.searchParams.set("parent_process_id", `eq.${processInstanceId}`)
+        endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+        endpoint.searchParams.append("order", "last_updated.desc.nullslast")
+        endpoint.searchParams.append("order", "id.desc")
+      }
+    )
+  } catch (error) {
+    console.warn("Failed to load case events; continuing without them", error)
+    return []
+  }
 }
 
 async function fetchLatestPreScreeningProcessInstanceRecord({
