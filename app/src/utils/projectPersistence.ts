@@ -1005,7 +1005,14 @@ async function submitDecisionPayloadRecords({
 
   const errorDetail = extractErrorDetail(responseText)
 
-  if (response.status === 400 && isMissingOnConflictConstraintError(errorDetail)) {
+  if (response.status === 400) {
+    if (!isMissingOnConflictConstraintError(errorDetail)) {
+      console.warn(
+        "Unexpected 400 when upserting process_decision_payload records; retrying with delete-and-insert workflow.",
+        { errorDetail }
+      )
+    }
+
     await replaceProcessDecisionPayloadRecords({
       supabaseUrl,
       supabaseAnonKey,
