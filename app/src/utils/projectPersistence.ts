@@ -2826,6 +2826,8 @@ function buildDecisionPayloadRecords({
 }: BuildDecisionPayloadRecordsArgs): Array<Record<string, unknown>> {
   const records: Array<Record<string, unknown>> = []
 
+  const projectId = normalizeNumber(projectRecord.id as number | undefined)
+
   for (const builder of DECISION_ELEMENT_BUILDERS) {
     const element = decisionElements.get(builder.decisionElementId)
 
@@ -2866,6 +2868,7 @@ function buildDecisionPayloadRecords({
       stripUndefined({
         process: processInstanceId,
         process_decision_element: element?.id ?? null,
+        project: projectId,
         data_source_system: DATA_SOURCE_SYSTEM,
         last_updated: timestamp,
         retrieved_timestamp: timestamp,
