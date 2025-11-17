@@ -1118,7 +1118,16 @@ function isMissingOnConflictConstraintError(errorDetail?: string): boolean {
   // a unique constraint so we can fall back to the delete-and-insert workflow.
   const normalizedDetail = errorDetail.toLowerCase()
 
-  if (normalizedDetail.includes("no unique or exclusion constraint")) {
+  const conflictPhrases = [
+    "no unique or exclusion constraint",
+    "could not find a unique",
+    "could not find constraint",
+    "match on_conflict",
+    "matches no on conflict specification",
+    "unique or primary key to match on_conflict"
+  ]
+
+  if (conflictPhrases.some((phrase) => normalizedDetail.includes(phrase))) {
     return true
   }
 
