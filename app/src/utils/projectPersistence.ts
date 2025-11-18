@@ -4220,14 +4220,12 @@ async function fetchProcessDecisionPayloadRows({
   supabaseUrl,
   supabaseAnonKey,
   processInstanceId,
-  projectId,
-  decisionElementIds
+  projectId
 }: {
   supabaseUrl: string
   supabaseAnonKey: string
   processInstanceId?: number
   projectId?: number
-  decisionElementIds: number[]
 }): Promise<ProcessDecisionPayloadRow[]> {
   const processFilters: Array<{ column: string; value: string }> = []
 
@@ -4253,13 +4251,6 @@ async function fetchProcessDecisionPayloadRows({
         "process_decision_element,evaluation_data,last_updated"
       )
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
-
-      if (decisionElementIds.length > 0) {
-        endpoint.searchParams.set(
-          "process_decision_element",
-          `in.(${decisionElementIds.join(",")})`
-        )
-      }
 
       if (processFilters.length === 1) {
         const [filter] = processFilters
@@ -4841,10 +4832,6 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     ? parseNumericId(processRecord.id)
     : undefined
 
-  const decisionElementIds = DECISION_ELEMENT_BUILDERS.map(
-    (builder) => builder.decisionElementId
-  ).filter((id): id is number => typeof id === "number")
-
   let projectInitiatedTimestamp: string | undefined
   let preScreeningInitiatedTimestamp: string | undefined
   let preScreeningCompletedTimestamp: string | undefined
@@ -4861,8 +4848,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     supabaseUrl,
     supabaseAnonKey,
     processInstanceId: preScreeningProcessId,
-    projectId,
-    decisionElementIds
+    projectId
   })
 
   if (payloads.length > 0) {
