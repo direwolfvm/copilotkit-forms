@@ -2726,6 +2726,10 @@ const DECISION_ELEMENT_TITLES = {
   RESOURCE_NOTES: DECISION_ELEMENT_BUILDERS[6]?.title ?? "Provide resource-by-resource notes"
 } as const
 
+const DECISION_ELEMENT_TITLE_BY_ID = new Map<number, string>(
+  DECISION_ELEMENT_BUILDERS.map(({ decisionElementId, title }) => [decisionElementId, title])
+)
+
 const CEQ_PROJECT_FIELDS = [
   "id",
   "created_at",
@@ -3937,17 +3941,19 @@ function determineDecisionElementTitle(
   titleMap: Map<number, string>
 ): string | undefined {
   const lookupById = (value: unknown): string | undefined => {
-    if (typeof value === "number" && Number.isFinite(value) && titleMap.has(value)) {
-      return titleMap.get(value)
-    }
-    if (typeof value === "string" && value.trim().length > 0) {
-      const trimmed = value.trim()
-      const parsed = Number.parseInt(trimmed, 10)
-      if (Number.isFinite(parsed) && titleMap.has(parsed)) {
-        return titleMap.get(parsed)
+    const numericValue = parseNumericId(value)
+
+    if (typeof numericValue === "number") {
+      const mappedTitle = titleMap.get(numericValue) ?? DECISION_ELEMENT_TITLE_BY_ID.get(numericValue)
+      if (mappedTitle) {
+        return mappedTitle
       }
-      return trimmed
     }
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim()
+    }
+
     return undefined
   }
 
