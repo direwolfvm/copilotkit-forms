@@ -31,6 +31,44 @@ type SupabaseFetchRequest = {
   init: RequestInit
 }
 
+function buildLoggableHeaders(init: RequestInit): Record<string, string> {
+  const headers = new Headers(init.headers ?? undefined)
+  headers.delete("apikey")
+  headers.delete("authorization")
+
+  const loggableHeaders: Record<string, string> = {}
+  for (const [key, value] of headers.entries()) {
+    loggableHeaders[key] = value
+  }
+
+  return loggableHeaders
+}
+
+function logSupabaseRequest(
+  resourceDescription: string,
+  url: string,
+  init: RequestInit
+): void {
+  const method = init.method ?? "GET"
+  const headers = buildLoggableHeaders(init)
+
+  console.info(`[portal] Supabase request: ${resourceDescription}`, { url, method, headers })
+}
+
+function logSupabaseResponse(
+  resourceDescription: string,
+  url: string,
+  response: Response,
+  responseText: string
+): void {
+  console.info(`[portal] Supabase response: ${resourceDescription}`, {
+    url,
+    status: response.status,
+    ok: response.ok,
+    body: responseText
+  })
+}
+
 function buildSupabaseFetchRequest(
   endpoint: URL,
   supabaseAnonKey: string,
@@ -1810,8 +1848,10 @@ async function fetchProjectGisDataUpload({
     method: "GET"
   })
 
+  logSupabaseRequest("GIS data", url, init)
   const response = await fetch(url, init)
   const responseText = await response.text()
+  logSupabaseResponse("GIS data", url, response, responseText)
 
   if (!response.ok) {
     const detail = extractErrorDetail(responseText)
@@ -4121,8 +4161,10 @@ async function fetchSupabaseList<T>(
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "GET"
   })
+  logSupabaseRequest(resourceDescription, url, init)
   const response = await fetch(url, init)
   const responseText = await response.text()
+  logSupabaseResponse(resourceDescription, url, response, responseText)
   if (!response.ok) {
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
@@ -4271,8 +4313,10 @@ async function fetchLatestProjectReportDocument({
     headers: { Accept: "application/json" }
   })
 
+  logSupabaseRequest("project report", url, init)
   const response = await fetch(url, init)
   const responseText = await response.text()
+  logSupabaseResponse("project report", url, response, responseText)
 
   if (!response.ok) {
     const errorDetail = extractErrorDetail(responseText)
@@ -4349,8 +4393,10 @@ async function fetchSupportingDocumentSummaries({
     headers: { Accept: "application/json" }
   })
 
+  logSupabaseRequest("supporting documents", url, init)
   const response = await fetch(url, init)
   const responseText = await response.text()
+  logSupabaseResponse("supporting documents", url, response, responseText)
 
   if (!response.ok) {
     const errorDetail = extractErrorDetail(responseText)
