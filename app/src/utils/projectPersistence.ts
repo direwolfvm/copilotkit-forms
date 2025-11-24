@@ -4219,24 +4219,13 @@ async function fetchDecisionElementTitleMap({
 async function fetchProcessDecisionPayloadRows({
   supabaseUrl,
   supabaseAnonKey,
-  processInstanceId,
-  projectId
+  processInstanceId
 }: {
   supabaseUrl: string
   supabaseAnonKey: string
   processInstanceId?: number
-  projectId?: number
 }): Promise<ProcessDecisionPayloadRow[]> {
-  const processFilters: Array<{ column: string; value: string }> = []
-
-  if (typeof processInstanceId === "number") {
-    processFilters.push({ column: "process", value: `eq.${processInstanceId}` })
-  }
-  if (typeof projectId === "number") {
-    processFilters.push({ column: "project", value: `eq.${projectId}` })
-  }
-
-  if (processFilters.length === 0) {
+  if (typeof processInstanceId !== "number") {
     return []
   }
 
@@ -4251,18 +4240,7 @@ async function fetchProcessDecisionPayloadRows({
         "process_decision_element,evaluation_data,last_updated"
       )
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
-
-      if (processFilters.length === 1) {
-        const [filter] = processFilters
-        endpoint.searchParams.set(filter.column, filter.value)
-        return
-      }
-
-      const orFilter = processFilters
-        .map(({ column, value }) => `${column}.${value}`)
-        .join(",")
-
-      endpoint.searchParams.set("or", `(${orFilter})`)
+      endpoint.searchParams.set("process", `eq.${processInstanceId}`)
     }
   )
 }
@@ -4847,8 +4825,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
   const payloads = await fetchProcessDecisionPayloadRows({
     supabaseUrl,
     supabaseAnonKey,
-    processInstanceId: preScreeningProcessId,
-    projectId
+    processInstanceId: preScreeningProcessId
   })
 
   if (payloads.length > 0) {
