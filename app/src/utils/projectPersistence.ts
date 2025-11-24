@@ -1251,17 +1251,32 @@ export function evaluatePreScreeningData({
   return evaluateDecisionPayloads(evaluationRecords)
 }
 
+function coerceEvaluationData(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object") {
+    return value as Record<string, unknown>
+  }
+
+  if (typeof value === "string") {
+    const parsed = safeJsonParse(value)
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>
+    }
+  }
+
+  return null
+}
+
 function extractDecisionPayloadData(
   record: Record<string, unknown>
 ): Record<string, unknown> | null {
-  const evaluationData = (record as { evaluation_data?: unknown }).evaluation_data
-  if (evaluationData && typeof evaluationData === "object") {
-    return evaluationData as Record<string, unknown>
+  const evaluationData = coerceEvaluationData((record as { evaluation_data?: unknown }).evaluation_data)
+  if (evaluationData) {
+    return evaluationData
   }
 
-  const data = (record as { data?: unknown }).data
-  if (data && typeof data === "object") {
-    return data as Record<string, unknown>
+  const data = coerceEvaluationData((record as { data?: unknown }).data)
+  if (data) {
+    return data
   }
 
   return null
