@@ -4891,10 +4891,10 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
         lastUpdated = pickLatestTimestamp(lastUpdated, payload.last_updated)
         lastPreScreeningActivity = pickLatestTimestamp(lastPreScreeningActivity, payload.last_updated)
       }
-      if (!payload.evaluation_data || typeof payload.evaluation_data !== "object") {
+      const evaluation = extractDecisionPayloadData(payload as Record<string, unknown>)
+      if (!evaluation) {
         continue
       }
-      const evaluation = payload.evaluation_data as Record<string, unknown>
       const title = determineDecisionElementTitle(
         payload.process_decision_element,
         evaluation,
