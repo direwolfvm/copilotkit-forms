@@ -1203,12 +1203,15 @@ function buildDecisionPayloadEvaluationRecords({
   formData: ProjectFormData
 }): Array<Record<string, unknown>> {
   return DECISION_ELEMENT_BUILDERS.map((builder) => ({
-    evaluation_data: builder.build({
-      elementId: undefined,
-      projectRecord,
-      geospatialResults,
-      permittingChecklist,
-      formData
+    evaluation_data: addDecisionPayloadMetadata({
+      builder,
+      evaluationData: builder.build({
+        elementId: undefined,
+        projectRecord,
+        geospatialResults,
+        permittingChecklist,
+        formData
+      })
     })
   }))
 }
@@ -2770,6 +2773,35 @@ const DECISION_ELEMENT_TITLE_BY_ID = new Map<number, string>(
   DECISION_ELEMENT_BUILDERS.map(({ decisionElementId, title }) => [decisionElementId, title])
 )
 
+function addDecisionPayloadMetadata({
+  builder,
+  evaluationData
+}: {
+  builder: DecisionElementBuilder
+  evaluationData: Record<string, unknown>
+}): Record<string, unknown> {
+  const baseTitle = normalizeString((evaluationData as { title?: unknown }).title as string | undefined)
+  const idValue = (evaluationData as { id?: unknown }).id
+
+  const resolvedId = (() => {
+    if (typeof idValue === "number" && Number.isFinite(idValue)) {
+      return idValue
+    }
+
+    if (typeof idValue === "string" && idValue.trim().length > 0) {
+      return idValue
+    }
+
+    return builder.title
+  })()
+
+  return stripUndefined({
+    ...evaluationData,
+    id: resolvedId,
+    title: baseTitle ?? builder.title
+  })
+}
+
 const CEQ_PROJECT_FIELDS = [
   "id",
   "created_at",
@@ -2828,18 +2860,23 @@ function buildDecisionPayloadRecords({
       formData
     })
 
+    const evaluationDataWithMetadata = addDecisionPayloadMetadata({
+      builder,
+      evaluationData: baseData
+    })
+
     const evaluationData = (() => {
       if (element) {
-        return baseData
+        return evaluationDataWithMetadata
       }
 
-      const withFallback: Record<string, unknown> = { ...baseData }
-      const existingId = (baseData as { id?: unknown }).id
+      const withFallback: Record<string, unknown> = { ...evaluationDataWithMetadata }
+      const existingId = (evaluationDataWithMetadata as { id?: unknown }).id
       if (typeof existingId !== "number" && typeof existingId !== "string") {
         withFallback.id = builder.title
       }
 
-      const existingTitle = (baseData as { title?: unknown }).title
+      const existingTitle = (evaluationDataWithMetadata as { title?: unknown }).title
       if (typeof existingTitle !== "string" || existingTitle.length === 0) {
         withFallback.title = builder.title
       }
