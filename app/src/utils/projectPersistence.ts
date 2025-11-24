@@ -4289,6 +4289,8 @@ async function fetchProcessDecisionPayloadRows({
       )
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
       endpoint.searchParams.set("process", `eq.${processInstanceId}`)
+      endpoint.searchParams.set("order", "last_updated.asc")
+      endpoint.searchParams.set("limit", "1000")
     }
   )
 }
