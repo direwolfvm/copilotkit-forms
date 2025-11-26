@@ -4068,31 +4068,41 @@ function determineDecisionElementTitle(
 }
 
 function applyDecisionPayloadToState({
+  decisionElementId,
   title,
   evaluation,
   formData,
   geospatialResults,
   permittingChecklist
 }: {
+  decisionElementId: number | undefined
   title: string
   evaluation: Record<string, unknown>
   formData: ProjectFormData
   geospatialResults: GeospatialResultsState
   permittingChecklist: LoadedPermittingChecklistItem[]
 }): void {
-  switch (title) {
-    case DECISION_ELEMENT_TITLES.PROJECT_DETAILS: {
+  console.log('[portal] applyDecisionPayloadToState - ID:', decisionElementId, 'title:', title, 'evaluation keys:', Object.keys(evaluation))
+  
+  // Match based on decision element ID instead of title
+  switch (decisionElementId) {
+    case 1: { // PROJECT_DETAILS
+      console.log('[portal] Matched PROJECT_DETAILS case (ID 1)')
       const project = evaluation.project
+      console.log('[portal] Project data:', project)
       if (project && typeof project === "object") {
+        console.log('[portal] Applying project record to state')
         applyProjectRecordToState({
           formData,
           geospatialResults,
           projectRecord: project as Record<string, unknown>
         })
+      } else {
+        console.log('[portal] Project data is null or not an object')
       }
       break
     }
-    case DECISION_ELEMENT_TITLES.NEPA_ASSIST: {
+    case 2: { // NEPA_ASSIST
       const nextService: GeospatialServiceState<NepassistSummaryItem[]> = {
         ...geospatialResults.nepassist
       }
@@ -4123,7 +4133,7 @@ function applyDecisionPayloadToState({
       geospatialResults.nepassist = nextService
       break
     }
-    case DECISION_ELEMENT_TITLES.IPAC: {
+    case 3: { // IPAC
       const nextService: GeospatialServiceState<IpacSummary> = {
         ...geospatialResults.ipac
       }
@@ -4155,7 +4165,7 @@ function applyDecisionPayloadToState({
       geospatialResults.ipac = nextService
       break
     }
-    case DECISION_ELEMENT_TITLES.PERMIT_NOTES: {
+    case 4: { // PERMIT_NOTES
       const permits = parseChecklistItems(evaluation.permits)
       if (permits.length > 0) {
         permittingChecklist.splice(0, permittingChecklist.length, ...permits)
@@ -4165,14 +4175,14 @@ function applyDecisionPayloadToState({
       }
       break
     }
-    case DECISION_ELEMENT_TITLES.CE_REFERENCES: {
+    case 5: { // CE_REFERENCES
       const candidates = joinStrings(evaluation.ce_candidates)
       if (candidates) {
         formData.nepa_categorical_exclusion_code = candidates
       }
       break
     }
-    case DECISION_ELEMENT_TITLES.CONDITIONS: {
+    case 6: { // CONDITIONS
       const conditions = joinStrings(evaluation.conditions)
       if (conditions) {
         formData.nepa_conformance_conditions = conditions
@@ -4182,7 +4192,7 @@ function applyDecisionPayloadToState({
       }
       break
     }
-    case DECISION_ELEMENT_TITLES.RESOURCE_NOTES: {
+    case 7: { // RESOURCE_NOTES
       if (typeof evaluation.notes === "string" && evaluation.notes.trim().length > 0) {
         formData.nepa_extraordinary_circumstances = evaluation.notes
       } else if (
@@ -4938,13 +4948,16 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
     hasDecisionPayloads = true
     const titleMap = await fetchDecisionElementTitleMap({ supabaseUrl, supabaseAnonKey })
 
+    console.log('[portal] Processing decision payloads:', payloads.length)
     for (const payload of payloads) {
       if (typeof payload.last_updated === "string") {
         lastUpdated = pickLatestTimestamp(lastUpdated, payload.last_updated)
         lastPreScreeningActivity = pickLatestTimestamp(lastPreScreeningActivity, payload.last_updated)
       }
       const evaluation = extractDecisionPayloadData(payload as Record<string, unknown>)
+      console.log('[portal] Extracted evaluation data:', evaluation)
       if (!evaluation) {
+        console.log('[portal] No evaluation data found in payload')
         continue
       }
       const title = determineDecisionElementTitle(
@@ -4952,10 +4965,15 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
         evaluation,
         titleMap
       )
+      console.log('[portal] Determined title:', title, 'for element ID:', payload.process_decision_element)
       if (!title) {
+        console.log('[portal] No title determined for payload')
         continue
       }
+      const decisionElementId = parseNumericId(payload.process_decision_element)
+      console.log('[portal] Applying decision payload with title:', title, 'and ID:', decisionElementId)
       applyDecisionPayloadToState({
+        decisionElementId,
         title,
         evaluation,
         formData,
