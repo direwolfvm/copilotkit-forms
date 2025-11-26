@@ -1285,43 +1285,68 @@ function extractDecisionPayloadData(
 function isPreScreeningComplete(
   evaluationDataByTitle: Map<string, Record<string, unknown>>
 ): boolean {
+  console.log('[portal] Checking pre-screening completion')
+  console.log('[portal] evaluationDataByTitle keys:', Array.from(evaluationDataByTitle.keys()))
+  console.log('[portal] DECISION_ELEMENT_TITLES:', DECISION_ELEMENT_TITLES)
+  
   const projectDetails = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.PROJECT_DETAILS)
-  if (!hasProjectDetails(projectDetails)) {
+  console.log('[portal] PROJECT_DETAILS title:', DECISION_ELEMENT_TITLES.PROJECT_DETAILS)
+  console.log('[portal] projectDetails:', projectDetails)
+  const hasProject = hasProjectDetails(projectDetails)
+  console.log('[portal] hasProjectDetails:', hasProject)
+  if (!hasProject) {
     return false
   }
 
   const nepaAssistPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.NEPA_ASSIST)
-  if (!hasNepaAssistResults(nepaAssistPayload)) {
+  console.log('[portal] NEPA_ASSIST title:', DECISION_ELEMENT_TITLES.NEPA_ASSIST)
+  console.log('[portal] nepaAssistPayload:', nepaAssistPayload)
+  const hasNepa = hasNepaAssistResults(nepaAssistPayload)
+  console.log('[portal] hasNepaAssistResults:', hasNepa)
+  if (!hasNepa) {
     return false
   }
 
   const ipacPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.IPAC)
-  if (!hasIpacResults(ipacPayload)) {
+  console.log('[portal] IPAC title:', DECISION_ELEMENT_TITLES.IPAC)
+  console.log('[portal] ipacPayload:', ipacPayload)
+  const hasIpac = hasIpacResults(ipacPayload)
+  console.log('[portal] hasIpacResults:', hasIpac)
+  if (!hasIpac) {
     return false
   }
 
   const permitNotesPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.PERMIT_NOTES)
-  if (!hasPermitNotesText(permitNotesPayload)) {
+  const hasPermits = hasPermitNotesText(permitNotesPayload)
+  console.log('[portal] hasPermitNotesText:', hasPermits)
+  if (!hasPermits) {
     return false
   }
 
   const categoricalExclusionPayload = evaluationDataByTitle.get(
     DECISION_ELEMENT_TITLES.CE_REFERENCES
   )
-  if (!hasCategoricalExclusionText(categoricalExclusionPayload)) {
+  const hasCE = hasCategoricalExclusionText(categoricalExclusionPayload)
+  console.log('[portal] hasCategoricalExclusionText:', hasCE)
+  if (!hasCE) {
     return false
   }
 
   const conditionsPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.CONDITIONS)
-  if (!hasConditionsText(conditionsPayload)) {
+  const hasConditions = hasConditionsText(conditionsPayload)
+  console.log('[portal] hasConditionsText:', hasConditions)
+  if (!hasConditions) {
     return false
   }
 
   const resourceNotesPayload = evaluationDataByTitle.get(DECISION_ELEMENT_TITLES.RESOURCE_NOTES)
-  if (!hasResourceNotesText(resourceNotesPayload)) {
+  const hasResources = hasResourceNotesText(resourceNotesPayload)
+  console.log('[portal] hasResourceNotesText:', hasResources)
+  if (!hasResources) {
     return false
   }
 
+  console.log('[portal] All checks passed - pre-screening is complete!')
   return true
 }
 
@@ -1366,21 +1391,28 @@ function hasIpacResults(payload: Record<string, unknown> | undefined): boolean {
 
 function hasPermitNotesText(payload: Record<string, unknown> | undefined): boolean {
   if (!payload) {
+    console.log('[portal] hasPermitNotesText: no payload')
     return false
   }
 
   const notes = (payload as { notes?: unknown }).notes
+  console.log('[portal] hasPermitNotesText - notes:', notes)
   if (containsMeaningfulText(notes)) {
+    console.log('[portal] hasPermitNotesText: has meaningful notes text')
     return true
   }
 
   const permits = (payload as { permits?: unknown }).permits
+  console.log('[portal] hasPermitNotesText - permits:', permits)
   if (!Array.isArray(permits)) {
+    console.log('[portal] hasPermitNotesText: permits is not an array')
     return false
   }
 
-  const ignoredPermitKeys = new Set(["label", "source", "completed"])
-  return permits.some((entry) => containsMeaningfulText(entry, ignoredPermitKeys))
+  // If we have any permits, that's sufficient - they don't need additional notes
+  const hasPermits = permits.length > 0
+  console.log('[portal] hasPermitNotesText - has permits:', hasPermits)
+  return hasPermits
 }
 
 function hasCategoricalExclusionText(payload: Record<string, unknown> | undefined): boolean {
