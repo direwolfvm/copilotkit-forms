@@ -1062,7 +1062,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       return
     }
 
-    const copilotWrapper = document.querySelector<HTMLElement>(".copilotKitSidebarContentWrapper")
+    const copilotWrapper =
+      document.querySelector<HTMLElement>(".copilotKitWindow") ??
+      document.querySelector<HTMLElement>(".copilotKitSidebar")
+
     if (copilotWrapper) {
       copilotWrapper.dataset.tourId = copilotWrapper.dataset.tourId ?? "portal-copilot"
       copilotWrapper.dataset.tourTitle =
