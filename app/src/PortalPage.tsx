@@ -1330,6 +1330,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     supportingDocuments
   ])
 
+  const locationSectionKey = projectId ?? "new-project"
+
   const locationFieldDetail = useMemo(
     () => projectFieldDetails.find((field) => field.key === "location_text"),
     []
@@ -2499,6 +2501,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             />
             {locationFieldDetail ? (
               <LocationSection
+                key={locationSectionKey}
                 title={locationFieldDetail.title}
                 description={locationFieldDetail.description}
                 placeholder={locationFieldDetail.placeholder}
