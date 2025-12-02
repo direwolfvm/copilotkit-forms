@@ -1053,13 +1053,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     message?: string
   }>({ status: "idle" })
 
-  useEffect(() => {
+  const startPortalTour = useCallback(() => {
     if (typeof window === "undefined") {
-      return
-    }
-
-    if (localStorage.getItem(PORTAL_TOUR_STORAGE_KEY) === "true") {
-      return
+      return null
     }
 
     const copilotWrapper =
@@ -1099,7 +1095,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     }, [])
 
     if (!steps.length) {
-      return
+      return null
     }
 
     const intro = introJs()
@@ -1126,10 +1122,24 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
 
     intro.start()
 
-    return () => {
-      intro.exit()
-    }
+    return intro
   }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    if (localStorage.getItem(PORTAL_TOUR_STORAGE_KEY) === "true") {
+      return
+    }
+
+    const intro = startPortalTour()
+
+    return () => {
+      intro?.exit()
+    }
+  }, [startPortalTour])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -2382,6 +2392,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               </p>
             </div>
             <div className="actions">
+              <button type="button" className="usa-button secondary" onClick={() => startPortalTour()}>
+                Take a tour
+              </button>
               <button type="button" className="usa-button usa-button--outline secondary" onClick={handleReset}>
                 Reset form
               </button>
