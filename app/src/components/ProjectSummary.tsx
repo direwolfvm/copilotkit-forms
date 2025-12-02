@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import type { ProjectFormData, ProjectContact, SimpleProjectField } from "../schema/projectSchema"
 import { formatProjectSummary } from "../schema/projectSchema"
 
@@ -32,9 +34,10 @@ function hasContact(contact?: ProjectContact) {
 
 interface ProjectSummaryProps {
   data: ProjectFormData
+  actions?: ReactNode
 }
 
-export function ProjectSummary({ data }: ProjectSummaryProps) {
+export function ProjectSummary({ data, actions }: ProjectSummaryProps) {
   const summaryText = formatProjectSummary(data)
   const contact = data.sponsor_contact
   const showContact = hasContact(contact)
@@ -52,6 +55,8 @@ export function ProjectSummary({ data }: ProjectSummaryProps) {
           </p>
         </div>
       </header>
+
+      {actions ? <div className="summary-panel__actions">{actions}</div> : null}
 
       <div className="summary-grid">
         <div className="summary-card">
