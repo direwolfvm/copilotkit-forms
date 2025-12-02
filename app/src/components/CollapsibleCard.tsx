@@ -20,7 +20,7 @@ export function CollapsibleCard({
   className,
   defaultExpanded = true,
   headingLevel = 2,
-  ariaLabel
+  ariaLabel = title
 }: CollapsibleCardProps) {
   const [isOpen, setIsOpen] = useState(defaultExpanded)
   const contentId = useId()
@@ -38,12 +38,7 @@ export function CollapsibleCard({
   return (
     <section className={classNames} aria-label={ariaLabel}>
       <div className="collapsible-card__header">
-        <div className="collapsible-card__title-group">
-          <HeadingTag>{title}</HeadingTag>
-          {description ? <p className="collapsible-card__description">{description}</p> : null}
-        </div>
-        <div className="collapsible-card__header-actions">
-          {actions}
+        <div className="collapsible-card__title-wrapper">
           <button
             type="button"
             className="collapsible-card__toggle"
@@ -56,7 +51,12 @@ export function CollapsibleCard({
               {isOpen ? "−" : "+"}
             </span>
           </button>
+          <div className="collapsible-card__title-group">
+            <HeadingTag>{title}</HeadingTag>
+            {description ? <p className="collapsible-card__description">{description}</p> : null}
+          </div>
         </div>
+        {actions ? <div className="collapsible-card__header-actions">{actions}</div> : null}
       </div>
       {isOpen ? (
         <div className="collapsible-card__content" id={contentId}>
