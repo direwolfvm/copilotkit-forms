@@ -55,6 +55,12 @@ export function PermittingChecklistSection({
           )}
         </div>
       }
+      dataAttributes={{
+        "data-tour-id": "portal-checklist",
+        "data-tour-title": "Track permits",
+        "data-tour-intro":
+          "Use this checklist to capture likely permits. Ask the Copilot to suggest items and it can add them directly here."
+      }}
     >
       <form className="checklist-panel__form" onSubmit={handleSubmit}>
         <label htmlFor="permitting-checklist-input" className="visually-hidden">

@@ -251,6 +251,12 @@ export function NepaReviewSection({
       title="NEPA review"
       description="Capture information related to the NEPA review process."
       ariaLabel="NEPA review details"
+      dataAttributes={{
+        "data-tour-id": "portal-nepa",
+        "data-tour-title": "Review NEPA factors",
+        "data-tour-intro":
+          "Summarize categorical exclusions, conditions, and extraordinary circumstances. The Copilot can draft language based on your project details."
+      }}
     >
       <div className="form-panel__body">
         <div className="form-field">
