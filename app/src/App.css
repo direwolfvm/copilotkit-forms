@@ -217,6 +217,13 @@
   margin-top: 0.25rem;
 }
 
+.site-tour__tooltip .introjs-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-right: 0.35rem;
+}
+
 .site-tour__tooltip .introjs-title {
   color: var(--color-heading);
   font-weight: 800;
@@ -244,6 +251,10 @@
   border-radius: 999px;
   padding-inline: 1.05rem;
   min-height: 2.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
 }
 
 .site-tour__tooltip .introjs-prevbutton,
@@ -251,6 +262,11 @@
   border: 1px solid color-mix(in srgb, var(--border) 80%, rgba(31, 79, 153, 0.14) 20%);
   background: color-mix(in srgb, var(--surface-muted) 90%, rgba(31, 79, 153, 0.08) 10%);
   color: color-mix(in srgb, var(--color-text-muted) 72%, var(--color-heading) 28%);
+}
+
+.site-tour__tooltip .introjs-skipbutton {
+  margin-left: auto;
+  position: static;
 }
 
 .site-tour__tooltip .introjs-prevbutton:hover,
@@ -266,7 +282,7 @@
 .site-tour__tooltip .introjs-donebutton {
   background: linear-gradient(140deg, var(--accent) 0%, var(--accent-dark) 100%);
   border-color: var(--accent-dark);
-  color: var(--accent-contrast);
+  color: #fff;
   box-shadow: 0 16px 32px -22px rgba(7, 29, 66, 0.55);
   text-shadow: 0 1px 4px rgba(7, 29, 66, 0.3);
 }

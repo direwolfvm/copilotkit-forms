@@ -5,6 +5,8 @@ import { Link } from "react-router-dom"
 
 import { ArcgisSketchMap } from "./components/ArcgisSketchMap"
 
+const TOUR_STORAGE_KEY = "homeSiteTourComplete"
+
 const cards = [
   {
     title: "Projects overview",
@@ -56,6 +58,10 @@ export default function HomePage() {
       return
     }
 
+    if (localStorage.getItem(TOUR_STORAGE_KEY) === "true") {
+      return
+    }
+
     const navLinks = Array.from(
       document.querySelectorAll<HTMLElement>("[data-tour='nav-link']")
     ).filter((element) => element.dataset.tourIntro)
@@ -82,6 +88,13 @@ export default function HomePage() {
       tooltipClass: "site-tour__tooltip",
       highlightClass: "site-tour__highlight"
     })
+
+    const markTourComplete = () => {
+      localStorage.setItem(TOUR_STORAGE_KEY, "true")
+    }
+
+    intro.oncomplete(markTourComplete)
+    intro.onexit(markTourComplete)
 
     intro.start()
 
