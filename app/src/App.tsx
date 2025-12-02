@@ -256,7 +256,7 @@ function Layout() {
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
               }
             >
-              New Project Portal
+              Project Portal
             </NavLink>
             <NavLink
               to="/resource-check"
