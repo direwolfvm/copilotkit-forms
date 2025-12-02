@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-  "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node server.mjs",
@@ -23,12 +23,13 @@
     "@tmcw/togeojson": "^5.4.0",
     "@uswds/uswds": "^3.13.0",
     "express": "^4.21.2",
+    "intro.js": "^8.3.2",
     "jszip": "^3.10.1",
     "pdf-lib": "^1.17.1",
-    "recharts": "^2.12.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.4"
+    "react-router-dom": "^7.9.4",
+    "recharts": "^2.12.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",
