@@ -63,13 +63,12 @@ export function LocationSection({
   }, [onLocationGeometryChange])
 
   const textareaId = useId()
-  const [isCardOpen, setIsCardOpen] = useState(true)
+  const [isCardOpen, setIsCardOpen] = useState(false)
 
   return (
     <CollapsibleCard
       className="location-section"
       title={title}
-      defaultExpanded
       aria-label="Project location details"
       dataAttributes={{
         "data-tour-id": "portal-location",
