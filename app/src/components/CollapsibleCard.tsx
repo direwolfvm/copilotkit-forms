@@ -18,7 +18,7 @@ export function CollapsibleCard({
   actions,
   children,
   className,
-  defaultExpanded = true,
+  defaultExpanded = false,
   headingLevel = 2,
   ariaLabel = title
 }: CollapsibleCardProps) {
