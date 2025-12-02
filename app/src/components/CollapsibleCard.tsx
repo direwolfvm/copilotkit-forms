@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import type { ReactNode } from "react"
 
 interface CollapsibleCardProps {
@@ -11,6 +11,7 @@ interface CollapsibleCardProps {
   headingLevel?: 2 | 3 | 4
   ariaLabel?: string
   dataAttributes?: Record<string, string | number | boolean | undefined>
+  onToggle?: (isOpen: boolean) => void
 }
 
 export function CollapsibleCard({
@@ -22,7 +23,8 @@ export function CollapsibleCard({
   defaultExpanded = false,
   headingLevel = 2,
   ariaLabel = title,
-  dataAttributes
+  dataAttributes,
+  onToggle
 }: CollapsibleCardProps) {
   const [isOpen, setIsOpen] = useState(defaultExpanded)
   const contentId = useId()
@@ -32,6 +34,10 @@ export function CollapsibleCard({
   const handleToggle = () => {
     setIsOpen((previous) => !previous)
   }
+
+  useEffect(() => {
+    onToggle?.(isOpen)
+  }, [isOpen, onToggle])
 
   const classNames = ["collapsible-card", className, isOpen ? undefined : "collapsible-card--collapsed"]
     .filter(Boolean)

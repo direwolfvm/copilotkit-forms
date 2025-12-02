@@ -1,4 +1,4 @@
-import { useCallback, useId } from "react"
+import { useCallback, useId, useState } from "react"
 
 import type { ProjectFormData } from "../schema/projectSchema"
 import { ArcgisSketchMap } from "./ArcgisSketchMap"
@@ -63,18 +63,22 @@ export function LocationSection({
   }, [onLocationGeometryChange])
 
   const textareaId = useId()
+  const [isCardOpen, setIsCardOpen] = useState(true)
 
   return (
     <CollapsibleCard
       className="location-section"
       title={title}
+      defaultExpanded
       aria-label="Project location details"
       dataAttributes={{
         "data-tour-id": "portal-location",
         "data-tour-title": "Map the project",
         "data-tour-intro":
-          "Describe the location and sketch or upload a geometry. The Copilot uses this footprint to generate geospatial checks."
+          "Describe the location and sketch or upload a geometry. The Copilot uses this footprint to generate geospatial checks.",
+        "data-tour-step": 2
       }}
+      onToggle={setIsCardOpen}
     >
       <div className="location-card">
         <div className="location-card__header">
@@ -107,6 +111,7 @@ export function LocationSection({
             onGeometryChange={handleGeometryChange}
             enableFileUpload={enableFileUpload}
             activeUploadFileName={activeUploadFileName}
+            isVisible={isCardOpen}
           />
           <input type="hidden" name="location_object" value={geometry ?? ""} readOnly aria-hidden="true" />
         </div>
