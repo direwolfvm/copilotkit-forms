@@ -51,6 +51,7 @@ export function ProjectSummary({ data, actions }: ProjectSummaryProps) {
       title="Project snapshot"
       description="As you populate the form, this summary updates so it can be copied into status reports or sent to collaborators."
       actions={actions ? <div className="summary-panel__actions">{actions}</div> : null}
+      defaultExpanded
     >
       <div className="summary-grid">
         <div className="summary-card">
