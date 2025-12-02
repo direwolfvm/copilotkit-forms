@@ -3,6 +3,7 @@ import { useCallback, useId } from "react"
 import type { ProjectFormData } from "../schema/projectSchema"
 import { ArcgisSketchMap } from "./ArcgisSketchMap"
 import type { GeometryChange, GeometrySource, UploadedGisFile } from "../types/gis"
+import { CollapsibleCard } from "./CollapsibleCard"
 
 interface LocationSectionProps {
   title: string
@@ -64,7 +65,11 @@ export function LocationSection({
   const textareaId = useId()
 
   return (
-    <section className="location-section" aria-label="Project location details">
+    <CollapsibleCard
+      className="location-section"
+      title={title}
+      aria-label="Project location details"
+    >
       <div className="location-card">
         <div className="location-card__header">
           <label className="location-card__label" htmlFor={textareaId}>
@@ -100,6 +105,6 @@ export function LocationSection({
           <input type="hidden" name="location_object" value={geometry ?? ""} readOnly aria-hidden="true" />
         </div>
       </div>
-    </section>
+    </CollapsibleCard>
   )
 }

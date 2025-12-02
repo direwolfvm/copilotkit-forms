@@ -8,6 +8,7 @@ import type {
   IpacSummary,
   NepassistSummaryItem
 } from "../types/geospatial"
+import { CollapsibleCard } from "./CollapsibleCard"
 
 type NepaFieldKey =
   | "nepa_categorical_exclusion_code"
@@ -245,13 +246,12 @@ export function NepaReviewSection({
   }
 
   return (
-    <section className="form-panel" aria-label="NEPA review details">
-      <header className="form-panel__header">
-        <h2>NEPA review</h2>
-        <p className="help-block">
-          Capture information related to the NEPA review process.
-        </p>
-      </header>
+    <CollapsibleCard
+      className="form-panel"
+      title="NEPA review"
+      description="Capture information related to the NEPA review process."
+      ariaLabel="NEPA review details"
+    >
       <div className="form-panel__body">
         <div className="form-field">
           <label htmlFor={categoricalId}>{categoricalConfig?.title ?? "Categorical Exclusion"}</label>
@@ -391,6 +391,6 @@ export function NepaReviewSection({
           </div>
         </div>
       </div>
-    </section>
+    </CollapsibleCard>
   )
 }
