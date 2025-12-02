@@ -2187,6 +2187,50 @@
   gap: 1rem;
 }
 
+.home__hero-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.home__hero-headings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  flex: 1;
+}
+
+.home__tour-button {
+  margin-left: auto;
+  padding: 0.65rem 1.35rem;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 80%, var(--accent-dark) 20%), var(--accent-dark));
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px -12px rgba(7, 29, 66, 0.55);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.home__tour-button:hover,
+.home__tour-button:focus-visible {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, var(--accent-dark), color-mix(in srgb, var(--accent-dark) 80%, #fff 20%));
+  box-shadow: 0 12px 24px -12px rgba(7, 29, 66, 0.6);
+}
+
+.home__tour-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, #fff 35%);
+  outline-offset: 2px;
+}
+
+.home__tour-button:active {
+  transform: translateY(0);
+  box-shadow: 0 6px 14px -10px rgba(7, 29, 66, 0.6);
+}
+
 .home__eyebrow {
   font-size: 0.9rem;
   font-weight: 700;
