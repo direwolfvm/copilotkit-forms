@@ -2336,59 +2336,63 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           ) : null}
 
           <section className="content">
-            <ProjectSummary data={formData} />
-            <div className="summary-panel__actions">
-              <div className="summary-panel__buttons">
-                <button
-                  type="button"
-                  className="usa-button usa-button--outline secondary"
-                  onClick={handleGenerateProjectReport}
-                  disabled={!canGenerateReport || isGeneratingReport}
-                  title={
-                    !canGenerateReport
-                      ? "Save the project snapshot to enable report generation."
-                      : undefined
-                  }
-                >
-                  {isGeneratingReport ? "Generating…" : "Generate PDF"}
-                </button>
-                {projectReport ? (
-                  <a
-                    className="usa-button"
-                    href={projectReport.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View latest PDF
-                  </a>
-                ) : (
-                  <button
-                    type="button"
-                    className="usa-button"
-                    disabled
-                    title="Generate a report to enable the download."
-                  >
-                    View latest PDF
-                  </button>
-                )}
-              </div>
-              <div className="summary-panel__status-group" aria-live="polite">
-                {isGeneratingReport ? (
-                  <span className="summary-panel__status">Generating report…</span>
-                ) : projectReport?.generatedAt ? (
-                  <span className="summary-panel__status">
-                    {formattedReportTimestamp
-                      ? `Generated ${formattedReportTimestamp}`
-                      : `Generated ${projectReport.generatedAt}`}
-                  </span>
-                ) : null}
-                {reportError ? (
-                  <span className="summary-panel__status summary-panel__status--error" role="alert">
-                    {reportError}
-                  </span>
-                ) : null}
-              </div>
-            </div>
+            <ProjectSummary
+              data={formData}
+              actions={
+                <>
+                  <div className="summary-panel__buttons">
+                    <button
+                      type="button"
+                      className="usa-button usa-button--outline secondary"
+                      onClick={handleGenerateProjectReport}
+                      disabled={!canGenerateReport || isGeneratingReport}
+                      title={
+                        !canGenerateReport
+                          ? "Save the project snapshot to enable report generation."
+                          : undefined
+                      }
+                    >
+                      {isGeneratingReport ? "Generating…" : "Generate PDF"}
+                    </button>
+                    {projectReport ? (
+                      <a
+                        className="usa-button"
+                        href={projectReport.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        View latest PDF
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        className="usa-button"
+                        disabled
+                        title="Generate a report to enable the download."
+                      >
+                        View latest PDF
+                      </button>
+                    )}
+                  </div>
+                  <div className="summary-panel__status-group" aria-live="polite">
+                    {isGeneratingReport ? (
+                      <span className="summary-panel__status">Generating report…</span>
+                    ) : projectReport?.generatedAt ? (
+                      <span className="summary-panel__status">
+                        {formattedReportTimestamp
+                          ? `Generated ${formattedReportTimestamp}`
+                          : `Generated ${projectReport.generatedAt}`}
+                      </span>
+                    ) : null}
+                    {reportError ? (
+                      <span className="summary-panel__status summary-panel__status--error" role="alert">
+                        {reportError}
+                      </span>
+                    ) : null}
+                  </div>
+                </>
+              }
+            />
             {locationFieldDetail ? (
               <LocationSection
               title={locationFieldDetail.title}
