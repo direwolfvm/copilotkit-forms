@@ -293,6 +293,7 @@
 .site-tour__tooltip .introjs-donebutton:focus-visible {
   transform: translateY(-1px);
   box-shadow: 0 18px 46px -24px rgba(7, 29, 66, 0.6);
+  color: #fff;
 }
 
 .site-tour__highlight {
