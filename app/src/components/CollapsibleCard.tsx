@@ -66,11 +66,14 @@ export function CollapsibleCard({
         </div>
         {actions ? <div className="collapsible-card__header-actions">{actions}</div> : null}
       </div>
-      {isOpen ? (
-        <div className="collapsible-card__content" id={contentId}>
-          {children}
-        </div>
-      ) : null}
+      <div
+        className={`collapsible-card__content${isOpen ? "" : " collapsible-card__content--collapsed"}`}
+        id={contentId}
+        hidden={!isOpen}
+        aria-hidden={!isOpen}
+      >
+        {children}
+      </div>
     </section>
   )
 }
