@@ -14,13 +14,6 @@ const cards = [
     linkLabel: "View projects"
   },
   {
-    title: "Analytics",
-    description:
-      "Explore daily pre-screening completions and completion times to monitor how reviews progress over time.",
-    to: "/analytics",
-    linkLabel: "View analytics"
-  },
-  {
     title: "Start a new project",
     description:
       "Work with the copilot to start your project and initiate a pre-screening process to kick off permitting (simulated, of course).",
