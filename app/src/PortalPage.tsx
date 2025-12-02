@@ -24,6 +24,7 @@ import {
   PermittingChecklistSection,
   type PermittingChecklistItem
 } from "./components/PermittingChecklistSection"
+import { CollapsibleCard } from "./components/CollapsibleCard"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
@@ -2395,102 +2396,107 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             />
             {locationFieldDetail ? (
               <LocationSection
-              title={locationFieldDetail.title}
-              description={locationFieldDetail.description}
-              placeholder={locationFieldDetail.placeholder}
-              rows={locationFieldDetail.rows}
-              locationText={formData.location_text}
-              geometry={formData.location_object}
-              activeUploadFileName={projectGisUpload.uploadedFile?.fileName}
-              enableFileUpload
-              onLocationTextChange={handleLocationTextChange}
-              onLocationGeometryChange={handleLocationGeometryChange}
-            />
-          ) : null}
-          <div className="form-panel">
-            <Form<ProjectFormData>
-              schema={projectSchema}
-              uiSchema={projectUiSchema}
-              validator={validator}
-              formData={formData}
-              onChange={handleChange}
-              onSubmit={handleSubmit}
-              liveValidate
+                title={locationFieldDetail.title}
+                description={locationFieldDetail.description}
+                placeholder={locationFieldDetail.placeholder}
+                rows={locationFieldDetail.rows}
+                locationText={formData.location_text}
+                geometry={formData.location_object}
+                activeUploadFileName={projectGisUpload.uploadedFile?.fileName}
+                enableFileUpload
+                onLocationTextChange={handleLocationTextChange}
+                onLocationGeometryChange={handleLocationGeometryChange}
+              />
+            ) : null}
+            <CollapsibleCard
+              className="form-panel"
+              title="Project form"
+              description="Complete the CEQ project fields."
+              ariaLabel="Project form"
             >
-              <div className="form-panel__actions">
-                {documentUploadStatus ? (
-                  <span
-                    className={`form-panel__status-message status${
-                      documentUploadStatus.type === "error" ? " status--error" : ""
-                    }`}
-                    aria-live="polite"
-                  >
-                    {documentUploadStatus.message}
-                  </span>
-                ) : null}
-                <div className="form-panel__actions-group">
-                  <button type="submit" className="usa-button primary" disabled={isSaving}>
-                    {isSaving ? "Saving…" : "Save project snapshot"}
-                  </button>
-                  <button
-                    type="button"
-                    className="usa-button usa-button--outline secondary"
-                    onClick={handleOpenDocumentModal}
-                    disabled={!canUploadDocument}
-                    title={
-                      !canUploadDocument
-                        ? "Save the project snapshot before uploading documents."
-                        : undefined
-                    }
-                  >
-                    Upload supporting document
-                  </button>
-                </div>
-                {supportingDocuments.length > 0 ? (
-                  <div className="supporting-documents" aria-live="polite">
-                    <p className="supporting-documents__heading">Uploaded documents</p>
-                    <ul className="supporting-documents__list">
-                      {supportingDocuments.map((document) => {
-                        const uploadedAt = formatDocumentTimestamp(document.uploadedAt)
-                        const fileSizeLabel = formatFileSize(document.fileSize)
-                        const metaParts: string[] = []
-                        if (document.fileName) {
-                          metaParts.push(document.fileName)
-                        }
-                        if (fileSizeLabel) {
-                          metaParts.push(fileSizeLabel)
-                        }
-                        if (uploadedAt) {
-                          metaParts.push(`Uploaded ${uploadedAt}`)
-                        }
-                        const metaText = metaParts.join(" • ")
-                        return (
-                          <li key={document.id} className="supporting-documents__item">
-                            <a
-                              className="supporting-documents__link"
-                              href={document.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {document.title}
-                            </a>
-                            {metaText ? <span className="supporting-documents__meta">{metaText}</span> : null}
-                          </li>
-                        )
-                      })}
-                    </ul>
+              <Form<ProjectFormData>
+                schema={projectSchema}
+                uiSchema={projectUiSchema}
+                validator={validator}
+                formData={formData}
+                onChange={handleChange}
+                onSubmit={handleSubmit}
+                liveValidate
+              >
+                <div className="form-panel__actions">
+                  {documentUploadStatus ? (
+                    <span
+                      className={`form-panel__status-message status${
+                        documentUploadStatus.type === "error" ? " status--error" : ""
+                      }`}
+                      aria-live="polite"
+                    >
+                      {documentUploadStatus.message}
+                    </span>
+                  ) : null}
+                  <div className="form-panel__actions-group">
+                    <button type="submit" className="usa-button primary" disabled={isSaving}>
+                      {isSaving ? "Saving…" : "Save project snapshot"}
+                    </button>
+                    <button
+                      type="button"
+                      className="usa-button usa-button--outline secondary"
+                      onClick={handleOpenDocumentModal}
+                      disabled={!canUploadDocument}
+                      title={
+                        !canUploadDocument
+                          ? "Save the project snapshot before uploading documents."
+                          : undefined
+                      }
+                    >
+                      Upload supporting document
+                    </button>
                   </div>
-                ) : null}
-              </div>
-            </Form>
-          </div>
-          <PermittingChecklistSection
-            items={permittingChecklist}
-            onAddItem={handleAddChecklistItem}
-            onToggleItem={handleToggleChecklistItem}
-            onRemoveItem={handleRemoveChecklistItem}
-            onBulkAddFromSeed={handleBulkAddFromSeed}
-          />
+                  {supportingDocuments.length > 0 ? (
+                    <div className="supporting-documents" aria-live="polite">
+                      <p className="supporting-documents__heading">Uploaded documents</p>
+                      <ul className="supporting-documents__list">
+                        {supportingDocuments.map((document) => {
+                          const uploadedAt = formatDocumentTimestamp(document.uploadedAt)
+                          const fileSizeLabel = formatFileSize(document.fileSize)
+                          const metaParts: string[] = []
+                          if (document.fileName) {
+                            metaParts.push(document.fileName)
+                          }
+                          if (fileSizeLabel) {
+                            metaParts.push(fileSizeLabel)
+                          }
+                          if (uploadedAt) {
+                            metaParts.push(`Uploaded ${uploadedAt}`)
+                          }
+                          const metaText = metaParts.join(" • ")
+                          return (
+                            <li key={document.id} className="supporting-documents__item">
+                              <a
+                                className="supporting-documents__link"
+                                href={document.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {document.title}
+                              </a>
+                              {metaText ? <span className="supporting-documents__meta">{metaText}</span> : null}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              </Form>
+            </CollapsibleCard>
+            <PermittingChecklistSection
+              items={permittingChecklist}
+              onAddItem={handleAddChecklistItem}
+              onToggleItem={handleToggleChecklistItem}
+              onRemoveItem={handleRemoveChecklistItem}
+              onBulkAddFromSeed={handleBulkAddFromSeed}
+            />
             <NepaReviewSection
               values={{
                 nepa_categorical_exclusion_code: formData.nepa_categorical_exclusion_code,

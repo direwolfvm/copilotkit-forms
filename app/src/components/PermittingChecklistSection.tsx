@@ -1,5 +1,7 @@
 import { type FormEvent, useMemo, useState } from "react"
 
+import { CollapsibleCard } from "./CollapsibleCard"
+
 export type PermittingChecklistItem = {
   id: string
   label: string
@@ -38,15 +40,11 @@ export function PermittingChecklistSection({
   }
 
   return (
-    <section className="checklist-panel">
-      <header className="checklist-panel__header">
-        <div>
-          <h2>Permitting checklist</h2>
-          <p>
-            Track anticipated permits and authorizations alongside the project form. Use the Copilot to
-            suggest items based on project scope, or add your own below.
-          </p>
-        </div>
+    <CollapsibleCard
+      className="checklist-panel"
+      title="Permitting checklist"
+      description="Track anticipated permits and authorizations alongside the project form. Use the Copilot to suggest items based on project scope, or add your own below."
+      actions={
         <div className="checklist-panel__summary" aria-live="polite">
           {items.length ? (
             <span>
@@ -56,8 +54,8 @@ export function PermittingChecklistSection({
             <span>No checklist items yet</span>
           )}
         </div>
-      </header>
-
+      }
+    >
       <form className="checklist-panel__form" onSubmit={handleSubmit}>
         <label htmlFor="permitting-checklist-input" className="visually-hidden">
           Add permitting checklist item
@@ -120,6 +118,6 @@ export function PermittingChecklistSection({
           </ul>
         )}
       </div>
-    </section>
+    </CollapsibleCard>
   )
 }

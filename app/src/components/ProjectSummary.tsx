@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 
 import type { ProjectFormData, ProjectContact, SimpleProjectField } from "../schema/projectSchema"
 import { formatProjectSummary } from "../schema/projectSchema"
+import { CollapsibleCard } from "./CollapsibleCard"
 
 const overviewFields: Array<{ key: SimpleProjectField; label: string }> = [
   { key: "title", label: "Title" },
@@ -45,19 +46,12 @@ export function ProjectSummary({ data, actions }: ProjectSummaryProps) {
     typeof data.location_lat === "number" || typeof data.location_lon === "number"
 
   return (
-    <section className="summary-panel" aria-label="Project snapshot">
-      <header className="summary-header">
-        <div>
-          <h2>Project snapshot</h2>
-          <p className="summary-intro">
-            As you populate the form, this summary updates so it can be copied into status
-            reports or sent to collaborators.
-          </p>
-        </div>
-      </header>
-
-      {actions ? <div className="summary-panel__actions">{actions}</div> : null}
-
+    <CollapsibleCard
+      className="summary-panel"
+      title="Project snapshot"
+      description="As you populate the form, this summary updates so it can be copied into status reports or sent to collaborators."
+      actions={actions ? <div className="summary-panel__actions">{actions}</div> : null}
+    >
       <div className="summary-grid">
         <div className="summary-card">
           <h3>Overview</h3>
@@ -132,6 +126,6 @@ export function ProjectSummary({ data, actions }: ProjectSummaryProps) {
           <div className="summary-narrative">{summaryText}</div>
         </div>
       </div>
-    </section>
+    </CollapsibleCard>
   )
 }
