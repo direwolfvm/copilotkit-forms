@@ -69,6 +69,12 @@ export function LocationSection({
       className="location-section"
       title={title}
       aria-label="Project location details"
+      dataAttributes={{
+        "data-tour-id": "portal-location",
+        "data-tour-title": "Map the project",
+        "data-tour-intro":
+          "Describe the location and sketch or upload a geometry. The Copilot uses this footprint to generate geospatial checks."
+      }}
     >
       <div className="location-card">
         <div className="location-card__header">

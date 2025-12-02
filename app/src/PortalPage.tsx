@@ -4,6 +4,8 @@ import type { ChangeEvent, FormEvent, ReactNode } from "react"
 import Form from "@rjsf/core"
 import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
+import introJs from "intro.js"
+import "intro.js/introjs.css"
 import { CopilotKit, useCopilotAction, useCopilotReadable } from "@copilotkit/react-core"
 import { CopilotSidebar } from "@copilotkit/react-ui"
 import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
@@ -83,6 +85,8 @@ const SUPPORTED_DOCUMENT_ACCEPT = [
 const SUPPORTED_DOCUMENT_EXTENSION_SET = new Set<SupportedDocumentExtension>(
   SUPPORTED_DOCUMENT_EXTENSIONS
 )
+
+const PORTAL_TOUR_STORAGE_KEY = "portalSiteTourComplete"
 
 type SupportedDocumentExtension = (typeof SUPPORTED_DOCUMENT_EXTENSIONS)[number]
 type DocumentUploadStatus = { type: "success" | "error"; message: string }
@@ -213,6 +217,8 @@ type ProcessInformationState =
   | { status: "error"; message: string }
 type ProgressStatus = "not-started" | "in-progress" | "complete"
 
+type IntroStep = { element: HTMLElement; title?: string; intro: string }
+
 const PROGRESS_STATUS_LABELS: Record<ProgressStatus, string> = {
   "not-started": "Not started",
   "in-progress": "In progress",
@@ -297,7 +303,13 @@ function PortalProgressIndicator({ progress, hasSavedSnapshot }: PortalProgressI
   }
 
   return (
-    <section className="portal-progress" aria-label="Project progress">
+    <section
+      className="portal-progress"
+      aria-label="Project progress"
+      data-tour-id="portal-progress"
+      data-tour-title="Follow the workflow"
+      data-tour-intro="These status cards reflect whether you've saved a project snapshot and advanced pre-screening steps."
+    >
       <ProgressPanel
         name="Project snapshot"
         status={projectSnapshotStatus}
@@ -1040,6 +1052,81 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     status: "idle" | "loading" | "error"
     message?: string
   }>({ status: "idle" })
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    if (localStorage.getItem(PORTAL_TOUR_STORAGE_KEY) === "true") {
+      return
+    }
+
+    const copilotWrapper = document.querySelector<HTMLElement>(".copilotKitSidebarContentWrapper")
+    if (copilotWrapper) {
+      copilotWrapper.dataset.tourId = copilotWrapper.dataset.tourId ?? "portal-copilot"
+      copilotWrapper.dataset.tourTitle =
+        copilotWrapper.dataset.tourTitle ?? "Work with the Copilot"
+      copilotWrapper.dataset.tourIntro =
+        copilotWrapper.dataset.tourIntro ??
+        "Open the Copilot pane to describe your project conversationally. It can map your notes into the form and checklist."
+    }
+
+    const stepSelectors = [
+      "[data-tour-id='portal-copilot']",
+      "[data-tour-id='portal-progress']",
+      "[data-tour-id='portal-summary']",
+      "[data-tour-id='portal-location']",
+      "[data-tour-id='portal-form']",
+      "[data-tour-id='portal-checklist']",
+      "[data-tour-id='portal-nepa']"
+    ]
+
+    const steps = stepSelectors.reduce<IntroStep[]>((collectedSteps, selector) => {
+      const element = document.querySelector<HTMLElement>(selector)
+      if (!element) {
+        return collectedSteps
+      }
+      const intro = element.dataset.tourIntro ?? ""
+      if (!intro.trim()) {
+        return collectedSteps
+      }
+      collectedSteps.push({ element, title: element.dataset.tourTitle, intro })
+      return collectedSteps
+    }, [])
+
+    if (!steps.length) {
+      return
+    }
+
+    const intro = introJs()
+
+    intro.setOptions({
+      steps,
+      showProgress: true,
+      showBullets: false,
+      disableInteraction: true,
+      exitOnOverlayClick: true,
+      nextLabel: "Next",
+      prevLabel: "Back",
+      doneLabel: "Finish",
+      tooltipClass: "site-tour__tooltip",
+      highlightClass: "site-tour__highlight"
+    })
+
+    const markTourComplete = () => {
+      localStorage.setItem(PORTAL_TOUR_STORAGE_KEY, "true")
+    }
+
+    intro.oncomplete(markTourComplete)
+    intro.onexit(markTourComplete)
+
+    intro.start()
+
+    return () => {
+      intro.exit()
+    }
+  }, [])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -2413,6 +2500,12 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               title="Project form"
               description="Complete the CEQ project fields."
               ariaLabel="Project form"
+              dataAttributes={{
+                "data-tour-id": "portal-form",
+                "data-tour-title": "Fill out the CEQ form",
+                "data-tour-intro":
+                  "Work through the structured fields or ask the Copilot to take your narrative and populate the schema for you."
+              }}
             >
               <Form<ProjectFormData>
                 schema={projectSchema}

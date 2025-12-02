@@ -10,6 +10,7 @@ interface CollapsibleCardProps {
   defaultExpanded?: boolean
   headingLevel?: 2 | 3 | 4
   ariaLabel?: string
+  dataAttributes?: Record<string, string | number | boolean | undefined>
 }
 
 export function CollapsibleCard({
@@ -20,7 +21,8 @@ export function CollapsibleCard({
   className,
   defaultExpanded = false,
   headingLevel = 2,
-  ariaLabel = title
+  ariaLabel = title,
+  dataAttributes
 }: CollapsibleCardProps) {
   const [isOpen, setIsOpen] = useState(defaultExpanded)
   const contentId = useId()
@@ -36,7 +38,7 @@ export function CollapsibleCard({
     .join(" ")
 
   return (
-    <section className={classNames} aria-label={ariaLabel}>
+    <section className={classNames} aria-label={ariaLabel} {...(dataAttributes ?? {})}>
       <div className="collapsible-card__header">
         <div className="collapsible-card__title-wrapper">
           <button

@@ -52,6 +52,12 @@ export function ProjectSummary({ data, actions }: ProjectSummaryProps) {
       description="As you populate the form, this summary updates so it can be copied into status reports or sent to collaborators."
       actions={actions ? <div className="summary-panel__actions">{actions}</div> : null}
       defaultExpanded
+      dataAttributes={{
+        "data-tour-id": "portal-summary",
+        "data-tour-title": "Snapshot updates",
+        "data-tour-intro":
+          "Key fields and a quick narrative update in this card as you or the Copilot provide more project details."
+      }}
     >
       <div className="summary-grid">
         <div className="summary-card">
