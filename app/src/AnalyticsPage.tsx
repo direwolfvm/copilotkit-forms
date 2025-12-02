@@ -387,6 +387,7 @@ function AnalyticsContent() {
                             name="Completed processes"
                             stroke="#1f4f99"
                             strokeWidth={2}
+                            connectNulls
                             dot={false}
                             yAxisId="left"
                           />
@@ -404,6 +405,7 @@ function AnalyticsContent() {
                             name="Average completion time"
                             stroke="#f08a24"
                             strokeWidth={2}
+                            connectNulls
                             dot={false}
                             yAxisId="right"
                           />
