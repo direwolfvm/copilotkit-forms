@@ -226,6 +226,17 @@ function Layout() {
               About
             </NavLink>
             <NavLink
+              to="/portal"
+              data-tour="nav-link"
+              data-tour-title="Start a new project"
+              data-tour-intro="Work with the copilot to kick off a simulated pre-screening."
+              className={({ isActive }) =>
+                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
+              }
+            >
+              Project Portal
+            </NavLink>
+            <NavLink
               to="/projects"
               data-tour="nav-link"
               data-tour-title="Projects overview"
@@ -246,17 +257,6 @@ function Layout() {
               }
             >
               Analytics
-            </NavLink>
-            <NavLink
-              to="/portal"
-              data-tour="nav-link"
-              data-tour-title="Start a new project"
-              data-tour-intro="Work with the copilot to kick off a simulated pre-screening."
-              className={({ isActive }) =>
-                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
-              }
-            >
-              Project Portal
             </NavLink>
             <NavLink
               to="/resource-check"
