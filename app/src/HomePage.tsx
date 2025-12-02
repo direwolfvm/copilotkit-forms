@@ -1,6 +1,6 @@
 import introJs from "intro.js"
 import "intro.js/introjs.css"
-import { useEffect } from "react"
+import { useCallback, useEffect } from "react"
 import { Link } from "react-router-dom"
 
 import { ArcgisSketchMap } from "./components/ArcgisSketchMap"
@@ -53,21 +53,13 @@ function noopGeometryChange() {
 }
 
 export default function HomePage() {
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return
-    }
-
-    if (localStorage.getItem(TOUR_STORAGE_KEY) === "true") {
-      return
-    }
-
+  const startTour = useCallback(() => {
     const navLinks = Array.from(
       document.querySelectorAll<HTMLElement>("[data-tour='nav-link']")
     ).filter((element) => element.dataset.tourIntro)
 
     if (!navLinks.length) {
-      return
+      return null
     }
 
     const intro = introJs()
@@ -98,16 +90,37 @@ export default function HomePage() {
 
     intro.start()
 
-    return () => {
-      intro.exit()
-    }
+    return intro
   }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    if (localStorage.getItem(TOUR_STORAGE_KEY) === "true") {
+      return
+    }
+
+    const intro = startTour()
+
+    return () => {
+      intro?.exit()
+    }
+  }, [startTour])
 
   return (
     <div className="home">
       <section className="home__hero" aria-labelledby="home-hero-heading">
-        <p className="home__eyebrow">Welcome to HelpPermit.me</p>
-        <h1 id="home-hero-heading">Explore technology in permitting and environmental review</h1>
+        <div className="home__hero-top">
+          <div className="home__hero-headings">
+            <p className="home__eyebrow">Welcome to HelpPermit.me</p>
+            <h1 id="home-hero-heading">Explore technology in permitting and environmental review</h1>
+          </div>
+          <button type="button" className="home__tour-button" onClick={() => startTour()}>
+            Take a Tour
+          </button>
+        </div>
         <p className="home__intro">
           HelpPermit.me is an  demo that showcases how technology tools like AI can streamline project intake and review. Explore the
           tools below to see how project tracking, application portals, and geospatial screening tools come together in one place.
