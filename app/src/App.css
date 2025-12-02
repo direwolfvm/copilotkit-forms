@@ -337,6 +337,21 @@
   box-shadow: 0 18px 46px -30px rgba(7, 29, 66, 0.45);
 }
 
+.usa-button.secondary {
+  color: var(--accent-contrast);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 84%, #fff 16%), var(--accent-dark));
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--accent-dark) 30%);
+  box-shadow: 0 18px 46px -28px rgba(7, 29, 66, 0.55);
+}
+
+.usa-button.secondary:hover,
+.usa-button.secondary:focus-visible {
+  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 88%, #fff 12%), var(--accent-dark));
+  border-color: var(--accent-dark);
+  box-shadow: 0 20px 52px -28px rgba(7, 29, 66, 0.6);
+}
+
 .status {
   font-size: 0.9rem;
   color: color-mix(in srgb, var(--color-text-muted) 75%, var(--color-text) 25%);
