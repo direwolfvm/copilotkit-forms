@@ -443,6 +443,10 @@
   gap: 1.25rem;
 }
 
+.collapsible-card__content--collapsed {
+  display: none;
+}
+
 .form-panel {
   background: var(--surface-muted);
   border: 1px solid var(--border);
