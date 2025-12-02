@@ -1,3 +1,6 @@
+import introJs from "intro.js"
+import "intro.js/introjs.css"
+import { useEffect } from "react"
 import { Link } from "react-router-dom"
 
 import { ArcgisSketchMap } from "./components/ArcgisSketchMap"
@@ -55,6 +58,45 @@ function noopGeometryChange() {
 }
 
 export default function HomePage() {
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const navLinks = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-tour='nav-link']")
+    ).filter((element) => element.dataset.tourIntro)
+
+    if (!navLinks.length) {
+      return
+    }
+
+    const intro = introJs()
+
+    intro.setOptions({
+      steps: navLinks.map((element) => ({
+        element,
+        title: element.dataset.tourTitle,
+        intro: element.dataset.tourIntro ?? ""
+      })),
+      showProgress: true,
+      showBullets: false,
+      disableInteraction: true,
+      exitOnOverlayClick: true,
+      nextLabel: "Next",
+      prevLabel: "Back",
+      doneLabel: "Finish",
+      tooltipClass: "site-tour__tooltip",
+      highlightClass: "site-tour__highlight"
+    })
+
+    intro.start()
+
+    return () => {
+      intro.exit()
+    }
+  }, [])
+
   return (
     <div className="home">
       <section className="home__hero" aria-labelledby="home-hero-heading">

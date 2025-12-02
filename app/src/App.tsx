@@ -216,6 +216,9 @@ function Layout() {
           >
             <NavLink
               to="/about"
+              data-tour="nav-link"
+              data-tour-title="About HelpPermit.me"
+              data-tour-intro="Learn about the purpose of this demo experience."
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
               }
@@ -224,6 +227,9 @@ function Layout() {
             </NavLink>
             <NavLink
               to="/projects"
+              data-tour="nav-link"
+              data-tour-title="Projects overview"
+              data-tour-intro="See active permit applications and track their milestones."
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
               }
@@ -232,6 +238,9 @@ function Layout() {
             </NavLink>
             <NavLink
               to="/analytics"
+              data-tour="nav-link"
+              data-tour-title="Analytics"
+              data-tour-intro="Review pre-screening activity and turnaround times."
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
               }
@@ -240,6 +249,9 @@ function Layout() {
             </NavLink>
             <NavLink
               to="/portal"
+              data-tour="nav-link"
+              data-tour-title="Start a new project"
+              data-tour-intro="Work with the copilot to kick off a simulated pre-screening."
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
               }
@@ -248,6 +260,9 @@ function Layout() {
             </NavLink>
             <NavLink
               to="/resource-check"
+              data-tour="nav-link"
+              data-tour-title="Resource check"
+              data-tour-intro="Check how a footprint may interact with natural resources."
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
               }
@@ -256,6 +271,9 @@ function Layout() {
             </NavLink>
             <NavLink
               to="/developer-tools"
+              data-tour="nav-link"
+              data-tour-title="Developer tools"
+              data-tour-intro="See how CopilotKit integrations power this experience."
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
               }
@@ -265,6 +283,9 @@ function Layout() {
             <NavLink
               to="/settings"
               aria-label="Settings"
+              data-tour="nav-link"
+              data-tour-title="Settings"
+              data-tour-intro="Adjust profile preferences and site options."
               className={({ isActive }) =>
                 isActive
                   ? "site-nav__link site-nav__link--active site-nav__link--icon"
