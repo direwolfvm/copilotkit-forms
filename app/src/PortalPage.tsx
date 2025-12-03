@@ -1414,12 +1414,18 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     const geospatialComplete =
       geospatialResults.nepassist.status === "success" && geospatialResults.ipac.status === "success"
 
+    const hasChecklistItems = permittingChecklist.length > 0
+
     if (!geospatialComplete) {
       return { tone: "danger", text: "Run the geospatial screen" }
     }
 
     if (portalProgress.preScreening.completedAt) {
       return { tone: "success", text: "Pre-screening submitted" }
+    }
+
+    if (!hasChecklistItems) {
+      return { tone: "danger", text: "Add permitting checklist items" }
     }
 
     if (!hasSavedSnapshot) {
@@ -1436,6 +1442,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     geospatialResults,
     hasSavedSnapshot,
     nepaFieldConfigs,
+    permittingChecklist.length,
     portalProgress.preScreening
   ])
 
