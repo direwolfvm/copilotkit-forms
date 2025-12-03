@@ -3,7 +3,7 @@ import { useCallback, useId, useState } from "react"
 import type { ProjectFormData } from "../schema/projectSchema"
 import { ArcgisSketchMap } from "./ArcgisSketchMap"
 import type { GeometryChange, GeometrySource, UploadedGisFile } from "../types/gis"
-import { CollapsibleCard } from "./CollapsibleCard"
+import { CollapsibleCard, type CollapsibleCardStatus } from "./CollapsibleCard"
 
 interface LocationSectionProps {
   title: string
@@ -65,6 +65,25 @@ export function LocationSection({
   const textareaId = useId()
   const [isCardOpen, setIsCardOpen] = useState(false)
 
+  const status: CollapsibleCardStatus = (() => {
+    const missing: string[] = []
+
+    if (!locationText || locationText.trim().length === 0) {
+      missing.push("Add a location description")
+    }
+
+    if (!geometry || geometry.trim().length === 0) {
+      missing.push("Draw or upload a map shape")
+    }
+
+    if (missing.length > 0) {
+      const text = missing.length === 1 ? missing[0] : `${missing[0]} and ${missing[1]}`
+      return { tone: "danger", text }
+    }
+
+    return { tone: "success", text: "Location details captured" }
+  })()
+
   return (
     <CollapsibleCard
       className="location-section"
@@ -78,6 +97,7 @@ export function LocationSection({
         "data-tour-step": 2
       }}
       onToggle={setIsCardOpen}
+      status={status}
     >
       <div className="location-card">
         <div className="location-card__header">

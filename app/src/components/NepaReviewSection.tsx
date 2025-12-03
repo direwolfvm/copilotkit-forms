@@ -8,7 +8,7 @@ import type {
   IpacSummary,
   NepassistSummaryItem
 } from "../types/geospatial"
-import { CollapsibleCard } from "./CollapsibleCard"
+import { CollapsibleCard, type CollapsibleCardStatus } from "./CollapsibleCard"
 
 type NepaFieldKey =
   | "nepa_categorical_exclusion_code"
@@ -45,6 +45,7 @@ interface NepaReviewSectionProps {
   canSubmitPreScreening: boolean
   onShowProcessInformation: () => void
   isProcessInformationLoading: boolean
+  status?: CollapsibleCardStatus
 }
 
 function NepassistSummaryTable({ items }: { items: NepassistSummaryItem[] }) {
@@ -194,7 +195,8 @@ export function NepaReviewSection({
   isProjectSaving,
   canSubmitPreScreening,
   onShowProcessInformation,
-  isProcessInformationLoading
+  isProcessInformationLoading,
+  status
 }: NepaReviewSectionProps) {
   const categoricalId = useId()
   const conformanceId = useId()
@@ -251,6 +253,7 @@ export function NepaReviewSection({
       title="NEPA review"
       description="Capture information related to the NEPA review process."
       ariaLabel="NEPA review details"
+      status={status}
       dataAttributes={{
         "data-tour-id": "portal-nepa",
         "data-tour-title": "Review NEPA factors",
