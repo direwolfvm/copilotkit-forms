@@ -12,7 +12,11 @@ import {
   useCopilotAction,
   useCopilotReadable
 } from "@copilotkit/react-core"
-import { CopilotSidebar } from "@copilotkit/react-ui"
+import {
+  CopilotSidebar,
+  RenderSuggestion,
+  type RenderSuggestionsListProps
+} from "@copilotkit/react-ui"
 import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import "@copilotkit/react-ui/styles.css"
 import "./copilot-overrides.css"
@@ -2024,9 +2028,46 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     []
   )
 
-  const visibleConversationStarters = useMemo(
-    () => (conversationStartersHidden ? [] : conversationStarters),
-    [conversationStarters, conversationStartersHidden]
+  const ConversationStartersList = useCallback(
+    ({ suggestions, onSuggestionClick }: RenderSuggestionsListProps) => (
+      <div className="conversation-starters-panel">
+        <div className="conversation-starters-panel__header">
+          <span className="conversation-starters-panel__title">Conversation starters</span>
+          <button
+            type="button"
+            className="conversation-starters-panel__dismiss"
+            onClick={() => setConversationStartersHidden(true)}
+            aria-label="Hide conversation starters"
+          >
+            ×
+          </button>
+        </div>
+
+        {conversationStartersHidden ? (
+          <button
+            type="button"
+            className="conversation-starters-panel__show"
+            onClick={() => setConversationStartersHidden(false)}
+          >
+            Show conversation starters
+          </button>
+        ) : (
+          <div className="suggestions">
+            {suggestions.map((suggestion, index) => (
+              <RenderSuggestion
+                key={index}
+                title={suggestion.title}
+                message={suggestion.message}
+                partial={suggestion.partial}
+                className={suggestion.className}
+                onClick={() => onSuggestionClick(suggestion.message)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    ),
+    [conversationStartersHidden]
   )
 
   const handleChange = (event: IChangeEvent<ProjectFormData>) => {
@@ -2498,10 +2539,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   return (
     <CopilotSidebar
       instructions={instructions}
-      suggestions={visibleConversationStarters}
+      suggestions={conversationStarters}
       defaultOpen
       clickOutsideToClose={false}
       labels={{ title: "Permitting Copilot" }}
+      RenderSuggestionsList={ConversationStartersList}
     >
       <main className="app">
         <div className="app__inner">
@@ -2514,14 +2556,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               </p>
             </div>
             <div className="actions">
-              <button
-                type="button"
-                className="usa-button usa-button--unstyled conversation-starters-toggle"
-                onClick={() => setConversationStartersHidden((previous) => !previous)}
-                aria-pressed={conversationStartersHidden}
-              >
-                {conversationStartersHidden ? "Show conversation starters" : "Dismiss conversation starters"}
-              </button>
               <button type="button" className="usa-button secondary" onClick={() => startPortalTour()}>
                 Take a tour
               </button>
