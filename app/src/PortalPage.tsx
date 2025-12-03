@@ -6,8 +6,12 @@ import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
 import introJs from "intro.js"
 import "intro.js/introjs.css"
-import { CopilotKit, useCopilotAction, useCopilotReadable } from "@copilotkit/react-core"
-import type { SuggestionItem } from "@copilotkit/react-core"
+import {
+  CopilotKit,
+  type SuggestionItem,
+  useCopilotAction,
+  useCopilotReadable
+} from "@copilotkit/react-core"
 import { CopilotSidebar } from "@copilotkit/react-ui"
 import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import "@copilotkit/react-ui/styles.css"
