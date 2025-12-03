@@ -182,7 +182,7 @@
   padding: 0.55rem 1.05rem;
   font-size: 0.9rem;
   background: color-mix(in srgb, var(--surface) 94%, rgba(31, 79, 153, 0.1) 6%);
-  border: 1px solid color-mix(in srgb, var(--border) 75%, rgba(31, 79, 153, 0.2) 25%);
+  border: none;
   color: color-mix(in srgb, var(--color-text-muted) 78%, var(--color-text) 22%);
   box-shadow: 0 14px 28px -26px rgba(7, 29, 66, 0.35);
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
@@ -191,7 +191,6 @@
 .copilotKitSidebar .copilotKitMessages footer .suggestions button:not(:disabled):hover,
 .copilotKitSidebar .copilotKitMessages footer .suggestions button:not(:disabled):focus-visible {
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 80%, white 20%), var(--accent));
-  border-color: color-mix(in srgb, var(--accent-dark) 55%, transparent 45%);
   color: var(--accent-contrast);
   box-shadow: 0 18px 40px -30px rgba(7, 29, 66, 0.45);
   transform: translateY(-1px);
