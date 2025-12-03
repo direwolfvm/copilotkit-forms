@@ -4241,6 +4241,37 @@ function applyDecisionPayloadToState({
   }
 }
 
+async function deleteSupabaseRecords({
+  supabaseUrl,
+  supabaseAnonKey,
+  endpoint,
+  resourceDescription
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  endpoint: URL
+  resourceDescription: string
+}): Promise<void> {
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "DELETE",
+    headers: { Prefer: "count=exact" }
+  })
+
+  logSupabaseRequest(resourceDescription, url, init)
+  const response = await fetch(url, init)
+  const responseText = await response.text()
+  logSupabaseResponse(resourceDescription, url, response, responseText)
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to remove ${resourceDescription} (${response.status}): ${errorDetail}`
+        : `Failed to remove ${resourceDescription} (${response.status}).`
+    )
+  }
+}
+
 async function fetchSupabaseList<T>(
   supabaseUrl: string,
   supabaseAnonKey: string,
@@ -4899,6 +4930,134 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
   hierarchy.sort((a, b) => compareByTimestampDesc(a.project.lastUpdated, b.project.lastUpdated))
 
   return hierarchy
+}
+
+async function deleteProjectDocuments({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+}): Promise<void> {
+  const endpoint = new URL("/rest/v1/document", supabaseUrl)
+  endpoint.searchParams.set("parent_process_id", `eq.${processInstanceId}`)
+  endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+
+  await deleteSupabaseRecords({
+    supabaseUrl,
+    supabaseAnonKey,
+    endpoint,
+    resourceDescription: "documents"
+  })
+}
+
+async function deleteCaseEvents({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+}): Promise<void> {
+  const endpoint = new URL("/rest/v1/case_event", supabaseUrl)
+  endpoint.searchParams.set("parent_process_id", `eq.${processInstanceId}`)
+  endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+
+  await deleteSupabaseRecords({
+    supabaseUrl,
+    supabaseAnonKey,
+    endpoint,
+    resourceDescription: "case events"
+  })
+}
+
+async function deleteProcessInstances({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  projectId: number
+}): Promise<void> {
+  const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
+  endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+  endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+
+  await deleteSupabaseRecords({
+    supabaseUrl,
+    supabaseAnonKey,
+    endpoint,
+    resourceDescription: "process instances"
+  })
+}
+
+async function deleteProjectRecord({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  projectId: number
+}): Promise<void> {
+  const endpoint = new URL("/rest/v1/project", supabaseUrl)
+  endpoint.searchParams.set("id", `eq.${projectId}`)
+  endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+
+  await deleteSupabaseRecords({
+    supabaseUrl,
+    supabaseAnonKey,
+    endpoint,
+    resourceDescription: "project"
+  })
+}
+
+export async function deleteProjectAndRelatedData(projectId: number): Promise<void> {
+  if (!Number.isFinite(projectId)) {
+    throw new ProjectPersistenceError("Project identifier must be numeric.")
+  }
+
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const processes = await fetchSupabaseList<ProcessInstanceRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_instance",
+    "process instances",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id")
+      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+    }
+  )
+
+  const processIds = processes
+    .map((row) => parseNumericId(row.id))
+    .filter((id): id is number => typeof id === "number")
+
+  for (const processId of processIds) {
+    await deleteProjectDocuments({ supabaseUrl, supabaseAnonKey, processInstanceId: processId })
+    await deleteExistingProcessDecisionPayloadRecords({
+      supabaseUrl,
+      supabaseAnonKey,
+      processInstanceId: processId
+    })
+    await deleteCaseEvents({ supabaseUrl, supabaseAnonKey, processInstanceId: processId })
+  }
+
+  await deleteProjectGisDataForProject({ supabaseUrl, supabaseAnonKey, projectId })
+  await deleteProcessInstances({ supabaseUrl, supabaseAnonKey, projectId })
+  await deleteProjectRecord({ supabaseUrl, supabaseAnonKey, projectId })
 }
 
 export async function loadProjectPortalState(projectId: number): Promise<LoadedProjectPortalState> {
