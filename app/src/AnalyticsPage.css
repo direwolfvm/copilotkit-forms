@@ -140,9 +140,101 @@
   color: color-mix(in srgb, var(--color-heading) 85%, var(--color-text) 15%);
 }
 
+.analytics-hero {
+  position: relative;
+  margin: -3rem -2rem 2.25rem;
+  padding: 2.75rem 3rem;
+  border-radius: 28px 28px 0 0;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--theme-navy-800), var(--theme-navy-500));
+  color: #f5f7fb;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.analytics-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.12), transparent 36%),
+    radial-gradient(circle at 84% 10%, rgba(255, 255, 255, 0.14), transparent 32%);
+  pointer-events: none;
+}
+
+.analytics-hero__content {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+}
+
+.analytics-hero__eyebrow {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(245, 247, 251, 0.82);
+}
+
+.analytics-hero__title {
+  margin: 0;
+  font-size: clamp(2.25rem, 2.8vw + 1.1rem, 3rem);
+  letter-spacing: -0.02em;
+}
+
+.analytics-hero__lede {
+  margin: 0.75rem 0 0.6rem;
+  color: rgba(245, 247, 251, 0.9);
+  max-width: 54ch;
+  line-height: 1.7;
+}
+
+.analytics-hero__meta {
+  margin: 0.35rem 0 0;
+  font-weight: 600;
+  color: rgba(245, 247, 251, 0.92);
+}
+
+.analytics-hero__aside {
+  position: absolute;
+  top: 50%;
+  right: 3rem;
+  transform: translateY(-50%);
+  max-width: 260px;
+  padding: 1.25rem 1.35rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  color: #fefefe;
+  box-shadow: 0 18px 28px -22px rgba(0, 0, 0, 0.5);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.analytics-page .app__inner {
+  padding-top: 0;
+}
+
+.analytics-page {
+  padding-top: 0;
+}
+
 @media (max-width: 720px) {
   .analytics-card {
     padding: 1.5rem;
+  }
+
+  .analytics-hero {
+    margin-inline: -1.5rem;
+    padding: 2.25rem 1.5rem;
+    border-radius: 24px 24px 0 0;
+  }
+
+  .analytics-hero__aside {
+    position: relative;
+    top: auto;
+    right: auto;
+    transform: none;
+    margin-top: 1.35rem;
+    max-width: none;
   }
 
   .analytics-card__header {

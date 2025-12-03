@@ -254,6 +254,18 @@ function AnalyticsContent() {
     }
   }, [points])
 
+  const lastUpdatedLabel = useMemo(
+    () =>
+      summary.latestCompletionDate
+        ? formatDisplayDate(summary.latestCompletionDate, {
+            month: "short",
+            day: "numeric",
+            year: "numeric"
+          })
+        : "—",
+    [summary.latestCompletionDate]
+  )
+
   return (
     <CopilotSidebar
       instructions={ANALYTICS_INSTRUCTIONS}
@@ -261,18 +273,23 @@ function AnalyticsContent() {
       clickOutsideToClose={false}
       labels={{ title: "Analytics Copilot" }}
     >
-      <main className="app">
+      <main className="app analytics-page">
+        <div className="analytics-hero">
+          <div className="analytics-hero__content">
+            <p className="analytics-hero__eyebrow">Permit dashboard</p>
+            <h1 className="analytics-hero__title">Performance overview</h1>
+            <p className="analytics-hero__lede">
+              Track daily pre-screening completions and completion times. Use the copilot to unpack the
+              data and call out any gaps in the workflow.
+            </p>
+            <p className="analytics-hero__meta">Latest update: {lastUpdatedLabel}</p>
+          </div>
+          <div className="analytics-hero__aside">
+            Navigate between charting defaults and your hosted Metabase dashboard using the shortcut
+            links in the sidebar.
+          </div>
+        </div>
         <div className="app__inner">
-          <header className="app-header">
-            <div>
-              <h1>Analytics</h1>
-              <p>
-                Track daily pre-screening completions and the time it takes to finish each review. Use the
-                Copilot to interpret trends or spot gaps in the workflow.
-              </p>
-            </div>
-          </header>
-
           <section className="content">
             <article className="analytics-card">
               <header className="analytics-card__header">
