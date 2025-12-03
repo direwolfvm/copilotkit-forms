@@ -10,6 +10,8 @@ import DeveloperToolsPage from "./DeveloperToolsPage"
 import SettingsPage from "./SettingsPage"
 import AboutPage from "./AboutPage"
 import AnalyticsPage from "./AnalyticsPage"
+import { useHolidayTheme } from "./holidayThemeContext"
+import Snowfall from "./components/Snowfall"
 
 function Layout() {
   const bannerRef = useRef<HTMLElement | null>(null)
@@ -18,6 +20,7 @@ function Layout() {
   const [isNavOpen, setIsNavOpen] = useState(false)
   const location = useLocation()
   const currentYear = new Date().getFullYear()
+  const { isChristmasThemeEnabled } = useHolidayTheme()
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -141,6 +144,7 @@ function Layout() {
 
   return (
     <div className="site-shell">
+      {isChristmasThemeEnabled ? <Snowfall /> : null}
       <section ref={bannerRef} className="site-banner" aria-label="Website disclaimer">
         <div className="site-banner__inner">
           <div className="site-banner__bar">
@@ -210,14 +214,19 @@ function Layout() {
             <span className="site-nav-toggle__label">{isNavOpen ? "Close" : "Menu"}</span>
           </button>
           <nav
-            id="site-nav-primary"
-            className={`site-nav${isNavOpen ? " site-nav--open" : ""}`}
-            aria-label="Primary"
-          >
-            <NavLink
-              to="/about"
-              data-tour="nav-link"
-              data-tour-title="About HelpPermit.me"
+          id="site-nav-primary"
+          className={`site-nav${isNavOpen ? " site-nav--open" : ""}`}
+          aria-label="Primary"
+        >
+          {isChristmasThemeEnabled ? (
+            <span className="site-nav__holiday" aria-hidden="true" role="img">
+              ❄️ 🎄 🎅 🎁 ❄️
+            </span>
+          ) : null}
+          <NavLink
+            to="/about"
+            data-tour="nav-link"
+            data-tour-title="About HelpPermit.me"
               data-tour-intro="Learn about the purpose of this demo experience."
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"

@@ -7,6 +7,7 @@ import {
   fetchProjectHierarchy,
   type ProjectHierarchy
 } from "./utils/projectPersistence"
+import { useHolidayTheme } from "./holidayThemeContext"
 
 import "./App.css"
 
@@ -193,6 +194,7 @@ export default function SettingsPage() {
   const [projectLoadError, setProjectLoadError] = useState<string | null>(null)
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const { isChristmasThemeEnabled, setChristmasThemeEnabled } = useHolidayTheme()
 
   useEffect(() => {
     let isActive = true
@@ -251,6 +253,26 @@ export default function SettingsPage() {
             Switching to the Permitting ADK routes Copilot requests through the local <code>/api/custom-adk</code>
             proxy.
           </p>
+        </section>
+
+        <section className="settings__section" aria-labelledby="settings-theme-heading">
+          <h2 id="settings-theme-heading">Seasonal theme</h2>
+          <p className="settings__description">
+            Add a festive touch to HelpPermit.me with falling snowflakes and holiday cheer in the navigation.
+          </p>
+          <label className="settings__switch" htmlFor="settings-christmas-toggle">
+            <div className="settings__switch-text">
+              <span className="settings__label">Christmas theme</span>
+              <span className="settings__hint">Show falling snow and holiday emojis in the header.</span>
+            </div>
+            <input
+              id="settings-christmas-toggle"
+              className="settings__switch-input"
+              type="checkbox"
+              checked={isChristmasThemeEnabled}
+              onChange={(event) => setChristmasThemeEnabled(event.target.checked)}
+            />
+          </label>
         </section>
 
         <section className="settings__section settings__section--danger" aria-labelledby="settings-projects-heading">
