@@ -6,7 +6,12 @@ import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
 import introJs from "intro.js"
 import "intro.js/introjs.css"
-import { CopilotKit, useCopilotAction, useCopilotReadable } from "@copilotkit/react-core"
+import {
+  CopilotKit,
+  SuggestionItem,
+  useCopilotAction,
+  useCopilotReadable
+} from "@copilotkit/react-core"
 import { CopilotSidebar } from "@copilotkit/react-ui"
 import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import "@copilotkit/react-ui/styles.css"
@@ -1910,6 +1915,22 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     []
   )
 
+  const conversationStarters: SuggestionItem[] = useMemo(
+    () => [
+      {
+        title: "How do I start?",
+        message:
+          "How do I start? Describe how this project portal form works and what information I should provide."
+      },
+      {
+        title: "I have an idea for a project.",
+        message:
+          "I have an idea for a project. Ask me for the details you need and map them into the form and checklist."
+      }
+    ],
+    []
+  )
+
   const handleChange = (event: IChangeEvent<ProjectFormData>) => {
     setFormData((previous) =>
       applyGeneratedProjectId(event.formData ?? createEmptyProjectData(), previous?.id)
@@ -2379,6 +2400,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   return (
     <CopilotSidebar
       instructions={instructions}
+      suggestions={conversationStarters}
       defaultOpen
       clickOutsideToClose={false}
       labels={{ title: "Permitting Copilot" }}
