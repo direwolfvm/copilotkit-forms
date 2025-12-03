@@ -11,7 +11,6 @@ import {
   Legend,
   Line,
   ResponsiveContainer,
-  Scatter,
   Tooltip,
   XAxis,
   YAxis
@@ -39,6 +38,11 @@ const ANALYTICS_INSTRUCTIONS = [
   "Interpret completion volumes and average completion times to surface notable trends and anomalies.",
   "Reference missing data explicitly when gaps appear in the series."
 ].join("\n")
+
+const COMPLETIONS_COLOR = "#1f4f99"
+const COMPLETIONS_ACCENT_COLOR = "#0f2f66"
+const AVERAGE_COLOR = "#f08a24"
+const AVERAGE_ACCENT_COLOR = "#f4c95f"
 
 type LoadState = "idle" | "loading" | "success" | "error"
 
@@ -335,8 +339,8 @@ function AnalyticsContent() {
                 <div>
                   <h2 className="analytics-card__title">Daily pre-screening outcomes</h2>
                   <p className="analytics-card__subtitle">
-                    A scatter plot with connected series showing completed pre-screenings and the average
-                    completion time in days.
+                    A line chart with markers showing completed pre-screenings and the average completion
+                    time in days.
                   </p>
                 </div>
               </header>
@@ -356,27 +360,39 @@ function AnalyticsContent() {
                           margin={{ top: 16, right: 28, left: 12, bottom: 20 }}
                         >
                           <CartesianGrid stroke="rgba(7, 29, 66, 0.1)" strokeDasharray="3 3" />
-                          <XAxis dataKey="date" tickFormatter={formatAxisDate} tick={{ fontSize: 12 }} />
+                          <XAxis
+                            dataKey="date"
+                            tickFormatter={formatAxisDate}
+                            tick={{ fontSize: 12, fill: "#071d42" }}
+                          />
                           <YAxis
                             yAxisId="left"
                             allowDecimals={false}
-                            tick={{ fontSize: 12 }}
+                            tick={{ fontSize: 12, fill: COMPLETIONS_COLOR, fontWeight: 600 }}
+                            axisLine={{ stroke: COMPLETIONS_COLOR }}
+                            tickLine={{ stroke: COMPLETIONS_COLOR }}
                             label={{
                               value: "Completed processes",
                               angle: -90,
                               position: "insideLeft",
-                              offset: 12
+                              offset: 12,
+                              fill: COMPLETIONS_COLOR,
+                              fontWeight: 600
                             }}
                           />
                           <YAxis
                             yAxisId="right"
                             orientation="right"
-                            tick={{ fontSize: 12 }}
+                            tick={{ fontSize: 12, fill: AVERAGE_COLOR, fontWeight: 600 }}
+                            axisLine={{ stroke: AVERAGE_COLOR }}
+                            tickLine={{ stroke: AVERAGE_COLOR }}
                             label={{
                               value: "Avg completion (days)",
                               angle: 90,
                               position: "insideRight",
-                              offset: 12
+                              offset: 12,
+                              fill: AVERAGE_COLOR,
+                              fontWeight: 600
                             }}
                           />
                           <Tooltip content={<AnalyticsTooltip />} cursor={{ strokeDasharray: "3 3" }} />
@@ -385,37 +401,21 @@ function AnalyticsContent() {
                             type="monotone"
                             dataKey="completions"
                             name="Completed processes"
-                            stroke="#1f4f99"
+                            stroke={COMPLETIONS_COLOR}
                             strokeWidth={2}
                             connectNulls
-                            dot={false}
+                            dot={{ r: 4, fill: COMPLETIONS_COLOR, stroke: COMPLETIONS_ACCENT_COLOR, strokeWidth: 2 }}
                             yAxisId="left"
-                          />
-                          <Scatter
-                            yAxisId="left"
-                            dataKey="completions"
-                            name="Completed processes"
-                            fill="#1f4f99"
-                            stroke="#0f2f66"
-                            strokeWidth={1}
                           />
                           <Line
                             type="monotone"
                             dataKey="averageDays"
                             name="Average completion time"
-                            stroke="#f08a24"
+                            stroke={AVERAGE_COLOR}
                             strokeWidth={2}
                             connectNulls
-                            dot={false}
+                            dot={{ r: 4, fill: AVERAGE_ACCENT_COLOR, stroke: AVERAGE_COLOR, strokeWidth: 2 }}
                             yAxisId="right"
-                          />
-                          <Scatter
-                            yAxisId="right"
-                            dataKey="averageDays"
-                            name="Average completion time"
-                            fill="#f4c95f"
-                            stroke="#f08a24"
-                            strokeWidth={1}
                           />
                         </ComposedChart>
                       </ResponsiveContainer>
