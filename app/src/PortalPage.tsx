@@ -92,6 +92,7 @@ const SUPPORTED_DOCUMENT_EXTENSION_SET = new Set<SupportedDocumentExtension>(
 )
 
 const PORTAL_TOUR_STORAGE_KEY = "portalSiteTourComplete"
+const CONVERSATION_STARTERS_HIDDEN_KEY = "portalConversationStartersHidden"
 
 type SupportedDocumentExtension = (typeof SUPPORTED_DOCUMENT_EXTENSIONS)[number]
 type DocumentUploadStatus = { type: "success" | "error"; message: string }
@@ -1996,6 +1997,17 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     []
   )
 
+  const [conversationStartersHidden, setConversationStartersHidden] = useState(false)
+
+  useEffect(() => {
+    const storedValue = localStorage.getItem(CONVERSATION_STARTERS_HIDDEN_KEY)
+    setConversationStartersHidden(storedValue === "true")
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem(CONVERSATION_STARTERS_HIDDEN_KEY, conversationStartersHidden ? "true" : "false")
+  }, [conversationStartersHidden])
+
   const conversationStarters: SuggestionItem[] = useMemo(
     () => [
       {
@@ -2010,6 +2022,11 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       }
     ],
     []
+  )
+
+  const visibleConversationStarters = useMemo(
+    () => (conversationStartersHidden ? [] : conversationStarters),
+    [conversationStarters, conversationStartersHidden]
   )
 
   const handleChange = (event: IChangeEvent<ProjectFormData>) => {
@@ -2481,7 +2498,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   return (
     <CopilotSidebar
       instructions={instructions}
-      suggestions={conversationStarters}
+      suggestions={visibleConversationStarters}
       defaultOpen
       clickOutsideToClose={false}
       labels={{ title: "Permitting Copilot" }}
@@ -2497,6 +2514,14 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               </p>
             </div>
             <div className="actions">
+              <button
+                type="button"
+                className="usa-button usa-button--unstyled conversation-starters-toggle"
+                onClick={() => setConversationStartersHidden((previous) => !previous)}
+                aria-pressed={conversationStartersHidden}
+              >
+                {conversationStartersHidden ? "Show conversation starters" : "Dismiss conversation starters"}
+              </button>
               <button type="button" className="usa-button secondary" onClick={() => startPortalTour()}>
                 Take a tour
               </button>
