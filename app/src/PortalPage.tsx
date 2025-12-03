@@ -6,12 +6,8 @@ import type { IChangeEvent } from "@rjsf/core"
 import validator from "@rjsf/validator-ajv8"
 import introJs from "intro.js"
 import "intro.js/introjs.css"
-import {
-  CopilotKit,
-  SuggestionItem,
-  useCopilotAction,
-  useCopilotReadable
-} from "@copilotkit/react-core"
+import { CopilotKit, useCopilotAction, useCopilotReadable } from "@copilotkit/react-core"
+import type { SuggestionItem } from "@copilotkit/react-core"
 import { CopilotSidebar } from "@copilotkit/react-ui"
 import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import "@copilotkit/react-ui/styles.css"
@@ -31,7 +27,7 @@ import {
   PermittingChecklistSection,
   type PermittingChecklistItem
 } from "./components/PermittingChecklistSection"
-import { CollapsibleCard } from "./components/CollapsibleCard"
+import { CollapsibleCard, type CollapsibleCardStatus } from "./components/CollapsibleCard"
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
@@ -1365,6 +1361,80 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     )
   }, [])
 
+  const projectRequiredFields = useMemo<(keyof ProjectFormData)[]>(
+    () => (projectSchema.required ?? []).filter((field): field is keyof ProjectFormData => typeof field === "string"),
+    []
+  )
+
+  const missingProjectFields = useMemo(
+    () =>
+      projectRequiredFields.filter((field) => {
+        const value = formData?.[field]
+        return value === undefined || value === null || (typeof value === "string" && value.trim().length === 0)
+      }),
+    [formData, projectRequiredFields]
+  )
+
+  const projectFormStatus: CollapsibleCardStatus = useMemo(() => {
+    if (missingProjectFields.length > 0) {
+      const label = `${missingProjectFields.length} required field${missingProjectFields.length === 1 ? "" : "s"} missing`
+      return { tone: "danger", text: label }
+    }
+
+    if (!hasSavedSnapshot) {
+      return { tone: "warning", text: "Save the project snapshot to continue" }
+    }
+
+    const savedLabel = lastSaved ? `Snapshot saved ${lastSaved}` : "Snapshot saved"
+    return { tone: "success", text: savedLabel }
+  }, [hasSavedSnapshot, lastSaved, missingProjectFields.length])
+
+  const nepaStatus: CollapsibleCardStatus = useMemo(() => {
+    const missingFields = ([
+      "nepa_categorical_exclusion_code",
+      "nepa_conformance_conditions",
+      "nepa_extraordinary_circumstances"
+    ] as const)
+      .filter((key) => {
+        const value = formData?.[key]
+        return value === undefined || value === null || (typeof value === "string" && value.trim().length === 0)
+      })
+
+    if (missingFields.length > 0) {
+      const labels = missingFields
+        .map((key) => nepaFieldConfigs[key]?.title ?? key.replaceAll("_", " "))
+        .join(" and ")
+      return { tone: "danger", text: `Add ${labels}` }
+    }
+
+    const geospatialComplete =
+      geospatialResults.nepassist.status === "success" && geospatialResults.ipac.status === "success"
+
+    if (!geospatialComplete) {
+      return { tone: "danger", text: "Run the geospatial screen" }
+    }
+
+    if (portalProgress.preScreening.completedAt) {
+      return { tone: "success", text: "Pre-screening submitted" }
+    }
+
+    if (!hasSavedSnapshot) {
+      return { tone: "warning", text: "Save the project snapshot to submit" }
+    }
+
+    if (portalProgress.preScreening.hasDecisionPayloads || portalProgress.preScreening.initiatedAt) {
+      return { tone: "warning", text: "Submit pre-screening data" }
+    }
+
+    return { tone: "warning", text: "Save pre-screening data" }
+  }, [
+    formData,
+    geospatialResults,
+    hasSavedSnapshot,
+    nepaFieldConfigs,
+    portalProgress.preScreening
+  ])
+
   const formattedReportTimestamp = useMemo(() => {
     if (!projectReport?.generatedAt) {
       return undefined
@@ -2541,6 +2611,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               title="Project form"
               description="Complete the CEQ project fields."
               ariaLabel="Project form"
+              status={projectFormStatus}
               dataAttributes={{
                 "data-tour-id": "portal-form",
                 "data-tour-title": "Fill out the CEQ form",
@@ -2651,6 +2722,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               canSubmitPreScreening={hasSavedSnapshot}
               onShowProcessInformation={handleShowProcessInformation}
               isProcessInformationLoading={processInformationState.status === "loading"}
+              status={nepaStatus}
             />
           </section>
         </div>

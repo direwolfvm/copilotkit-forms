@@ -1,6 +1,13 @@
 import { useEffect, useId, useState } from "react"
 import type { ReactNode } from "react"
 
+export type CollapsibleCardStatusTone = "success" | "warning" | "danger"
+
+export interface CollapsibleCardStatus {
+  tone: CollapsibleCardStatusTone
+  text: string
+}
+
 interface CollapsibleCardProps {
   title: string
   description?: ReactNode
@@ -12,6 +19,7 @@ interface CollapsibleCardProps {
   ariaLabel?: string
   dataAttributes?: Record<string, string | number | boolean | undefined>
   onToggle?: (isOpen: boolean) => void
+  status?: CollapsibleCardStatus
 }
 
 export function CollapsibleCard({
@@ -24,7 +32,8 @@ export function CollapsibleCard({
   headingLevel = 2,
   ariaLabel = title,
   dataAttributes,
-  onToggle
+  onToggle,
+  status
 }: CollapsibleCardProps) {
   const [isOpen, setIsOpen] = useState(defaultExpanded)
   const contentId = useId()
@@ -42,6 +51,8 @@ export function CollapsibleCard({
   const classNames = ["collapsible-card", className, isOpen ? undefined : "collapsible-card--collapsed"]
     .filter(Boolean)
     .join(" ")
+
+  const hasHeaderActions = Boolean(status || actions)
 
   return (
     <section className={classNames} aria-label={ariaLabel} {...(dataAttributes ?? {})}>
@@ -64,7 +75,20 @@ export function CollapsibleCard({
             {description ? <p className="collapsible-card__description">{description}</p> : null}
           </div>
         </div>
-        {actions ? <div className="collapsible-card__header-actions">{actions}</div> : null}
+        {hasHeaderActions ? (
+          <div className="collapsible-card__header-actions">
+            {status ? (
+              <div
+                className={`collapsible-card__status collapsible-card__status--${status.tone}`}
+                aria-live="polite"
+              >
+                <span className="collapsible-card__status-indicator" aria-hidden="true" />
+                <span className="collapsible-card__status-text">{status.text}</span>
+              </div>
+            ) : null}
+            {actions ? <div className="collapsible-card__actions">{actions}</div> : null}
+          </div>
+        ) : null}
       </div>
       <div
         className={`collapsible-card__content${isOpen ? "" : " collapsible-card__content--collapsed"}`}

@@ -1,6 +1,6 @@
 import { type FormEvent, useMemo, useState } from "react"
 
-import { CollapsibleCard } from "./CollapsibleCard"
+import { CollapsibleCard, type CollapsibleCardStatus } from "./CollapsibleCard"
 
 export type PermittingChecklistItem = {
   id: string
@@ -29,6 +29,18 @@ export function PermittingChecklistSection({
 
   const pendingCount = useMemo(() => items.filter((item) => !item.completed).length, [items])
 
+  const status: CollapsibleCardStatus = useMemo(() => {
+    if (!items.length) {
+      return { tone: "danger", text: "No checklist items yet" }
+    }
+
+    if (pendingCount > 0) {
+      return { tone: "danger", text: `${pendingCount} of ${items.length} pending` }
+    }
+
+    return { tone: "success", text: "Checklist complete" }
+  }, [items.length, pendingCount])
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const trimmed = draftLabel.trim()
@@ -44,17 +56,7 @@ export function PermittingChecklistSection({
       className="checklist-panel"
       title="Permitting checklist"
       description="Track anticipated permits and authorizations alongside the project form. Use the Copilot to suggest items based on project scope, or add your own below."
-      actions={
-        <div className="checklist-panel__summary" aria-live="polite">
-          {items.length ? (
-            <span>
-              {pendingCount} of {items.length} pending
-            </span>
-          ) : (
-            <span>No checklist items yet</span>
-          )}
-        </div>
-      }
+      status={status}
       dataAttributes={{
         "data-tour-id": "portal-checklist",
         "data-tour-title": "Track permits",

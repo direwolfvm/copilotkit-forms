@@ -422,6 +422,53 @@
   margin-left: auto;
 }
 
+.collapsible-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.collapsible-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+
+.collapsible-card__status-text {
+  white-space: nowrap;
+}
+
+.collapsible-card__status-indicator {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.collapsible-card__status--danger {
+  color: var(--color-danger, #b91c1c);
+  background: color-mix(in srgb, var(--surface) 82%, var(--color-danger, #b91c1c) 18%);
+  border: 1px solid color-mix(in srgb, var(--color-danger, #b91c1c) 35%, transparent);
+}
+
+.collapsible-card__status--success {
+  color: #0f7b4a;
+  background: color-mix(in srgb, var(--surface) 85%, #0f7b4a 15%);
+  border: 1px solid color-mix(in srgb, #0f7b4a 35%, transparent);
+}
+
+.collapsible-card__status--warning {
+  color: color-mix(in srgb, var(--theme-gold-300) 85%, #9c6b00 15%);
+  background: color-mix(in srgb, var(--surface) 86%, var(--theme-gold-300) 14%);
+  border: 1px solid color-mix(in srgb, var(--theme-gold-300) 45%, transparent);
+}
+
 .collapsible-card__toggle {
   width: 2.25rem;
   height: 2.25rem;
