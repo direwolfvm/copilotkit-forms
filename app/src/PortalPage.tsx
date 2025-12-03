@@ -96,7 +96,6 @@ const SUPPORTED_DOCUMENT_EXTENSION_SET = new Set<SupportedDocumentExtension>(
 )
 
 const PORTAL_TOUR_STORAGE_KEY = "portalSiteTourComplete"
-const CONVERSATION_STARTERS_HIDDEN_KEY = "portalConversationStartersHidden"
 
 type SupportedDocumentExtension = (typeof SUPPORTED_DOCUMENT_EXTENSIONS)[number]
 type DocumentUploadStatus = { type: "success" | "error"; message: string }
@@ -2003,15 +2002,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
 
   const [conversationStartersHidden, setConversationStartersHidden] = useState(false)
 
-  useEffect(() => {
-    const storedValue = localStorage.getItem(CONVERSATION_STARTERS_HIDDEN_KEY)
-    setConversationStartersHidden(storedValue === "true")
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem(CONVERSATION_STARTERS_HIDDEN_KEY, conversationStartersHidden ? "true" : "false")
-  }, [conversationStartersHidden])
-
   const conversationStarters: SuggestionItem[] = useMemo(
     () => [
       {
@@ -2029,29 +2019,25 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   )
 
   const ConversationStartersList = useCallback(
-    ({ suggestions, onSuggestionClick }: RenderSuggestionsListProps) => (
-      <div className="conversation-starters-panel">
-        <div className="conversation-starters-panel__header">
-          <span className="conversation-starters-panel__title">Conversation starters</span>
-          <button
-            type="button"
-            className="conversation-starters-panel__dismiss"
-            onClick={() => setConversationStartersHidden(true)}
-            aria-label="Hide conversation starters"
-          >
-            ×
-          </button>
-        </div>
+    ({ suggestions, onSuggestionClick }: RenderSuggestionsListProps) => {
+      if (conversationStartersHidden) {
+        return null
+      }
 
-        {conversationStartersHidden ? (
-          <button
-            type="button"
-            className="conversation-starters-panel__show"
-            onClick={() => setConversationStartersHidden(false)}
-          >
-            Show conversation starters
-          </button>
-        ) : (
+      return (
+        <div className="conversation-starters-panel">
+          <div className="conversation-starters-panel__header">
+            <span className="conversation-starters-panel__title">Conversation starters</span>
+            <button
+              type="button"
+              className="conversation-starters-panel__dismiss"
+              onClick={() => setConversationStartersHidden(true)}
+              aria-label="Hide conversation starters"
+            >
+              ×
+            </button>
+          </div>
+
           <div className="suggestions">
             {suggestions.map((suggestion, index) => (
               <RenderSuggestion
@@ -2064,9 +2050,9 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               />
             ))}
           </div>
-        )}
-      </div>
-    ),
+        </div>
+      )
+    },
     [conversationStartersHidden]
   )
 
