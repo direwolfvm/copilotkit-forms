@@ -4242,12 +4242,10 @@ function applyDecisionPayloadToState({
 }
 
 async function deleteSupabaseRecords({
-  supabaseUrl,
   supabaseAnonKey,
   endpoint,
   resourceDescription
 }: {
-  supabaseUrl: string
   supabaseAnonKey: string
   endpoint: URL
   resourceDescription: string
@@ -4946,7 +4944,6 @@ async function deleteProjectDocuments({
   endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
 
   await deleteSupabaseRecords({
-    supabaseUrl,
     supabaseAnonKey,
     endpoint,
     resourceDescription: "documents"
@@ -4967,7 +4964,6 @@ async function deleteCaseEvents({
   endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
 
   await deleteSupabaseRecords({
-    supabaseUrl,
     supabaseAnonKey,
     endpoint,
     resourceDescription: "case events"
@@ -4988,7 +4984,6 @@ async function deleteProcessInstances({
   endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
 
   await deleteSupabaseRecords({
-    supabaseUrl,
     supabaseAnonKey,
     endpoint,
     resourceDescription: "process instances"
@@ -5009,7 +5004,6 @@ async function deleteProjectRecord({
   endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
 
   await deleteSupabaseRecords({
-    supabaseUrl,
     supabaseAnonKey,
     endpoint,
     resourceDescription: "project"
