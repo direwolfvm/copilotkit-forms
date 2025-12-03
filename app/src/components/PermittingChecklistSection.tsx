@@ -35,7 +35,7 @@ export function PermittingChecklistSection({
     }
 
     if (pendingCount > 0) {
-      return { tone: "danger", text: `${pendingCount} of ${items.length} pending` }
+      return { tone: "success", text: `${pendingCount} of ${items.length} pending` }
     }
 
     return { tone: "success", text: "Checklist complete" }
