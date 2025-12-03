@@ -131,9 +131,21 @@ async function proxyCustomAdkRequest(req, res) {
 async function proxySupabaseRequest(req, res) {
   const supabaseUrl = resolveSupabaseUrl();
   const supabaseAnonKey = resolveSupabaseAnonKey();
+  const skipAuthHeader = req.headers["x-skip-supabase-auth"];
+  const skipAuth =
+    (Array.isArray(skipAuthHeader) ? skipAuthHeader[0] : skipAuthHeader)?.
+      toString()
+      .toLowerCase() === "true";
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl) {
     res.status(500).json({ error: "Supabase credentials are not configured" });
+    return;
+  }
+
+  if (!skipAuth && !supabaseAnonKey) {
+    res
+      .status(500)
+      .json({ error: "Supabase credentials are not configured" });
     return;
   }
 
@@ -146,7 +158,11 @@ async function proxySupabaseRequest(req, res) {
     }
 
     const lowerKey = key.toLowerCase();
-    if (lowerKey === "host" || lowerKey === "content-length") {
+    if (
+      lowerKey === "host" ||
+      lowerKey === "content-length" ||
+      lowerKey === "x-skip-supabase-auth"
+    ) {
       continue;
     }
 
@@ -157,8 +173,10 @@ async function proxySupabaseRequest(req, res) {
     }
   }
 
-  headers.set("apikey", supabaseAnonKey);
-  headers.set("Authorization", `Bearer ${supabaseAnonKey}`);
+  if (!skipAuth && supabaseAnonKey) {
+    headers.set("apikey", supabaseAnonKey);
+    headers.set("Authorization", `Bearer ${supabaseAnonKey}`);
+  }
 
   const method = req.method?.toUpperCase() ?? "GET";
   const hasBody = !["GET", "HEAD"].includes(method);

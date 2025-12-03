@@ -31,6 +31,10 @@ type SupabaseFetchRequest = {
   init: RequestInit
 }
 
+type SupabaseFetchOptions = {
+  includeAuth?: boolean
+}
+
 function buildLoggableHeaders(init: RequestInit): Record<string, string> {
   const headers = new Headers(init.headers ?? undefined)
   headers.delete("apikey")
@@ -71,21 +75,26 @@ function logSupabaseResponse(
 
 function buildSupabaseFetchRequest(
   endpoint: URL,
-  supabaseAnonKey: string,
-  init: RequestInit
+  supabaseAnonKey: string | undefined,
+  init: RequestInit,
+  options: SupabaseFetchOptions = {}
 ): SupabaseFetchRequest {
   const headers = new Headers(init.headers ?? undefined)
+  const includeAuth = options.includeAuth ?? true
 
   let url: string
   if (shouldUseSupabaseProxy()) {
     headers.delete("apikey")
     headers.delete("authorization")
+    if (!includeAuth) {
+      headers.set("x-skip-supabase-auth", "true")
+    }
     url = `${SUPABASE_PROXY_PREFIX}${endpoint.pathname}${endpoint.search}${endpoint.hash}`
   } else {
-    if (!headers.has("apikey")) {
+    if (includeAuth && supabaseAnonKey && !headers.has("apikey")) {
       headers.set("apikey", supabaseAnonKey)
     }
-    if (!headers.has("authorization")) {
+    if (includeAuth && supabaseAnonKey && !headers.has("authorization")) {
       headers.set("Authorization", `Bearer ${supabaseAnonKey}`)
     }
     url = endpoint.toString()
@@ -4270,6 +4279,40 @@ async function deleteSupabaseRecords({
   }
 }
 
+type FetchSupabaseResourceOptions = {
+  retryWithoutAuthOnForbidden?: boolean
+}
+
+async function fetchSupabaseResource(
+  resourceDescription: string,
+  endpoint: URL,
+  supabaseAnonKey: string,
+  init: RequestInit,
+  { retryWithoutAuthOnForbidden = false }: FetchSupabaseResourceOptions = {}
+): Promise<{ response: Response; responseText: string }> {
+  const execute = async (includeAuth: boolean) => {
+    const { url, init: requestInit } = buildSupabaseFetchRequest(
+      endpoint,
+      supabaseAnonKey,
+      init,
+      { includeAuth }
+    )
+    logSupabaseRequest(resourceDescription, url, requestInit)
+    const response = await fetch(url, requestInit)
+    const responseText = await response.text()
+    logSupabaseResponse(resourceDescription, url, response, responseText)
+    return { response, responseText }
+  }
+
+  let { response, responseText } = await execute(true)
+
+  if (response.status === 403 && retryWithoutAuthOnForbidden) {
+    ;({ response, responseText } = await execute(false))
+  }
+
+  return { response, responseText }
+}
+
 async function fetchSupabaseList<T>(
   supabaseUrl: string,
   supabaseAnonKey: string,
@@ -4281,13 +4324,15 @@ async function fetchSupabaseList<T>(
   if (configure) {
     configure(endpoint)
   }
-  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
-    method: "GET"
-  })
-  logSupabaseRequest(resourceDescription, url, init)
-  const response = await fetch(url, init)
-  const responseText = await response.text()
-  logSupabaseResponse(resourceDescription, url, response, responseText)
+
+  const { response, responseText } = await fetchSupabaseResource(
+    resourceDescription,
+    endpoint,
+    supabaseAnonKey,
+    { method: "GET" },
+    { retryWithoutAuthOnForbidden: true }
+  )
+
   if (!response.ok) {
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
