@@ -58,8 +58,7 @@ export default function PermitStartPage() {
         <p>{processState.message}</p>
       </div>
     )
-  } else {
-    // At this point, TypeScript knows processState.status === "success"
+  } else if (processState.status === "success") {
     content = <ProcessInformationDetails info={processState.info} />
   }
 
