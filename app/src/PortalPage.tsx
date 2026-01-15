@@ -80,6 +80,7 @@ const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
 const BASIC_PERMIT_LABEL = "Basic Permit"
 const BASIC_PERMIT_LINK = { href: "/permits/basic", label: "Start this permit." }
 const BASIC_PERMIT_PROJECT_PARAM = "projectId"
+const BASIC_PERMIT_CHECKLIST_KEY = toChecklistKey(BASIC_PERMIT_LABEL)
 
 type UpdatesPayload = Record<string, unknown>
 
@@ -179,6 +180,32 @@ function createDefaultPermittingChecklist(): PermittingChecklistItem[] {
 
 function toChecklistKey(label: string) {
   return normalizeChecklistLabel(label).toLowerCase()
+}
+
+function ensureBasicPermitChecklistItem(items: PermittingChecklistItem[]): PermittingChecklistItem[] {
+  let hasBasicPermit = false
+  let updated = false
+
+  const next = items.map((item) => {
+    if (toChecklistKey(item.label) !== BASIC_PERMIT_CHECKLIST_KEY) {
+      return item
+    }
+    hasBasicPermit = true
+    if (item.link) {
+      return item
+    }
+    updated = true
+    return {
+      ...item,
+      link: BASIC_PERMIT_LINK
+    }
+  })
+
+  if (!hasBasicPermit) {
+    return [...next, createBasicPermitChecklistItem()]
+  }
+
+  return updated ? next : items
 }
 
 type ChecklistUpsertInput = {
@@ -791,7 +818,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   )
   const [permittingChecklist, setPermittingChecklist] = useState<PermittingChecklistItem[]>(() =>
     projectId && persistedProjectFormState
-      ? cloneValue(persistedProjectFormState.permittingChecklist)
+      ? ensureBasicPermitChecklistItem(cloneValue(persistedProjectFormState.permittingChecklist))
       : createDefaultPermittingChecklist()
   )
   const [preScreeningProcessId, setPreScreeningProcessId] = useState<number | undefined>(() =>
@@ -844,6 +871,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     status: "idle" | "loading" | "error"
     message?: string
   }>({ status: "idle" })
+  const hasBasicPermitChecklistItem = useMemo(
+    () => permittingChecklist.some((item) => toChecklistKey(item.label) === BASIC_PERMIT_CHECKLIST_KEY),
+    [permittingChecklist]
+  )
 
   const startPortalTour = useCallback(() => {
     if (typeof window === "undefined") {
@@ -1026,7 +1057,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             id: generateChecklistItemId()
           })
         )
-        setPermittingChecklist(checklistWithIds)
+        setPermittingChecklist(ensureBasicPermitChecklistItem(checklistWithIds))
         setProjectGisUpload(cloneValue(loaded.gisUpload ?? {}))
         setPortalProgress(cloneValue(loaded.portalProgress))
         setPreScreeningProcessId(loaded.preScreeningProcessId)
@@ -1341,6 +1372,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
       for (const entry of normalized) {
         const key = toChecklistKey(entry.label)
         const existingIndex = indexByKey.get(key)
+        const isBasicPermit = key === BASIC_PERMIT_CHECKLIST_KEY
         if (existingIndex !== undefined) {
           const existing = next[existingIndex]
           let updated = false
@@ -1356,13 +1388,19 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           if (sourceValue && existing.source !== sourceValue) {
             updated = true
           }
+          const nextLink =
+            isBasicPermit && !existing.link ? BASIC_PERMIT_LINK : existing.link
+          if (isBasicPermit && !existing.link) {
+            updated = true
+          }
           if (updated) {
             next[existingIndex] = {
               ...existing,
               completed:
                 typeof completedValue === "boolean" ? completedValue : existing.completed,
               notes: notesValue !== undefined ? notesValue : existing.notes,
-              source: sourceValue ?? existing.source
+              source: sourceValue ?? existing.source,
+              link: nextLink
             }
             changed = true
           }
@@ -1372,7 +1410,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             label: entry.label,
             completed: typeof entry.completed === "boolean" ? entry.completed : false,
             notes: entry.notes,
-            source: entry.source ?? "manual"
+            source: entry.source ?? "manual",
+            link: isBasicPermit ? BASIC_PERMIT_LINK : undefined
           }
           next.push(newItem)
           indexByKey.set(key, next.length - 1)
@@ -1410,6 +1449,10 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   const handleRemoveChecklistItem = useCallback((id: string) => {
     setPermittingChecklist((previous) => previous.filter((item) => item.id !== id))
   }, [])
+
+  const handleAddBasicPermit = useCallback(() => {
+    upsertPermittingChecklistItems([{ label: BASIC_PERMIT_LABEL, source: "seed" }])
+  }, [upsertPermittingChecklistItems])
 
   const ensureProjectIdentifier = useCallback((): ProjectFormData => {
     let preparedFormData = formData
@@ -2534,13 +2577,15 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
                 </div>
               </Form>
             </CollapsibleCard>
-            <PermittingChecklistSection
-              items={permitChecklistItems}
-              onAddItem={handleAddChecklistItem}
-              onToggleItem={handleToggleChecklistItem}
-              onRemoveItem={handleRemoveChecklistItem}
-              onBulkAddFromSeed={handleBulkAddFromSeed}
-            />
+        <PermittingChecklistSection
+          items={permitChecklistItems}
+          onAddItem={handleAddChecklistItem}
+          onToggleItem={handleToggleChecklistItem}
+          onRemoveItem={handleRemoveChecklistItem}
+          onBulkAddFromSeed={handleBulkAddFromSeed}
+          hasBasicPermit={hasBasicPermitChecklistItem}
+          onAddBasicPermit={handleAddBasicPermit}
+        />
             <NepaReviewSection
               values={{
                 nepa_categorical_exclusion_code: formData.nepa_categorical_exclusion_code,
