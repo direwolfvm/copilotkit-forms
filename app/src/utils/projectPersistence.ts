@@ -891,13 +891,20 @@ function buildProjectRecord({
 
 export function buildProjectRecordForDecisionPayloads({
   formData,
-  geospatialResults
+  geospatialResults,
+  overrideProjectId
 }: {
   formData: ProjectFormData
   geospatialResults: GeospatialResultsState
+  overrideProjectId?: number
 }): Record<string, unknown> {
   const normalizedId = normalizeString(formData.id)
-  const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
+  const numericId =
+    typeof overrideProjectId === "number"
+      ? overrideProjectId
+      : normalizedId
+        ? Number.parseInt(normalizedId, 10)
+        : undefined
   const normalizedTitle = normalizeString(formData.title)
   const locationResult = parseLocationObject(formData.location_object)
 

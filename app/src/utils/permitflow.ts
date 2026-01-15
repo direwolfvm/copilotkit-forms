@@ -25,6 +25,7 @@ type PermitflowAuthSession = {
 }
 
 type PermitflowDecisionPayloadContext = {
+  options: PermitflowFetchOptions
   portalState: LoadedProjectPortalState
   processInstanceId: number
   projectRecord: Record<string, unknown>
@@ -594,17 +595,13 @@ function buildDecisionElementMap(elements: DecisionElementRecord[]): DecisionEle
 }
 
 async function buildPermitflowDecisionPayloads({
+  options,
   portalState,
   processInstanceId,
   projectRecord,
   processModelId,
   timestamp
 }: PermitflowDecisionPayloadContext): Promise<Array<Record<string, unknown>>> {
-  const options = {
-    supabaseUrl: getPermitflowUrl() ?? "",
-    supabaseAnonKey: getPermitflowAnonKey() ?? ""
-  }
-
   const elements = await fetchDecisionElements(options, processModelId)
   const decisionElements = buildDecisionElementMap(elements)
 
@@ -836,10 +833,12 @@ export async function submitPermitflowProject({
   const timestamp = new Date().toISOString()
   const projectRecord = buildProjectRecordForDecisionPayloads({
     formData: portalState.formData,
-    geospatialResults: portalState.geospatialResults
+    geospatialResults: portalState.geospatialResults,
+    overrideProjectId: projectId
   })
 
   const decisionPayloads = await buildPermitflowDecisionPayloads({
+    options,
     portalState,
     processInstanceId,
     projectRecord,
