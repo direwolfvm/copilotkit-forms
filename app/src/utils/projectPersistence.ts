@@ -182,7 +182,7 @@ export type DecisionElementRecord = {
   retrievedTimestamp: string | null
 }
 
-type DecisionElementMap = Map<number, DecisionElementRecord>
+export type DecisionElementMap = Map<number, DecisionElementRecord>
 
 type ProcessModelRecord = {
   id: number
@@ -887,6 +887,34 @@ function buildProjectRecord({
   }
 
   return stripUndefined(record)
+}
+
+export function buildProjectRecordForDecisionPayloads({
+  formData,
+  geospatialResults,
+  overrideProjectId
+}: {
+  formData: ProjectFormData
+  geospatialResults: GeospatialResultsState
+  overrideProjectId?: number
+}): Record<string, unknown> {
+  const normalizedId = normalizeString(formData.id)
+  const numericId =
+    typeof overrideProjectId === "number"
+      ? overrideProjectId
+      : normalizedId
+        ? Number.parseInt(normalizedId, 10)
+        : undefined
+  const normalizedTitle = normalizeString(formData.title)
+  const locationResult = parseLocationObject(formData.location_object)
+
+  return buildProjectRecord({
+    formData,
+    geospatialResults,
+    numericId,
+    normalizedTitle,
+    locationResult
+  })
 }
 
 export async function submitDecisionPayload({
@@ -2877,7 +2905,7 @@ const CEQ_PROJECT_FIELDS = [
   "retrieved_timestamp"
 ] as const
 
-function buildDecisionPayloadRecords({
+export function buildDecisionPayloadRecords({
   processInstanceId,
   timestamp,
   projectRecord,
