@@ -4,12 +4,11 @@ import type { PermittingChecklistItem } from "../components/PermittingChecklistS
 import {
   PRE_SCREENING_PROCESS_MODEL_ID,
   ProjectPersistenceError,
-  buildDecisionPayloadRecords,
-  buildProjectRecordForDecisionPayloads,
-  type DecisionElementMap,
+  type CaseEventSummary,
   type DecisionElementRecord,
-  type LoadedProjectPortalState,
-  type ProcessInformation
+  type ProcessInformation,
+  type ProjectProcessSummary,
+  type ProjectSummary
 } from "./projectPersistence"
 
 type PermitflowFetchOptions = {
@@ -113,6 +112,55 @@ function normalizeContact(value?: ProjectContact): ProjectContact | undefined {
   }
 
   return Object.values(contact).some((entry) => entry !== undefined) ? contact : undefined
+}
+
+function normalizeTitle(value?: string | null): string | undefined {
+  if (typeof value !== "string") {
+    return undefined
+  }
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function parseTimestampMillis(value?: string | null): number | undefined {
+  if (!value) {
+    return undefined
+  }
+  const timestamp = new Date(value).getTime()
+  return Number.isNaN(timestamp) ? undefined : timestamp
+}
+
+function compareByTimestampDesc(a?: string | null, b?: string | null): number {
+  const aTime = parseTimestampMillis(a)
+  const bTime = parseTimestampMillis(b)
+  if (typeof aTime === "number" && typeof bTime === "number") {
+    return bTime - aTime
+  }
+  if (typeof aTime === "number") {
+    return -1
+  }
+  if (typeof bTime === "number") {
+    return 1
+  }
+  if (a && b) {
+    return b.localeCompare(a)
+  }
+  if (a) {
+    return -1
+  }
+  if (b) {
+    return 1
+  }
+  return 0
+}
+
+function quotePostgrestValue(value: string): string {
+  return `"${value.replace(/"/g, "\"\"")}"`
+}
+
+function isBasicPermitProcess(row: PermitflowProcessInstanceRow): boolean {
+  const haystack = `${row.title ?? ""} ${row.description ?? ""}`.toLowerCase()
+  return haystack.includes(BASIC_PERMIT_LABEL.toLowerCase())
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -927,4 +975,333 @@ export async function submitPermitflowProject({
     accessToken,
     records: eventRecords
   })
+}
+
+export type PermitflowProjectStatus = {
+  exists: boolean
+  projectId: number
+  title?: string
+  lastUpdated?: string
+  basicPermitProcess?: ProjectProcessSummary
+}
+
+export async function loadPermitflowProjectStatus(
+  projectId: number
+): Promise<PermitflowProjectStatus> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+    )
+  }
+
+  if (!Number.isFinite(projectId)) {
+    throw new ProjectPersistenceError("PermitFlow project identifiers must be numeric.")
+  }
+
+  const options = { supabaseUrl, supabaseAnonKey }
+  const projectRows = await fetchPermitflowList<PermitflowProjectRow>(
+    options,
+    "/rest/v1/project",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,title,last_updated")
+      endpoint.searchParams.set("id", `eq.${projectId}`)
+    }
+  )
+
+  if (projectRows.length === 0) {
+    return { exists: false, projectId }
+  }
+
+  const projectRow = projectRows[0]
+  const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
+    options,
+    "/rest/v1/process_instance",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        "id,parent_project_id,title,description,last_updated,created_at,process_model"
+      )
+      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+      endpoint.searchParams.set(
+        "or",
+        [
+          `title.ilike.*${BASIC_PERMIT_LABEL}*`,
+          `description.ilike.*${BASIC_PERMIT_LABEL}*`
+        ].join(",")
+      )
+    }
+  )
+
+  const basicPermitProcesses = processRows.filter((row) => isBasicPermitProcess(row))
+  let basicPermitProcess: ProjectProcessSummary | undefined
+
+  if (basicPermitProcesses.length > 0) {
+    basicPermitProcesses.sort((a, b) => compareByTimestampDesc(a.last_updated, b.last_updated))
+    const row = basicPermitProcesses[0]
+    const id = parseNumericId(row.id)
+    if (typeof id === "number") {
+      const description = typeof row.description === "string" ? row.description : null
+      const title = typeof row.title === "string" ? row.title : description
+      basicPermitProcess = {
+        id,
+        title,
+        description,
+        lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
+        createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
+        caseEvents: []
+      }
+    }
+  }
+
+  return {
+    exists: true,
+    projectId,
+    title: normalizeTitle(projectRow.title),
+    lastUpdated: typeof projectRow.last_updated === "string" ? projectRow.last_updated : undefined,
+    basicPermitProcess
+  }
+}
+
+export async function updatePermitflowProject({
+  formData,
+  accessToken
+}: {
+  formData: ProjectFormData
+  accessToken: string
+}): Promise<void> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const normalizedId = normalizeString(formData.id)
+  const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
+
+  if (!numericId || Number.isNaN(numericId) || !Number.isFinite(numericId)) {
+    throw new ProjectPersistenceError("A numeric project identifier is required to update PermitFlow.")
+  }
+
+  const payload = buildPermitflowProjectPayload(formData)
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/project?id=eq.${numericId}`, {
+    method: "PATCH",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow update failed (${response.status}): ${errorDetail}`
+        : `PermitFlow update failed (${response.status}).`
+    )
+  }
+}
+
+export async function loadBasicPermitProcessesForProjects(
+  projects: ProjectSummary[]
+): Promise<Map<number, ProjectProcessSummary[]>> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return new Map()
+  }
+
+  const projectTitleEntries = projects
+    .map((project) => ({
+      id: project.id,
+      title: normalizeTitle(project.title),
+      rawTitle: project.title ?? undefined
+    }))
+    .filter((project) => project.title)
+
+  if (projectTitleEntries.length === 0) {
+    return new Map()
+  }
+
+  const uniqueTitles = Array.from(
+    new Set(projectTitleEntries.map((project) => project.title))
+  ).filter((title): title is string => typeof title === "string")
+
+  if (uniqueTitles.length === 0) {
+    return new Map()
+  }
+
+  try {
+    const options = { supabaseUrl, supabaseAnonKey }
+    const titleFilters = uniqueTitles.map((title) => `title.ilike.${quotePostgrestValue(title)}`)
+
+    const permitflowProjects = await fetchPermitflowList<PermitflowProjectRow>(
+      options,
+      "/rest/v1/project",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "id,title")
+        endpoint.searchParams.set("or", titleFilters.join(","))
+      }
+    )
+
+    const permitflowProjectsByTitle = new Map<string, PermitflowProjectRow[]>()
+    for (const row of permitflowProjects) {
+      const normalized = normalizeTitle(row.title)?.toLowerCase()
+      if (!normalized) {
+        continue
+      }
+      const matches = permitflowProjectsByTitle.get(normalized) ?? []
+      matches.push(row)
+      permitflowProjectsByTitle.set(normalized, matches)
+    }
+
+    const portalToPermitflowProjectId = new Map<number, number>()
+    for (const entry of projectTitleEntries) {
+      const normalizedTitle = entry.title?.toLowerCase()
+      if (!normalizedTitle) {
+        continue
+      }
+      const matchedProjects = permitflowProjectsByTitle.get(normalizedTitle)
+      if (!matchedProjects || matchedProjects.length === 0) {
+        continue
+      }
+      if (matchedProjects.length > 1) {
+        console.warn("[projects] Multiple PermitFlow projects share a title.", {
+          title: entry.rawTitle ?? entry.title,
+          permitflowProjectIds: matchedProjects
+            .map((project) => parseNumericId(project.id))
+            .filter((id): id is number => typeof id === "number")
+        })
+      }
+      const matchedProject = matchedProjects[0]
+      const permitflowProjectId = parseNumericId(matchedProject.id)
+      if (typeof permitflowProjectId !== "number") {
+        continue
+      }
+      if (permitflowProjectId !== entry.id) {
+        console.warn("[projects] PermitFlow project id mismatch for title match.", {
+          title: entry.rawTitle ?? entry.title,
+          portalProjectId: entry.id,
+          permitflowProjectId
+        })
+      }
+      portalToPermitflowProjectId.set(entry.id, permitflowProjectId)
+    }
+
+    const permitflowProjectIds = Array.from(
+      new Set(Array.from(portalToPermitflowProjectId.values()))
+    )
+
+    if (permitflowProjectIds.length === 0) {
+      return new Map()
+    }
+
+    const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
+      options,
+      "/rest/v1/process_instance",
+      (endpoint) => {
+        endpoint.searchParams.set(
+          "select",
+          "id,parent_project_id,title,description,last_updated,created_at,process_model"
+        )
+        endpoint.searchParams.set("parent_project_id", `in.(${permitflowProjectIds.join(",")})`)
+        endpoint.searchParams.set(
+          "or",
+          [
+            `title.ilike.*${BASIC_PERMIT_LABEL}*`,
+            `description.ilike.*${BASIC_PERMIT_LABEL}*`
+          ].join(",")
+        )
+      }
+    )
+
+    const basicPermitProcesses = processRows.filter((row) => isBasicPermitProcess(row))
+    const processIds = basicPermitProcesses
+      .map((row) => parseNumericId(row.id))
+      .filter((id): id is number => typeof id === "number")
+
+    const caseEvents = processIds.length
+      ? await fetchPermitflowList<PermitflowCaseEventRow>(
+          options,
+          "/rest/v1/case_event",
+          (endpoint) => {
+            endpoint.searchParams.set("select", "id,parent_process_id,type,last_updated,other")
+            endpoint.searchParams.set("parent_process_id", `in.(${processIds.join(",")})`)
+          }
+        )
+      : []
+
+    const caseEventsByProcess = new Map<number, CaseEventSummary[]>()
+    for (const row of caseEvents) {
+      const processId = parseNumericId(row.parent_process_id)
+      const id = parseNumericId(row.id)
+      if (typeof processId !== "number" || typeof id !== "number") {
+        continue
+      }
+      const events = caseEventsByProcess.get(processId) ?? []
+      events.push({
+        id,
+        eventType: typeof row.type === "string" ? row.type : null,
+        lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
+        data: row.other ?? undefined
+      })
+      caseEventsByProcess.set(processId, events)
+    }
+
+    const processesByPermitflowProject = new Map<number, ProjectProcessSummary[]>()
+    for (const row of basicPermitProcesses) {
+      const projectId = parseNumericId(row.parent_project_id)
+      const id = parseNumericId(row.id)
+      if (typeof projectId !== "number" || typeof id !== "number") {
+        continue
+      }
+      const description = typeof row.description === "string" ? row.description : null
+      const title = typeof row.title === "string" ? row.title : description
+      const summary: ProjectProcessSummary = {
+        id,
+        title,
+        description,
+        lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
+        createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
+        caseEvents: []
+      }
+      const events = caseEventsByProcess.get(id)
+      if (events && events.length > 0) {
+        events.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
+        summary.caseEvents = events
+      }
+      const existing = processesByPermitflowProject.get(projectId)
+      if (existing) {
+        existing.push(summary)
+      } else {
+        processesByPermitflowProject.set(projectId, [summary])
+      }
+    }
+
+    for (const processes of processesByPermitflowProject.values()) {
+      processes.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
+    }
+
+    const results = new Map<number, ProjectProcessSummary[]>()
+    for (const [portalProjectId, permitflowProjectId] of portalToPermitflowProjectId.entries()) {
+      const processes = processesByPermitflowProject.get(permitflowProjectId)
+      if (processes && processes.length > 0) {
+        results.set(portalProjectId, processes)
+      }
+    }
+
+    return results
+  } catch (error) {
+    console.warn("[projects] Failed to load PermitFlow basic permit processes.", error)
+    return new Map()
+  }
 }
