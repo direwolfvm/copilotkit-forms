@@ -1,3 +1,4 @@
+import type { ProjectContact, ProjectFormData } from "../schema/projectSchema"
 import { getPermitflowAnonKey, getPermitflowUrl } from "../runtimeConfig"
 import {
   ProjectPersistenceError,
@@ -8,6 +9,13 @@ import {
 type PermitflowFetchOptions = {
   supabaseUrl: string
   supabaseAnonKey: string
+}
+
+type PermitflowAuthSession = {
+  accessToken: string
+  userId: string
+  expiresIn?: number
+  refreshToken?: string
 }
 
 function safeJsonParse(text: string): unknown {
@@ -51,6 +59,74 @@ function parseNumericId(value: unknown): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined
   }
   return undefined
+}
+
+function normalizeString(value?: string | null): string | undefined {
+  if (typeof value !== "string") {
+    return undefined
+  }
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function normalizeNumber(value?: number | null): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined
+  }
+  return value
+}
+
+function normalizeContact(value?: ProjectContact): ProjectContact | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  const contact: ProjectContact = {
+    name: normalizeString(value.name),
+    organization: normalizeString(value.organization),
+    email: normalizeString(value.email),
+    phone: normalizeString(value.phone)
+  }
+
+  return Object.values(contact).some((entry) => entry !== undefined) ? contact : undefined
+}
+
+function stripUndefined<T extends Record<string, unknown>>(value: T): T {
+  const entries = Object.entries(value).filter((entry) => entry[1] !== undefined)
+  return Object.fromEntries(entries) as T
+}
+
+function buildPermitflowProjectPayload(formData: ProjectFormData): Record<string, unknown> {
+  const normalizedId = normalizeString(formData.id)
+  const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
+  const timestamp = new Date().toISOString()
+
+  const other = stripUndefined({
+    nepa_categorical_exclusion_code: normalizeString(formData.nepa_categorical_exclusion_code),
+    nepa_conformance_conditions: normalizeString(formData.nepa_conformance_conditions),
+    nepa_extraordinary_circumstances: normalizeString(formData.nepa_extraordinary_circumstances),
+    additional_notes: normalizeString(formData.other)
+  })
+
+  return stripUndefined({
+    id: Number.isFinite(numericId) ? numericId : undefined,
+    title: normalizeString(formData.title),
+    description: normalizeString(formData.description),
+    sector: normalizeString(formData.sector),
+    lead_agency: normalizeString(formData.lead_agency),
+    participating_agencies: normalizeString(formData.participating_agencies),
+    sponsor: normalizeString(formData.sponsor),
+    funding: normalizeString(formData.funding),
+    location_text: normalizeString(formData.location_text),
+    location_lat: normalizeNumber(formData.location_lat),
+    location_lon: normalizeNumber(formData.location_lon),
+    location_object: normalizeString(formData.location_object),
+    sponsor_contact: normalizeContact(formData.sponsor_contact),
+    other: Object.keys(other).length > 0 ? other : undefined,
+    data_source_system: "project-portal",
+    last_updated: timestamp,
+    retrieved_timestamp: timestamp
+  })
 }
 
 async function fetchPermitflowList<T>(
@@ -356,5 +432,118 @@ export async function loadPermitflowProcessInformation(
     processModel,
     legalStructure,
     decisionElements
+  }
+}
+
+export async function authenticatePermitflowUser({
+  email,
+  password
+}: {
+  email: string
+  password: string
+}): Promise<PermitflowAuthSession> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseAnonKey,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ email, password })
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow authentication failed (${response.status}): ${errorDetail}`
+        : `PermitFlow authentication failed (${response.status}).`
+    )
+  }
+
+  const payload = responseText ? safeJsonParse(responseText) : undefined
+  if (!payload || typeof payload !== "object") {
+    throw new ProjectPersistenceError("PermitFlow authentication response was empty.")
+  }
+
+  const accessToken =
+    typeof (payload as Record<string, unknown>).access_token === "string"
+      ? ((payload as Record<string, unknown>).access_token as string)
+      : undefined
+  const refreshToken =
+    typeof (payload as Record<string, unknown>).refresh_token === "string"
+      ? ((payload as Record<string, unknown>).refresh_token as string)
+      : undefined
+  const expiresIn =
+    typeof (payload as Record<string, unknown>).expires_in === "number"
+      ? ((payload as Record<string, unknown>).expires_in as number)
+      : undefined
+  const user =
+    (payload as Record<string, unknown>).user &&
+    typeof (payload as Record<string, unknown>).user === "object"
+      ? ((payload as Record<string, unknown>).user as Record<string, unknown>)
+      : undefined
+  const userId = user && typeof user.id === "string" ? user.id : undefined
+
+  if (!accessToken || !userId) {
+    throw new ProjectPersistenceError(
+      "PermitFlow authentication response was missing required fields."
+    )
+  }
+
+  return {
+    accessToken,
+    userId,
+    expiresIn,
+    refreshToken
+  }
+}
+
+export async function submitPermitflowProject({
+  formData,
+  accessToken
+}: {
+  formData: ProjectFormData
+  accessToken: string
+}): Promise<void> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const payload = buildPermitflowProjectPayload(formData)
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/project`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow submit failed (${response.status}): ${errorDetail}`
+        : `PermitFlow submit failed (${response.status}).`
+    )
   }
 }
