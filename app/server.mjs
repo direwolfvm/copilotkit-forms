@@ -32,6 +32,22 @@ function resolveSupabaseAnonKey() {
   );
 }
 
+function resolvePermitflowUrl() {
+  return (
+    normalizeEnvValue(process.env.VITE_PERMITFLOW_SUPABASE_URL) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_PERMITFLOW_SUPABASE_URL) ??
+    normalizeEnvValue(process.env.PERMITFLOW_SUPABASE_URL)
+  );
+}
+
+function resolvePermitflowAnonKey() {
+  return (
+    normalizeEnvValue(process.env.VITE_PERMITFLOW_SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_PERMITFLOW_SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.PERMITFLOW_SUPABASE_ANON_KEY)
+  );
+}
+
 app.use(express.json({ limit: "1mb" }));
 
 function normalizeEnvValue(value) {
@@ -684,6 +700,16 @@ app.get("/env.js", (req, res) => {
   const supabaseAnonKey = resolveSupabaseAnonKey();
   if (supabaseAnonKey) {
     config.supabaseAnonKey = supabaseAnonKey;
+  }
+
+  const permitflowUrl = resolvePermitflowUrl();
+  if (permitflowUrl) {
+    config.permitflowUrl = permitflowUrl;
+  }
+
+  const permitflowAnonKey = resolvePermitflowAnonKey();
+  if (permitflowAnonKey) {
+    config.permitflowAnonKey = permitflowAnonKey;
   }
 
   res.setHeader("Cache-Control", "no-store");
