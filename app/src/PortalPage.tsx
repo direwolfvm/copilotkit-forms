@@ -79,6 +79,7 @@ const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
 
 const BASIC_PERMIT_LABEL = "Basic Permit"
 const BASIC_PERMIT_LINK = { href: "/permits/basic", label: "Start this permit." }
+const BASIC_PERMIT_PROJECT_PARAM = "projectId"
 
 type UpdatesPayload = Record<string, unknown>
 
@@ -150,6 +151,25 @@ function createBasicPermitChecklistItem(): PermittingChecklistItem {
     completed: false,
     source: "seed",
     link: BASIC_PERMIT_LINK
+  }
+}
+
+function appendProjectIdToPermitLink(link: PermittingChecklistItem["link"], projectId?: string) {
+  if (!link || !projectId) {
+    return link
+  }
+  if (!link.href.startsWith(BASIC_PERMIT_LINK.href)) {
+    return link
+  }
+  if (link.href.includes(`${BASIC_PERMIT_PROJECT_PARAM}=`)) {
+    return link
+  }
+  const separator = link.href.includes("?") ? "&" : "?"
+  return {
+    ...link,
+    href: `${link.href}${separator}${BASIC_PERMIT_PROJECT_PARAM}=${encodeURIComponent(
+      projectId
+    )}`
   }
 }
 
@@ -806,6 +826,16 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   )
   const [isGeneratingReport, setIsGeneratingReport] = useState(false)
   const [reportError, setReportError] = useState<string | undefined>(undefined)
+  const permitChecklistItems = useMemo(() => {
+    const projectIdValue = typeof formData.id === "string" ? formData.id.trim() : ""
+    if (!projectIdValue) {
+      return permittingChecklist
+    }
+    return permittingChecklist.map((item) => ({
+      ...item,
+      link: appendProjectIdToPermitLink(item.link, projectIdValue)
+    }))
+  }, [formData.id, permittingChecklist])
   const canUploadDocument =
     typeof preScreeningProcessId === "number" && Number.isFinite(preScreeningProcessId)
   const canGenerateReport = canUploadDocument && hasSavedSnapshot
@@ -2505,7 +2535,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               </Form>
             </CollapsibleCard>
             <PermittingChecklistSection
-              items={permittingChecklist}
+              items={permitChecklistItems}
               onAddItem={handleAddChecklistItem}
               onToggleItem={handleToggleChecklistItem}
               onRemoveItem={handleRemoveChecklistItem}
