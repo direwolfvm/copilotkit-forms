@@ -3,6 +3,8 @@ interface CopilotRuntimeConfig {
   runtimeUrl?: string | null
   supabaseUrl?: string | null
   supabaseAnonKey?: string | null
+  permitflowUrl?: string | null
+  permitflowAnonKey?: string | null
 }
 
 declare global {
@@ -57,5 +59,21 @@ export function getSupabaseAnonKey(): string | undefined {
     normalize(envVars.VITE_SUPABASE_ANON_KEY) ??
     normalize(envVars.NEXT_PUBLIC_SUPABASE_ANON_KEY) ??
     normalize(readRuntimeConfigFromWindow()?.supabaseAnonKey ?? undefined)
+  )
+}
+
+export function getPermitflowUrl(): string | undefined {
+  return (
+    normalize(envVars.PERMITFLOW_SUPABASE_URL) ??
+    normalize(envVars.NEXT_PUBLIC_PERMITFLOW_SUPABASE_URL) ??
+    normalize(readRuntimeConfigFromWindow()?.permitflowUrl ?? undefined)
+  )
+}
+
+export function getPermitflowAnonKey(): string | undefined {
+  return (
+    normalize(envVars.PERMITFLOW_SUPABASE_ANON_KEY) ??
+    normalize(envVars.NEXT_PUBLIC_PERMITFLOW_SUPABASE_ANON_KEY) ??
+    normalize(readRuntimeConfigFromWindow()?.permitflowAnonKey ?? undefined)
   )
 }
