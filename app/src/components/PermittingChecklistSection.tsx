@@ -1,4 +1,5 @@
 import { type FormEvent, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 
 import { CollapsibleCard, type CollapsibleCardStatus } from "./CollapsibleCard"
 
@@ -8,6 +9,10 @@ export type PermittingChecklistItem = {
   completed: boolean
   source?: "manual" | "copilot" | "seed"
   notes?: string
+  link?: {
+    href: string
+    label: string
+  }
 }
 
 type PermittingChecklistSectionProps = {
@@ -104,15 +109,22 @@ export function PermittingChecklistSection({
           <ul className="checklist-panel__list">
             {items.map((item) => (
               <li key={item.id} className={item.completed ? "completed" : undefined}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={item.completed}
-                    onChange={() => onToggleItem(item.id)}
-                  />
-                  <span>{item.label}</span>
-                  {item.source === "copilot" ? <span className="badge">Copilot</span> : null}
-                </label>
+                <div className="checklist-panel__item">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={item.completed}
+                      onChange={() => onToggleItem(item.id)}
+                    />
+                    <span>{item.label}</span>
+                    {item.source === "copilot" ? <span className="badge">Copilot</span> : null}
+                  </label>
+                  {item.link ? (
+                    <Link className="checklist-panel__link" to={item.link.href}>
+                      {item.link.label}
+                    </Link>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   className="icon-button"

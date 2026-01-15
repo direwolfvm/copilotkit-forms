@@ -3052,7 +3052,13 @@ function buildPermitNotesPayload({
         label: normalizeString(item.label) ?? item.label,
         completed: item.completed,
         notes: normalizeString(item.notes),
-        source: item.source
+        source: item.source,
+        link: item.link
+          ? stripUndefined({
+              href: normalizeString(item.link.href) ?? item.link.href,
+              label: normalizeString(item.link.label) ?? item.link.label
+            })
+          : undefined
       })
     )
     .filter((entry) => hasAnyKeys(entry))
@@ -4043,6 +4049,14 @@ function parseChecklistItems(value: unknown): LoadedPermittingChecklistItem[] {
     }
     if (typeof record.notes === "string" && record.notes.trim().length > 0) {
       checklistItem.notes = record.notes
+    }
+    if (record.link && typeof record.link === "object") {
+      const linkRecord = record.link as Record<string, unknown>
+      const href = typeof linkRecord.href === "string" ? linkRecord.href.trim() : ""
+      const linkLabel = typeof linkRecord.label === "string" ? linkRecord.label.trim() : ""
+      if (href && linkLabel) {
+        checklistItem.link = { href, label: linkLabel }
+      }
     }
     items.push(checklistItem)
   }
