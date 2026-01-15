@@ -56,7 +56,10 @@ function parseNumericId(value: unknown): number | undefined {
 async function fetchPermitflowList<T>(
   { supabaseUrl, supabaseAnonKey }: PermitflowFetchOptions,
   path: string,
+<<<<<<< HEAD
   resourceDescription: string,
+=======
+>>>>>>> f5c8da1 (Fix TypeScript build errors: add type narrowing and remove unused parameter)
   configure?: (endpoint: URL) => void
 ): Promise<T[]> {
   const endpoint = new URL(path, supabaseUrl)
@@ -103,7 +106,10 @@ async function fetchProcessModelRecord(
   const rows = await fetchPermitflowList<Record<string, unknown>>(
     options,
     "/rest/v1/process_model",
+<<<<<<< HEAD
     "process model",
+=======
+>>>>>>> f5c8da1 (Fix TypeScript build errors: add type narrowing and remove unused parameter)
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
@@ -161,7 +167,10 @@ async function fetchLegalStructureRecord(
   const rows = await fetchPermitflowList<Record<string, unknown>>(
     options,
     "/rest/v1/legal_structure",
+<<<<<<< HEAD
     "legal structure",
+=======
+>>>>>>> f5c8da1 (Fix TypeScript build errors: add type narrowing and remove unused parameter)
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
@@ -276,7 +285,10 @@ async function fetchDecisionElements(
   const rows = await fetchPermitflowList<Record<string, unknown>>(
     options,
     "/rest/v1/decision_element",
+<<<<<<< HEAD
     "decision elements",
+=======
+>>>>>>> f5c8da1 (Fix TypeScript build errors: add type narrowing and remove unused parameter)
     (endpoint) => {
       endpoint.searchParams.set(
         "select",

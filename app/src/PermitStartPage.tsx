@@ -58,8 +58,16 @@ export default function PermitStartPage() {
         <p>{processState.message}</p>
       </div>
     )
+<<<<<<< HEAD
   } else {
     content = <ProcessInformationDetails info={processState.info} />
+=======
+  } else if (processState.status === "success") {
+    content = <ProcessInformationDetails info={processState.info} />
+  } else {
+    const _never: never = processState
+    content = _never
+>>>>>>> f5c8da1 (Fix TypeScript build errors: add type narrowing and remove unused parameter)
   }
 
   return (
