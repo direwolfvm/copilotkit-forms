@@ -8,6 +8,7 @@ import {
   type ProjectHierarchy,
   type ProjectProcessSummary
 } from "./utils/projectPersistence"
+import { loadBasicPermitProcessesForProjects } from "./utils/permitflow"
 import { ArcgisSketchMap, type GeometryChange } from "./components/ArcgisSketchMap"
 
 const PRE_SCREENING_COMPLETE_EVENT = "Pre-screening complete"
@@ -70,6 +71,30 @@ function parseTimestampMillis(value?: string | null): number | undefined {
     return undefined
   }
   return timestamp
+}
+
+function compareByTimestampDesc(a?: string | null, b?: string | null): number {
+  const aTime = parseTimestampMillis(a ?? undefined)
+  const bTime = parseTimestampMillis(b ?? undefined)
+  if (typeof aTime === "number" && typeof bTime === "number") {
+    return bTime - aTime
+  }
+  if (typeof aTime === "number") {
+    return -1
+  }
+  if (typeof bTime === "number") {
+    return 1
+  }
+  if (a && b) {
+    return b.localeCompare(a)
+  }
+  if (a) {
+    return -1
+  }
+  if (b) {
+    return 1
+  }
+  return 0
 }
 
 function isPreScreeningProcess(process: ProjectProcessSummary): boolean {
@@ -313,11 +338,29 @@ export function ProjectsPage() {
     setStatus("loading")
     setError(undefined)
     fetchProjectHierarchy()
-      .then((hierarchy) => {
+      .then(async (hierarchy) => {
         if (!isMounted) {
           return
         }
-        setProjects(hierarchy)
+        const permitflowProcessesByProject = await loadBasicPermitProcessesForProjects(
+          hierarchy.map((entry) => entry.project)
+        )
+        if (!isMounted) {
+          return
+        }
+        const merged = hierarchy.map((entry) => {
+          const permitflowProcesses = permitflowProcessesByProject.get(entry.project.id) ?? []
+          if (permitflowProcesses.length === 0) {
+            return entry
+          }
+          const combinedProcesses = [...entry.processes, ...permitflowProcesses]
+          combinedProcesses.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
+          return {
+            ...entry,
+            processes: combinedProcesses
+          }
+        })
+        setProjects(merged)
         setStatus("idle")
       })
       .catch((err) => {
