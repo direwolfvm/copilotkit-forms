@@ -1285,6 +1285,23 @@
   color: var(--color-text);
 }
 
+.checklist-panel__basic-permit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border) 70%);
+  background: color-mix(in srgb, var(--surface) 95%, rgba(31, 79, 153, 0.08) 5%);
+  color: var(--color-text-muted);
+}
+
+.checklist-panel__basic-permit p {
+  margin: 0;
+}
+
 .checklist-panel__body {
   display: flex;
   flex-direction: column;

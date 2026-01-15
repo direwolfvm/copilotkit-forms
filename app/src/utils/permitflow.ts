@@ -625,6 +625,140 @@ export async function submitPermitflowProject({
   }
 }
 
+export type PermitflowProjectStatus = {
+  exists: boolean
+  projectId: number
+  title?: string
+  lastUpdated?: string
+  basicPermitProcess?: ProjectProcessSummary
+}
+
+export async function loadPermitflowProjectStatus(
+  projectId: number
+): Promise<PermitflowProjectStatus> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+    )
+  }
+
+  if (!Number.isFinite(projectId)) {
+    throw new ProjectPersistenceError("PermitFlow project identifiers must be numeric.")
+  }
+
+  const options = { supabaseUrl, supabaseAnonKey }
+  const projectRows = await fetchPermitflowList<PermitflowProjectRow>(
+    options,
+    "/rest/v1/project",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,title,last_updated")
+      endpoint.searchParams.set("id", `eq.${projectId}`)
+    }
+  )
+
+  if (projectRows.length === 0) {
+    return { exists: false, projectId }
+  }
+
+  const projectRow = projectRows[0]
+  const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
+    options,
+    "/rest/v1/process_instance",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        "id,parent_project_id,title,description,last_updated,created_at,process_model"
+      )
+      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+      endpoint.searchParams.set(
+        "or",
+        [
+          `title.ilike.*${BASIC_PERMIT_LABEL}*`,
+          `description.ilike.*${BASIC_PERMIT_LABEL}*`
+        ].join(",")
+      )
+    }
+  )
+
+  const basicPermitProcesses = processRows.filter((row) => isBasicPermitProcess(row))
+  let basicPermitProcess: ProjectProcessSummary | undefined
+
+  if (basicPermitProcesses.length > 0) {
+    basicPermitProcesses.sort((a, b) => compareByTimestampDesc(a.last_updated, b.last_updated))
+    const row = basicPermitProcesses[0]
+    const id = parseNumericId(row.id)
+    if (typeof id === "number") {
+      const description = typeof row.description === "string" ? row.description : null
+      const title = typeof row.title === "string" ? row.title : description
+      basicPermitProcess = {
+        id,
+        title,
+        description,
+        lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
+        createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
+        caseEvents: []
+      }
+    }
+  }
+
+  return {
+    exists: true,
+    projectId,
+    title: normalizeTitle(projectRow.title),
+    lastUpdated: typeof projectRow.last_updated === "string" ? projectRow.last_updated : undefined,
+    basicPermitProcess
+  }
+}
+
+export async function updatePermitflowProject({
+  formData,
+  accessToken
+}: {
+  formData: ProjectFormData
+  accessToken: string
+}): Promise<void> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const normalizedId = normalizeString(formData.id)
+  const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
+
+  if (!numericId || Number.isNaN(numericId) || !Number.isFinite(numericId)) {
+    throw new ProjectPersistenceError("A numeric project identifier is required to update PermitFlow.")
+  }
+
+  const payload = buildPermitflowProjectPayload(formData)
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/project?id=eq.${numericId}`, {
+    method: "PATCH",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow update failed (${response.status}): ${errorDetail}`
+        : `PermitFlow update failed (${response.status}).`
+    )
+  }
+}
+
 export async function loadBasicPermitProcessesForProjects(
   projects: ProjectSummary[]
 ): Promise<Map<number, ProjectProcessSummary[]>> {

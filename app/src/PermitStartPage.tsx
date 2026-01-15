@@ -6,8 +6,11 @@ import "./App.css"
 import { ProcessInformationDetails } from "./components/ProcessInformationDetails"
 import {
   authenticatePermitflowUser,
+  loadPermitflowProjectStatus,
   loadPermitflowProcessInformation,
-  submitPermitflowProject
+  submitPermitflowProject,
+  updatePermitflowProject,
+  type PermitflowProjectStatus
 } from "./utils/permitflow"
 import {
   formatProjectSummary,
@@ -42,6 +45,11 @@ type PermitflowSubmitState =
   | { status: "success"; message: string }
   | { status: "error"; message: string }
 
+type PermitflowStatusState =
+  | { status: "idle" | "loading" }
+  | { status: "success"; info: PermitflowProjectStatus }
+  | { status: "error"; message: string }
+
 function normalizeRequiredFieldValue(value: ProjectFormData[keyof ProjectFormData]): boolean {
   if (typeof value === "string") {
     return value.trim().length > 0
@@ -57,6 +65,9 @@ export default function PermitStartPage() {
   const [projectState, setProjectState] = useState<ProjectInformationState>({ status: "idle" })
   const [authState, setAuthState] = useState<PermitflowAuthState>({ status: "idle" })
   const [submitState, setSubmitState] = useState<PermitflowSubmitState>({ status: "idle" })
+  const [permitflowStatus, setPermitflowStatus] = useState<PermitflowStatusState>({
+    status: "idle"
+  })
   const [authEmail, setAuthEmail] = useState("")
   const [authPassword, setAuthPassword] = useState("")
   const [searchParams] = useSearchParams()
@@ -98,6 +109,7 @@ export default function PermitStartPage() {
         status: "error",
         message: "Provide a project identifier to submit to PermitFlow."
       })
+      setPermitflowStatus({ status: "idle" })
       return () => {
         isCancelled = true
       }
@@ -109,6 +121,7 @@ export default function PermitStartPage() {
         status: "error",
         message: "Project identifiers must be numeric. Return to the portal to save your project."
       })
+      setPermitflowStatus({ status: "idle" })
       return () => {
         isCancelled = true
       }
@@ -134,12 +147,56 @@ export default function PermitStartPage() {
               ? error.message
               : "Unable to load project details."
         setProjectState({ status: "error", message })
+        setPermitflowStatus({ status: "idle" })
       })
 
     return () => {
       isCancelled = true
     }
   }, [searchParams])
+
+  useEffect(() => {
+    if (projectState.status !== "success") {
+      return
+    }
+
+    const projectIdValue = projectState.formData.id
+    const projectId = projectIdValue ? Number.parseInt(projectIdValue, 10) : Number.NaN
+    if (!Number.isFinite(projectId)) {
+      setPermitflowStatus({
+        status: "error",
+        message: "Project identifiers must be numeric to check PermitFlow status."
+      })
+      return
+    }
+
+    let isCancelled = false
+    setPermitflowStatus({ status: "loading" })
+
+    loadPermitflowProjectStatus(projectId)
+      .then((info) => {
+        if (isCancelled) {
+          return
+        }
+        setPermitflowStatus({ status: "success", info })
+      })
+      .catch((error) => {
+        if (isCancelled) {
+          return
+        }
+        const message =
+          error instanceof ProjectPersistenceError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : "Unable to check PermitFlow status."
+        setPermitflowStatus({ status: "error", message })
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [projectState])
 
   const requiredFields = useMemo(
     () =>
@@ -167,6 +224,24 @@ export default function PermitStartPage() {
     }
     return formatProjectSummary(projectState.formData)
   }, [projectState])
+
+  const hasExistingPermitflowProject =
+    permitflowStatus.status === "success" && permitflowStatus.info.exists
+
+  const formattedPermitflowTimestamp = useMemo(() => {
+    if (permitflowStatus.status !== "success") {
+      return undefined
+    }
+    const timestamp = permitflowStatus.info.lastUpdated
+    if (!timestamp) {
+      return undefined
+    }
+    const parsed = Date.parse(timestamp)
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed).toLocaleString()
+    }
+    return timestamp
+  }, [permitflowStatus])
 
   const canSubmitProject =
     projectState.status === "success" &&
@@ -226,14 +301,33 @@ export default function PermitStartPage() {
     setSubmitState({ status: "submitting" })
 
     try {
-      await submitPermitflowProject({
-        formData: projectState.formData,
-        accessToken: authState.accessToken
-      })
+      if (hasExistingPermitflowProject) {
+        await updatePermitflowProject({
+          formData: projectState.formData,
+          accessToken: authState.accessToken
+        })
+      } else {
+        await submitPermitflowProject({
+          formData: projectState.formData,
+          accessToken: authState.accessToken
+        })
+      }
       setSubmitState({
         status: "success",
-        message: "Project submitted to PermitFlow."
+        message: hasExistingPermitflowProject
+          ? "Project updated in PermitFlow."
+          : "Project submitted to PermitFlow."
       })
+      const projectIdValue = projectState.formData.id
+      const projectId = projectIdValue ? Number.parseInt(projectIdValue, 10) : Number.NaN
+      if (Number.isFinite(projectId)) {
+        try {
+          const info = await loadPermitflowProjectStatus(projectId)
+          setPermitflowStatus({ status: "success", info })
+        } catch (statusError) {
+          console.warn("Failed to refresh PermitFlow status after submission.", statusError)
+        }
+      }
     } catch (error) {
       const message =
         error instanceof ProjectPersistenceError
@@ -318,6 +412,39 @@ export default function PermitStartPage() {
                   <h3>Project summary</h3>
                   <pre className="permit-start-page__project-summary">{projectSummary}</pre>
                 </div>
+                <div>
+                  <h3>PermitFlow status</h3>
+                  {permitflowStatus.status === "loading" ? (
+                    <p className="permit-start-page__status" role="status" aria-live="polite">
+                      Checking PermitFlow for existing records…
+                    </p>
+                  ) : null}
+                  {permitflowStatus.status === "error" ? (
+                    <div className="permit-start-page__error" role="alert">
+                      <p>{permitflowStatus.message}</p>
+                    </div>
+                  ) : null}
+                  {permitflowStatus.status === "success" ? (
+                    <div className="permit-start-page__status" role="status" aria-live="polite">
+                      {permitflowStatus.info.exists ? (
+                        <p>
+                          PermitFlow already has this project.
+                          {formattedPermitflowTimestamp
+                            ? ` Last updated ${formattedPermitflowTimestamp}.`
+                            : null}
+                        </p>
+                      ) : (
+                        <p>No PermitFlow submission found for this project yet.</p>
+                      )}
+                      {permitflowStatus.info.basicPermitProcess ? (
+                        <p>
+                          A Basic Permit process is already underway. Update details to keep it
+                          current.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
                 {missingRequiredFields.length > 0 ? (
                   <div className="permit-start-page__warning" role="status" aria-live="polite">
                     <p>Complete the following required fields before submitting:</p>
@@ -386,7 +513,9 @@ export default function PermitStartPage() {
               >
                 {submitState.status === "submitting"
                   ? "Submitting…"
-                  : "Submit project to PermitFlow"}
+                  : hasExistingPermitflowProject
+                    ? "Update project in PermitFlow"
+                    : "Submit project to PermitFlow"}
               </button>
               {submitState.status === "error" ? (
                 <span className="permit-start-page__submit-error" role="alert">

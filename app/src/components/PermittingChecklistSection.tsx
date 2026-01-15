@@ -21,6 +21,8 @@ type PermittingChecklistSectionProps = {
   onToggleItem: (id: string) => void
   onRemoveItem: (id: string) => void
   onBulkAddFromSeed: (labels: string[]) => void
+  hasBasicPermit: boolean
+  onAddBasicPermit: () => void
 }
 
 export function PermittingChecklistSection({
@@ -28,7 +30,9 @@ export function PermittingChecklistSection({
   onAddItem,
   onToggleItem,
   onRemoveItem,
-  onBulkAddFromSeed
+  onBulkAddFromSeed,
+  hasBasicPermit,
+  onAddBasicPermit
 }: PermittingChecklistSectionProps) {
   const [draftLabel, setDraftLabel] = useState("")
 
@@ -84,6 +88,14 @@ export function PermittingChecklistSection({
           Add item
         </button>
       </form>
+      {!hasBasicPermit ? (
+        <div className="checklist-panel__basic-permit">
+          <p>Need to track the Basic Permit workflow?</p>
+          <button type="button" className="secondary" onClick={onAddBasicPermit}>
+            Add Basic Permit item
+          </button>
+        </div>
+      ) : null}
 
       <div className="checklist-panel__body">
         {items.length === 0 ? (
