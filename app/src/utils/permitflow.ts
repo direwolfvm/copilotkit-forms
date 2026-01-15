@@ -24,6 +24,7 @@ type PermitflowAuthSession = {
 type PermitflowProjectRow = {
   id?: number | string | null
   title?: string | null
+  last_updated?: string | null
 }
 
 type PermitflowProcessInstanceRow = {
