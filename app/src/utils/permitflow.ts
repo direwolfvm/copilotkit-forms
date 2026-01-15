@@ -1,8 +1,14 @@
 import type { ProjectContact, ProjectFormData } from "../schema/projectSchema"
 import { getPermitflowAnonKey, getPermitflowUrl } from "../runtimeConfig"
+import type { PermittingChecklistItem } from "../components/PermittingChecklistSection"
 import {
+  PRE_SCREENING_PROCESS_MODEL_ID,
   ProjectPersistenceError,
+  buildDecisionPayloadRecords,
+  buildProjectRecordForDecisionPayloads,
+  type DecisionElementMap,
   type DecisionElementRecord,
+  type LoadedProjectPortalState,
   type ProcessInformation
 } from "./projectPersistence"
 
@@ -17,6 +23,23 @@ type PermitflowAuthSession = {
   expiresIn?: number
   refreshToken?: string
 }
+
+type PermitflowDecisionPayloadContext = {
+  portalState: LoadedProjectPortalState
+  processInstanceId: number
+  projectRecord: Record<string, unknown>
+  processModelId: number
+  timestamp: string
+}
+
+type PermitflowProjectSubmissionArgs = {
+  portalState: LoadedProjectPortalState
+  accessToken: string
+  userId: string
+  processModelId?: number
+}
+
+const DATA_SOURCE_SYSTEM = "project-portal"
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -96,7 +119,13 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(entries) as T
 }
 
-function buildPermitflowProjectPayload(formData: ProjectFormData): Record<string, unknown> {
+function buildPermitflowProjectPayload({
+  formData,
+  userId
+}: {
+  formData: ProjectFormData
+  userId?: string
+}): Record<string, unknown> {
   const normalizedId = normalizeString(formData.id)
   const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
   const timestamp = new Date().toISOString()
@@ -123,10 +152,68 @@ function buildPermitflowProjectPayload(formData: ProjectFormData): Record<string
     location_object: normalizeString(formData.location_object),
     sponsor_contact: normalizeContact(formData.sponsor_contact),
     other: Object.keys(other).length > 0 ? other : undefined,
+    user_id: normalizeString(userId),
     data_source_system: "project-portal",
     last_updated: timestamp,
     retrieved_timestamp: timestamp
   })
+}
+
+function extractNumericId(payload: unknown): number | undefined {
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      const id = extractNumericId(entry)
+      if (typeof id === "number") {
+        return id
+      }
+    }
+    return undefined
+  }
+
+  if (payload && typeof payload === "object") {
+    const candidate = (payload as Record<string, unknown>).id
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate
+    }
+  }
+
+  return undefined
+}
+
+function buildProcessInstanceDescription(projectTitle: string | null): string {
+  if (projectTitle && projectTitle.length > 0) {
+    return `${projectTitle} Pre-Screening`
+  }
+  return "Pre-Screening"
+}
+
+function buildCaseEventData(
+  processInstanceId: number,
+  eventData?: Record<string, unknown> | null
+): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    process: processInstanceId
+  }
+
+  if (eventData && typeof eventData === "object") {
+    for (const [key, value] of Object.entries(eventData)) {
+      if (typeof value === "undefined") {
+        continue
+      }
+      base[key] = value
+    }
+  }
+
+  return base
+}
+
+function normalizePermittingChecklist(
+  checklist: LoadedProjectPortalState["permittingChecklist"]
+): PermittingChecklistItem[] {
+  return checklist.map((item, index) => ({
+    id: `permitflow-${index}`,
+    ...item
+  }))
 }
 
 async function fetchPermitflowList<T>(
@@ -398,6 +485,212 @@ async function fetchDecisionElements(
   return elements
 }
 
+async function createPermitflowProject({
+  options,
+  formData,
+  accessToken,
+  userId
+}: {
+  options: PermitflowFetchOptions
+  formData: ProjectFormData
+  accessToken: string
+  userId: string
+}): Promise<number> {
+  const payload = buildPermitflowProjectPayload({ formData, userId })
+
+  const response = await fetch(`${options.supabaseUrl}/rest/v1/project`, {
+    method: "POST",
+    headers: {
+      apikey: options.supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(payload)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow submit failed (${response.status}): ${errorDetail}`
+        : `PermitFlow submit failed (${response.status}).`
+    )
+  }
+
+  const payloadResponse = responseText ? safeJsonParse(responseText) : undefined
+  const projectId = extractNumericId(payloadResponse)
+  if (typeof projectId !== "number") {
+    throw new ProjectPersistenceError("PermitFlow response did not include a project identifier.")
+  }
+
+  return projectId
+}
+
+async function createPermitflowProcessInstance({
+  options,
+  accessToken,
+  projectId,
+  projectTitle,
+  processModelId
+}: {
+  options: PermitflowFetchOptions
+  accessToken: string
+  projectId: number
+  projectTitle: string | null
+  processModelId: number
+}): Promise<number> {
+  const timestamp = new Date().toISOString()
+  const processInstancePayload = stripUndefined({
+    description: buildProcessInstanceDescription(projectTitle),
+    process_model: processModelId,
+    parent_project_id: projectId,
+    data_source_system: DATA_SOURCE_SYSTEM,
+    last_updated: timestamp,
+    retrieved_timestamp: timestamp
+  })
+
+  const response = await fetch(`${options.supabaseUrl}/rest/v1/process_instance`, {
+    method: "POST",
+    headers: {
+      apikey: options.supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(processInstancePayload)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow process instance submit failed (${response.status}): ${errorDetail}`
+        : `PermitFlow process instance submit failed (${response.status}).`
+    )
+  }
+
+  const payloadResponse = responseText ? safeJsonParse(responseText) : undefined
+  const processInstanceId = extractNumericId(payloadResponse)
+  if (typeof processInstanceId !== "number") {
+    throw new ProjectPersistenceError(
+      "PermitFlow response did not include a process instance identifier."
+    )
+  }
+
+  return processInstanceId
+}
+
+function buildDecisionElementMap(elements: DecisionElementRecord[]): DecisionElementMap {
+  const map: DecisionElementMap = new Map()
+  for (const element of elements) {
+    map.set(element.id, element)
+  }
+  return map
+}
+
+async function buildPermitflowDecisionPayloads({
+  portalState,
+  processInstanceId,
+  projectRecord,
+  processModelId,
+  timestamp
+}: PermitflowDecisionPayloadContext): Promise<Array<Record<string, unknown>>> {
+  const options = {
+    supabaseUrl: getPermitflowUrl() ?? "",
+    supabaseAnonKey: getPermitflowAnonKey() ?? ""
+  }
+
+  const elements = await fetchDecisionElements(options, processModelId)
+  const decisionElements = buildDecisionElementMap(elements)
+
+  return buildDecisionPayloadRecords({
+    processInstanceId,
+    timestamp,
+    projectRecord,
+    decisionElements,
+    geospatialResults: portalState.geospatialResults,
+    permittingChecklist: normalizePermittingChecklist(portalState.permittingChecklist),
+    formData: portalState.formData
+  })
+}
+
+async function submitPermitflowDecisionPayloads({
+  options,
+  accessToken,
+  records
+}: {
+  options: PermitflowFetchOptions
+  accessToken: string
+  records: Array<Record<string, unknown>>
+}): Promise<void> {
+  if (records.length === 0) {
+    return
+  }
+
+  const response = await fetch(`${options.supabaseUrl}/rest/v1/process_decision_payload`, {
+    method: "POST",
+    headers: {
+      apikey: options.supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(records)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow decision payload submit failed (${response.status}): ${errorDetail}`
+        : `PermitFlow decision payload submit failed (${response.status}).`
+    )
+  }
+}
+
+async function submitPermitflowCaseEvents({
+  options,
+  accessToken,
+  records
+}: {
+  options: PermitflowFetchOptions
+  accessToken: string
+  records: Array<Record<string, unknown>>
+}): Promise<void> {
+  if (records.length === 0) {
+    return
+  }
+
+  const response = await fetch(`${options.supabaseUrl}/rest/v1/case_event`, {
+    method: "POST",
+    headers: {
+      apikey: options.supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(records)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow case event submit failed (${response.status}): ${errorDetail}`
+        : `PermitFlow case event submit failed (${response.status}).`
+    )
+  }
+}
+
 export async function loadPermitflowProcessInformation(
   processModelId: number
 ): Promise<ProcessInformation> {
@@ -509,12 +802,11 @@ export async function authenticatePermitflowUser({
 }
 
 export async function submitPermitflowProject({
-  formData,
-  accessToken
-}: {
-  formData: ProjectFormData
-  accessToken: string
-}): Promise<void> {
+  portalState,
+  accessToken,
+  userId,
+  processModelId = PRE_SCREENING_PROCESS_MODEL_ID
+}: PermitflowProjectSubmissionArgs): Promise<void> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -523,27 +815,117 @@ export async function submitPermitflowProject({
     )
   }
 
-  const payload = buildPermitflowProjectPayload(formData)
+  const options = { supabaseUrl, supabaseAnonKey }
 
-  const response = await fetch(`${supabaseUrl}/rest/v1/project`, {
-    method: "POST",
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-      "content-type": "application/json",
-      Prefer: "return=minimal"
-    },
-    body: JSON.stringify(payload)
+  const projectId = await createPermitflowProject({
+    options,
+    formData: portalState.formData,
+    accessToken,
+    userId
   })
 
-  const responseText = await response.text()
+  const normalizedTitle = normalizeString(portalState.formData.title) ?? null
+  const processInstanceId = await createPermitflowProcessInstance({
+    options,
+    accessToken,
+    projectId,
+    projectTitle: normalizedTitle,
+    processModelId
+  })
 
-  if (!response.ok) {
-    const errorDetail = extractErrorDetail(responseText)
-    throw new ProjectPersistenceError(
-      errorDetail
-        ? `PermitFlow submit failed (${response.status}): ${errorDetail}`
-        : `PermitFlow submit failed (${response.status}).`
+  const timestamp = new Date().toISOString()
+  const projectRecord = buildProjectRecordForDecisionPayloads({
+    formData: portalState.formData,
+    geospatialResults: portalState.geospatialResults
+  })
+
+  const decisionPayloads = await buildPermitflowDecisionPayloads({
+    portalState,
+    processInstanceId,
+    projectRecord,
+    processModelId,
+    timestamp
+  })
+
+  const decisionPayloadRecords = decisionPayloads.map((record) =>
+    stripUndefined({
+      ...record,
+      process: processInstanceId,
+      project: projectId,
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: timestamp,
+      retrieved_timestamp: timestamp
+    })
+  )
+
+  await submitPermitflowDecisionPayloads({
+    options,
+    accessToken,
+    records: decisionPayloadRecords
+  })
+
+  const eventRecords: Array<Record<string, unknown>> = []
+  const projectInitiatedAt = portalState.portalProgress.projectSnapshot.initiatedAt ?? timestamp
+  eventRecords.push(
+    stripUndefined({
+      parent_process_id: processInstanceId,
+      type: "Project initiated",
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: projectInitiatedAt,
+      retrieved_timestamp: projectInitiatedAt,
+      datetime: projectInitiatedAt,
+      other: buildCaseEventData(processInstanceId, {
+        process: processInstanceId,
+        project_id: projectId,
+        project_title: normalizedTitle,
+        project_snapshot: projectRecord
+      })
+    })
+  )
+
+  const preScreeningInitiatedAt =
+    portalState.portalProgress.preScreening.initiatedAt ??
+    (decisionPayloadRecords.length > 0 ? timestamp : undefined)
+  if (preScreeningInitiatedAt) {
+    eventRecords.push(
+      stripUndefined({
+        parent_process_id: processInstanceId,
+        type: "Pre-screening initiated",
+        data_source_system: DATA_SOURCE_SYSTEM,
+        last_updated: preScreeningInitiatedAt,
+        retrieved_timestamp: preScreeningInitiatedAt,
+        datetime: preScreeningInitiatedAt,
+        other: buildCaseEventData(processInstanceId, {
+          process: processInstanceId,
+          project_id: projectId,
+          total_payloads: decisionPayloadRecords.length
+        })
+      })
     )
   }
+
+  const preScreeningCompletedAt = portalState.portalProgress.preScreening.completedAt
+  if (preScreeningCompletedAt) {
+    eventRecords.push(
+      stripUndefined({
+        parent_process_id: processInstanceId,
+        type: "Pre-screening complete",
+        data_source_system: DATA_SOURCE_SYSTEM,
+        last_updated: preScreeningCompletedAt,
+        retrieved_timestamp: preScreeningCompletedAt,
+        datetime: preScreeningCompletedAt,
+        other: buildCaseEventData(processInstanceId, {
+          process: processInstanceId,
+          project_id: projectId,
+          total_payloads: decisionPayloadRecords.length
+        })
+      })
+    )
+  }
+
+  await submitPermitflowCaseEvents({
+    options,
+    accessToken,
+    records: eventRecords
+  })
 }

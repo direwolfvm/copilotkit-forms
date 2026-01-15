@@ -16,7 +16,11 @@ import {
   type ProjectFormData
 } from "./schema/projectSchema"
 import { loadProjectPortalState } from "./utils/projectPersistence"
-import { ProjectPersistenceError, type ProcessInformation } from "./utils/projectPersistence"
+import {
+  ProjectPersistenceError,
+  type LoadedProjectPortalState,
+  type ProcessInformation
+} from "./utils/projectPersistence"
 
 const BASIC_PERMIT_PROCESS_MODEL_ID = 1
 
@@ -27,7 +31,7 @@ type ProcessInformationState =
 
 type ProjectInformationState =
   | { status: "idle" | "loading" }
-  | { status: "success"; formData: ProjectFormData }
+  | { status: "success"; portalState: LoadedProjectPortalState }
   | { status: "error"; message: string }
 
 type PermitflowAuthState =
@@ -121,7 +125,7 @@ export default function PermitStartPage() {
         if (isCancelled) {
           return
         }
-        setProjectState({ status: "success", formData: result.formData })
+        setProjectState({ status: "success", portalState: result })
       })
       .catch((error) => {
         if (isCancelled) {
@@ -154,7 +158,7 @@ export default function PermitStartPage() {
       return [] as string[]
     }
     return requiredFields
-      .filter((field) => !normalizeRequiredFieldValue(projectState.formData[field]))
+      .filter((field) => !normalizeRequiredFieldValue(projectState.portalState.formData[field]))
       .map((field) => {
         const detail = projectFieldDetails.find((entry) => entry.key === field)
         return detail?.title ?? field
@@ -165,7 +169,7 @@ export default function PermitStartPage() {
     if (projectState.status !== "success") {
       return undefined
     }
-    return formatProjectSummary(projectState.formData)
+    return formatProjectSummary(projectState.portalState.formData)
   }, [projectState])
 
   const canSubmitProject =
@@ -227,8 +231,9 @@ export default function PermitStartPage() {
 
     try {
       await submitPermitflowProject({
-        formData: projectState.formData,
-        accessToken: authState.accessToken
+        portalState: projectState.portalState,
+        accessToken: authState.accessToken,
+        userId: authState.userId
       })
       setSubmitState({
         status: "success",
