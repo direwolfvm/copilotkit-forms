@@ -49,7 +49,7 @@ type PermitflowCaseEventRow = {
 }
 
 const BASIC_PERMIT_LABEL = "Basic Permit"
-const BASIC_PERMIT_PROCESS_MODEL_ID = 1
+export const BASIC_PERMIT_PROCESS_MODEL_ID = 1
 
 function safeJsonParse(text: string): unknown {
   try {
