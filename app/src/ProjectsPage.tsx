@@ -14,11 +14,13 @@ import { ArcgisSketchMap, type GeometryChange } from "./components/ArcgisSketchM
 const PRE_SCREENING_COMPLETE_EVENT = "Pre-screening complete"
 const PRE_SCREENING_INITIATED_EVENT = "Pre-screening initiated"
 const PRE_SCREENING_ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const BASIC_PERMIT_LABEL = "Basic Permit"
 
 type PreScreeningStatus = "complete" | "pending" | "caution"
+type ProcessStatusVariant = "complete" | "pending" | "caution"
 
 type StatusIndicatorProps = {
-  variant: PreScreeningStatus
+  variant: ProcessStatusVariant
   label: string
 }
 
@@ -138,6 +140,41 @@ function determinePreScreeningStatus(
   return undefined
 }
 
+function isBasicPermitProcess(process: ProjectProcessSummary): boolean {
+  const haystack = `${process.title ?? ""} ${process.description ?? ""}`.toLowerCase()
+  return haystack.includes("basic permit")
+}
+
+function determineBasicPermitStatus(
+  process: ProjectProcessSummary
+): { variant: ProcessStatusVariant; label: string } | undefined {
+  if (!isBasicPermitProcess(process)) {
+    return undefined
+  }
+
+  const latestEvent = process.caseEvents[0]
+  if (!latestEvent) {
+    return undefined
+  }
+
+  const eventStatus = latestEvent.status?.toLowerCase()
+
+  if (eventStatus === "complete" || eventStatus === "completed" || eventStatus === "done") {
+    return { variant: "complete", label: `${BASIC_PERMIT_LABEL} complete` }
+  }
+
+  if (eventStatus === "late" || eventStatus === "overdue" || eventStatus === "delayed") {
+    return { variant: "caution", label: `${BASIC_PERMIT_LABEL} delayed` }
+  }
+
+  const latestTimestamp = parseTimestampMillis(latestEvent.lastUpdated)
+  if (latestTimestamp && Date.now() - latestTimestamp > PRE_SCREENING_ONE_WEEK_MS) {
+    return { variant: "caution", label: `${BASIC_PERMIT_LABEL} pending for over 7 days` }
+  }
+
+  return { variant: "pending", label: `${BASIC_PERMIT_LABEL} in progress` }
+}
+
 function getLatestCaseEvent(entry: ProjectHierarchy): CaseEventSummary | undefined {
   let latest: CaseEventSummary | undefined
   let latestTimestamp = -Infinity
@@ -168,6 +205,8 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
   )
   const latestCaseEvent = process.caseEvents[0]
   const preScreeningStatus = determinePreScreeningStatus(process)
+  const basicPermitStatus = determineBasicPermitStatus(process)
+  const latestEventLabel = latestCaseEvent?.name || latestCaseEvent?.eventType
 
   return (
     <li className="projects-tree__process">
@@ -190,10 +229,13 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
             {preScreeningStatus ? (
               <StatusIndicator variant={preScreeningStatus.variant} label={preScreeningStatus.label} />
             ) : null}
-            {latestCaseEvent?.eventType ? (
+            {basicPermitStatus ? (
+              <StatusIndicator variant={basicPermitStatus.variant} label={basicPermitStatus.label} />
+            ) : null}
+            {latestEventLabel ? (
               <span className="projects-tree__latest-event">
                 <span className="projects-tree__latest-event-label">Latest event:</span>
-                <span className="projects-tree__latest-event-value">{latestCaseEvent.eventType}</span>
+                <span className="projects-tree__latest-event-value">{latestEventLabel}</span>
               </span>
             ) : null}
           </div>
@@ -220,11 +262,12 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
 
 function CaseEventTree({ event }: { event: CaseEventSummary }) {
   const formattedUpdated = useMemo(() => formatTimestamp(event.lastUpdated), [event.lastUpdated])
+  const eventLabel = event.name || event.eventType || `Event ${event.id}`
 
   return (
     <li className="projects-tree__event">
       <div className="projects-tree__event-row">
-        <span className="projects-tree__event-title">{event.eventType ?? `Event ${event.id}`}</span>
+        <span className="projects-tree__event-title">{eventLabel}</span>
         {formattedUpdated ? <span className="projects-tree__event-date">{formattedUpdated}</span> : null}
       </div>
     </li>
@@ -275,10 +318,10 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
             {preScreeningStatus ? (
               <StatusIndicator variant={preScreeningStatus.variant} label={preScreeningStatus.label} />
             ) : null}
-            {latestEvent?.eventType ? (
+            {latestEvent?.name || latestEvent?.eventType ? (
               <span className="projects-tree__latest-event">
                 <span className="projects-tree__latest-event-label">Latest event:</span>
-                <span className="projects-tree__latest-event-value">{latestEvent.eventType}</span>
+                <span className="projects-tree__latest-event-value">{latestEvent.name || latestEvent.eventType}</span>
               </span>
             ) : null}
             {formattedUpdated ? (

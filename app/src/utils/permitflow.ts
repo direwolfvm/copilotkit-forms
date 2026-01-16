@@ -41,7 +41,9 @@ type PermitflowProcessInstanceRow = {
 type PermitflowCaseEventRow = {
   id?: number | null
   parent_process_id?: number | null
+  name?: string | null
   type?: string | null
+  status?: string | null
   last_updated?: string | null
   other?: unknown
 }
@@ -1082,7 +1084,7 @@ export async function loadBasicPermitProcessesForProjects(
           options,
           "/rest/v1/case_event",
           (endpoint) => {
-            endpoint.searchParams.set("select", "id,parent_process_id,type,last_updated,other")
+            endpoint.searchParams.set("select", "id,parent_process_id,name,type,status,last_updated,other")
             endpoint.searchParams.set("parent_process_id", `in.(${processIds.join(",")})`)
           }
         )
@@ -1098,7 +1100,9 @@ export async function loadBasicPermitProcessesForProjects(
       const events = caseEventsByProcess.get(processId) ?? []
       events.push({
         id,
+        name: typeof row.name === "string" ? row.name : null,
         eventType: typeof row.type === "string" ? row.type : null,
+        status: typeof row.status === "string" ? row.status : null,
         lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
         data: row.other ?? undefined
       })
