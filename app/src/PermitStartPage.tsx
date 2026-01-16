@@ -36,7 +36,7 @@ type ProjectInformationState =
 type PermitflowAuthState =
   | { status: "idle" }
   | { status: "authenticating" }
-  | { status: "authenticated"; accessToken: string; userId: string }
+  | { status: "authenticated"; accessToken: string; userId: string; userEmail: string }
   | { status: "error"; message: string }
 
 type PermitflowSubmitState =
@@ -265,7 +265,8 @@ export default function PermitStartPage() {
       setAuthState({
         status: "authenticated",
         accessToken: session.accessToken,
-        userId: session.userId
+        userId: session.userId,
+        userEmail: email
       })
     } catch (error) {
       const message =
@@ -304,12 +305,15 @@ export default function PermitStartPage() {
       if (hasExistingPermitflowProject) {
         await updatePermitflowProject({
           formData: projectState.formData,
-          accessToken: authState.accessToken
+          accessToken: authState.accessToken,
+          userId: authState.userId
         })
       } else {
         await submitPermitflowProject({
           formData: projectState.formData,
-          accessToken: authState.accessToken
+          accessToken: authState.accessToken,
+          userId: authState.userId,
+          userEmail: authState.userEmail
         })
       }
       setSubmitState({

@@ -174,7 +174,10 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(entries) as T
 }
 
-function buildPermitflowProjectPayload(formData: ProjectFormData): Record<string, unknown> {
+function buildPermitflowProjectPayload(
+  formData: ProjectFormData,
+  userId?: string
+): Record<string, unknown> {
   const normalizedId = normalizeString(formData.id)
   const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
   const timestamp = new Date().toISOString()
@@ -201,6 +204,8 @@ function buildPermitflowProjectPayload(formData: ProjectFormData): Record<string
     location_object: normalizeString(formData.location_object),
     sponsor_contact: normalizeContact(formData.sponsor_contact),
     other: Object.keys(other).length > 0 ? other : undefined,
+    user_id: normalizeString(userId),
+    current_status: "draft",
     data_source_system: "project-portal",
     last_updated: timestamp,
     retrieved_timestamp: timestamp
@@ -586,30 +591,27 @@ export async function authenticatePermitflowUser({
   }
 }
 
-export async function submitPermitflowProject({
-  formData,
-  accessToken
-}: {
-  formData: ProjectFormData
-  accessToken: string
-}): Promise<void> {
-  const supabaseUrl = getPermitflowUrl()
-  const supabaseAnonKey = getPermitflowAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
-    )
-  }
+const BASIC_PERMIT_PROCESS_MODEL_ID = 1
 
-  const payload = buildPermitflowProjectPayload(formData)
+type PermitflowSubmitResult = {
+  projectId: number
+  processInstanceId: number
+}
 
-  const response = await fetch(`${supabaseUrl}/rest/v1/project`, {
+async function createPermitflowRecord<T>(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  accessToken: string,
+  table: string,
+  payload: Record<string, unknown>
+): Promise<T> {
+  const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
     method: "POST",
     headers: {
       apikey: supabaseAnonKey,
       Authorization: `Bearer ${accessToken}`,
       "content-type": "application/json",
-      Prefer: "return=minimal"
+      Prefer: "return=representation"
     },
     body: JSON.stringify(payload)
   })
@@ -620,10 +622,194 @@ export async function submitPermitflowProject({
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
       errorDetail
-        ? `PermitFlow submit failed (${response.status}): ${errorDetail}`
-        : `PermitFlow submit failed (${response.status}).`
+        ? `PermitFlow ${table} creation failed (${response.status}): ${errorDetail}`
+        : `PermitFlow ${table} creation failed (${response.status}).`
     )
   }
+
+  const parsed = responseText ? safeJsonParse(responseText) : undefined
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return parsed[0] as T
+  }
+  if (parsed && typeof parsed === "object") {
+    return parsed as T
+  }
+  throw new ProjectPersistenceError(`PermitFlow ${table} creation returned empty response.`)
+}
+
+async function createPermitflowRecordsBatch<T>(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  accessToken: string,
+  table: string,
+  payloads: Record<string, unknown>[]
+): Promise<T[]> {
+  const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(payloads)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow ${table} batch creation failed (${response.status}): ${errorDetail}`
+        : `PermitFlow ${table} batch creation failed (${response.status}).`
+    )
+  }
+
+  const parsed = responseText ? safeJsonParse(responseText) : undefined
+  if (Array.isArray(parsed)) {
+    return parsed as T[]
+  }
+  return []
+}
+
+export async function submitPermitflowProject({
+  formData,
+  accessToken,
+  userId,
+  userEmail
+}: {
+  formData: ProjectFormData
+  accessToken: string
+  userId: string
+  userEmail: string
+}): Promise<PermitflowSubmitResult> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const timestamp = new Date().toISOString()
+
+  // Step 2: Create project record with user_id
+  const projectPayload = buildPermitflowProjectPayload(formData, userId)
+  const projectResult = await createPermitflowRecord<{ id: number }>(
+    supabaseUrl,
+    supabaseAnonKey,
+    accessToken,
+    "project",
+    projectPayload
+  )
+  const projectId = parseNumericId(projectResult.id)
+  if (typeof projectId !== "number") {
+    throw new ProjectPersistenceError("PermitFlow project creation did not return a valid ID.")
+  }
+
+  // Step 3: Create process_instance record
+  const processInstancePayload = {
+    parent_project_id: projectId,
+    process_model: BASIC_PERMIT_PROCESS_MODEL_ID,
+    status: "draft",
+    start_date: timestamp.split("T")[0]
+  }
+  const processResult = await createPermitflowRecord<{ id: number }>(
+    supabaseUrl,
+    supabaseAnonKey,
+    accessToken,
+    "process_instance",
+    processInstancePayload
+  )
+  const processInstanceId = parseNumericId(processResult.id)
+  if (typeof processInstanceId !== "number") {
+    throw new ProjectPersistenceError(
+      "PermitFlow process instance creation did not return a valid ID."
+    )
+  }
+
+  // Step 4: Create 3 process_decision_payload records
+  const decisionPayloads = [
+    {
+      process_decision_element: 1,
+      process: processInstanceId,
+      project: projectId,
+      evaluation_data: {
+        provider: "project-portal",
+        user_id: userId,
+        email: userEmail,
+        authenticated_at: timestamp,
+        external_system_name: "CEQ Project Portal"
+      }
+    },
+    {
+      process_decision_element: 2,
+      process: processInstanceId,
+      project: projectId,
+      evaluation_data: {
+        title: normalizeString(formData.title),
+        description: normalizeString(formData.description),
+        sector: normalizeString(formData.sector),
+        lead_agency: normalizeString(formData.lead_agency),
+        type: normalizeString(formData.type),
+        location_text: normalizeString(formData.location_text)
+      }
+    },
+    {
+      process_decision_element: 3,
+      process: processInstanceId,
+      project: projectId,
+      evaluation_data: {}
+    }
+  ]
+  await createPermitflowRecordsBatch(
+    supabaseUrl,
+    supabaseAnonKey,
+    accessToken,
+    "process_decision_payload",
+    decisionPayloads
+  )
+
+  // Step 5: Create case_event records
+  const caseEvents = [
+    {
+      parent_process_id: processInstanceId,
+      name: "Project Started",
+      description: `Permit application started for project: ${formData.title ?? "Untitled"}`,
+      type: "project_started",
+      status: "completed",
+      source: "project-portal",
+      datetime: timestamp
+    },
+    {
+      parent_process_id: processInstanceId,
+      name: "Form Saved",
+      description: "User id form data saved",
+      type: "form_saved",
+      status: "completed",
+      source: "project-portal",
+      datetime: timestamp
+    },
+    {
+      parent_process_id: processInstanceId,
+      name: "Form Saved",
+      description: "Project Information form data saved",
+      type: "form_saved",
+      status: "completed",
+      source: "project-portal",
+      datetime: timestamp
+    }
+  ]
+  await createPermitflowRecordsBatch(
+    supabaseUrl,
+    supabaseAnonKey,
+    accessToken,
+    "case_event",
+    caseEvents
+  )
+
+  return { projectId, processInstanceId }
 }
 
 export type PermitflowProjectStatus = {
@@ -715,10 +901,12 @@ export async function loadPermitflowProjectStatus(
 
 export async function updatePermitflowProject({
   formData,
-  accessToken
+  accessToken,
+  userId
 }: {
   formData: ProjectFormData
   accessToken: string
+  userId: string
 }): Promise<void> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
@@ -735,7 +923,7 @@ export async function updatePermitflowProject({
     throw new ProjectPersistenceError("A numeric project identifier is required to update PermitFlow.")
   }
 
-  const payload = buildPermitflowProjectPayload(formData)
+  const payload = buildPermitflowProjectPayload(formData, userId)
 
   const response = await fetch(`${supabaseUrl}/rest/v1/project?id=eq.${numericId}`, {
     method: "PATCH",
