@@ -752,7 +752,6 @@ export async function submitPermitflowProject({
         description: normalizeString(formData.description),
         sector: normalizeString(formData.sector),
         lead_agency: normalizeString(formData.lead_agency),
-        type: normalizeString(formData.type),
         location_text: normalizeString(formData.location_text)
       }
     },
