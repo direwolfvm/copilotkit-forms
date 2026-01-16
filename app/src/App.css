@@ -3259,6 +3259,81 @@
   color: var(--color-heading);
 }
 
+.projects-tree__permit-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.projects-tree__permit-checklist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.projects-tree__permit-checklist-title {
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.projects-tree__permit-checklist-status {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-muted) 75%, white 25%);
+  color: color-mix(in srgb, var(--color-text-muted) 75%, var(--color-text) 25%);
+}
+
+.projects-tree__permit-checklist-status--complete {
+  background: color-mix(in srgb, var(--color-success) 18%, white 82%);
+  color: var(--color-success, #15803d);
+}
+
+.projects-tree__permit-checklist-status--pending {
+  background: color-mix(in srgb, var(--accent) 15%, white 85%);
+  color: var(--accent-dark);
+}
+
+.projects-tree__permit-checklist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.projects-tree__permit-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: color-mix(in srgb, var(--color-text-muted) 70%, var(--color-text) 30%);
+}
+
+.projects-tree__permit-checklist-marker {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent 20%);
+  background: white;
+  flex: 0 0 auto;
+}
+
+.projects-tree__permit-checklist-item--complete .projects-tree__permit-checklist-marker {
+  background: var(--color-success, #15803d);
+  border-color: var(--color-success, #15803d);
+}
+
+.projects-tree__permit-checklist-item--complete .projects-tree__permit-checklist-label {
+  color: var(--color-heading);
+  text-decoration: line-through;
+}
+
 .status-indicator {
   display: inline-flex;
   align-items: center;

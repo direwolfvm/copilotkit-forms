@@ -441,6 +441,7 @@ export async function loadPreScreeningAnalytics(): Promise<PreScreeningAnalytics
 export type ProjectHierarchy = {
   project: ProjectSummary
   processes: ProjectProcessSummary[]
+  permittingChecklist: LoadedPermittingChecklistItem[]
 }
 
 export type LoadedPermittingChecklistItem = Omit<PermittingChecklistItem, "id">
@@ -3734,6 +3735,7 @@ type CaseEventRow = {
 }
 
 type ProcessDecisionPayloadRow = {
+  process?: number | null
   process_decision_element?: number | null
   evaluation_data?: unknown
   last_updated?: string | null
@@ -4858,6 +4860,42 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
     .map((row) => parseNumericId(row.id))
     .filter((id): id is number => typeof id === "number")
 
+  const permitChecklistByProcess = new Map<number, LoadedPermittingChecklistItem[]>()
+
+  const decisionPayloads = processIds.length
+    ? await fetchSupabaseList<ProcessDecisionPayloadRow>(
+        supabaseUrl,
+        supabaseAnonKey,
+        "/rest/v1/process_decision_payload",
+        "decision payloads",
+        (endpoint) => {
+          endpoint.searchParams.set("select", "process,evaluation_data,last_updated")
+          endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+          endpoint.searchParams.set("process", `in.(${processIds.join(",")})`)
+          endpoint.searchParams.set("order", "last_updated.asc")
+          endpoint.searchParams.set("limit", "1000")
+        }
+      )
+    : []
+
+  for (const payload of decisionPayloads) {
+    const processId = parseNumericId(payload.process)
+    if (typeof processId !== "number") {
+      continue
+    }
+    if (!payload.evaluation_data || typeof payload.evaluation_data !== "object") {
+      continue
+    }
+    const evaluation = payload.evaluation_data as Record<string, unknown>
+    if (!Object.prototype.hasOwnProperty.call(evaluation, "permits")) {
+      continue
+    }
+    const permits = parseChecklistItems(evaluation.permits)
+    if (permits.length > 0) {
+      permitChecklistByProcess.set(processId, permits)
+    }
+  }
+
   const caseEvents = processIds.length
     ? await fetchSupabaseList<CaseEventRow>(
         supabaseUrl,
@@ -4938,7 +4976,23 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
     }
     const projectProcesses = processesByProject.get(projectId) ?? []
     projectProcesses.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
-    hierarchy.push({ project: projectSummary, processes: projectProcesses })
+    const preScreeningProcess = projectProcesses.find((process) => {
+      const haystack = `${process.title ?? ""} ${process.description ?? ""}`.toLowerCase()
+      return haystack.includes("pre-screening")
+    })
+    let permittingChecklist: LoadedPermittingChecklistItem[] = []
+    if (preScreeningProcess) {
+      permittingChecklist = permitChecklistByProcess.get(preScreeningProcess.id) ?? []
+    } else {
+      for (const process of projectProcesses) {
+        const permits = permitChecklistByProcess.get(process.id)
+        if (permits && permits.length > 0) {
+          permittingChecklist = permits
+          break
+        }
+      }
+    }
+    hierarchy.push({ project: projectSummary, processes: projectProcesses, permittingChecklist })
   }
 
   hierarchy.sort((a, b) => compareByTimestampDesc(a.project.lastUpdated, b.project.lastUpdated))
