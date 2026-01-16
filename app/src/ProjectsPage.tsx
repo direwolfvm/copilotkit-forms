@@ -105,10 +105,6 @@ function isPreScreeningProcess(process: ProjectProcessSummary): boolean {
   return haystack.includes("pre-screening")
 }
 
-function findPreScreeningProcess(processes: ProjectProcessSummary[]): ProjectProcessSummary | undefined {
-  return processes.find((process) => isPreScreeningProcess(process))
-}
-
 function determinePreScreeningStatus(
   process: ProjectProcessSummary
 ): { variant: PreScreeningStatus; label: string } | undefined {
