@@ -15,6 +15,7 @@ const PRE_SCREENING_COMPLETE_EVENT = "Pre-screening complete"
 const PRE_SCREENING_INITIATED_EVENT = "Pre-screening initiated"
 const PRE_SCREENING_ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const BASIC_PERMIT_LABEL = "Basic Permit"
+const BASIC_PERMIT_APPROVED_EVENT = "project_approved"
 
 type PreScreeningStatus = "complete" | "pending" | "caution"
 type ProcessStatusVariant = "complete" | "pending" | "caution"
@@ -152,16 +153,19 @@ function determineBasicPermitStatus(
     return undefined
   }
 
+  const hasApproval = process.caseEvents.some(
+    (event) => event.eventType?.toLowerCase() === BASIC_PERMIT_APPROVED_EVENT
+  )
+  if (hasApproval) {
+    return { variant: "complete", label: `${BASIC_PERMIT_LABEL} complete` }
+  }
+
   const latestEvent = process.caseEvents[0]
   if (!latestEvent) {
     return undefined
   }
 
   const eventStatus = latestEvent.status?.toLowerCase()
-
-  if (eventStatus === "complete" || eventStatus === "completed" || eventStatus === "done") {
-    return { variant: "complete", label: `${BASIC_PERMIT_LABEL} complete` }
-  }
 
   if (eventStatus === "late" || eventStatus === "overdue" || eventStatus === "delayed") {
     return { variant: "caution", label: `${BASIC_PERMIT_LABEL} delayed` }
