@@ -1003,7 +1003,7 @@ export async function loadBasicPermitProcessesForProjects(
       "/rest/v1/project",
       (endpoint) => {
         endpoint.searchParams.set("select", "id,title")
-        endpoint.searchParams.set("or", titleFilters.join(","))
+        endpoint.searchParams.set("or", `(${titleFilters.join(",")})`)
       }
     )
 
