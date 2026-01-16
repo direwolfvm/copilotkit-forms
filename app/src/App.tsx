@@ -11,6 +11,7 @@ import SettingsPage from "./SettingsPage"
 import AboutPage from "./AboutPage"
 import AnalyticsPage from "./AnalyticsPage"
 import PermitStartPage from "./PermitStartPage"
+import { PermitInfoPage } from "./PermitInfoPage"
 import { useHolidayTheme } from "./holidayThemeContext"
 import Snowfall from "./components/Snowfall"
 
@@ -354,6 +355,7 @@ function App() {
         </Route>
         <Route path="resource-check" element={<ResourceCheckPage />} />
         <Route path="permits/basic" element={<PermitStartPage />} />
+        <Route path="permit-info/:permitId" element={<PermitInfoPage />} />
         <Route path="developer-tools" element={<DeveloperToolsPage />} />
         <Route path="about" element={<AboutPage />} />
         <Route path="settings" element={<SettingsPage />} />

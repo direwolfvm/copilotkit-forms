@@ -40,6 +40,7 @@ import { CollapsibleCard, type CollapsibleCardStatus } from "./components/Collap
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
+import { findPermitByLabel, getPermitInfoUrl } from "./utils/permitInventory"
 import {
   ProjectPersistenceError,
   saveProjectSnapshot,
@@ -1405,13 +1406,27 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             changed = true
           }
         } else {
+          // Look up permit info link for non-Basic Permit items
+          let itemLink: PermittingChecklistItem["link"] = undefined
+          if (isBasicPermit) {
+            itemLink = BASIC_PERMIT_LINK
+          } else {
+            const matchedPermit = findPermitByLabel(entry.label)
+            if (matchedPermit) {
+              itemLink = {
+                href: getPermitInfoUrl(matchedPermit.id),
+                label: "Info"
+              }
+            }
+          }
+
           const newItem: PermittingChecklistItem = {
             id: generateChecklistItemId(),
             label: entry.label,
             completed: typeof entry.completed === "boolean" ? entry.completed : false,
             notes: entry.notes,
             source: entry.source ?? "manual",
-            link: isBasicPermit ? BASIC_PERMIT_LINK : undefined
+            link: itemLink
           }
           next.push(newItem)
           indexByKey.set(key, next.length - 1)
