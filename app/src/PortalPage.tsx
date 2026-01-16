@@ -2473,21 +2473,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
                 </>
               }
             />
-            {locationFieldDetail ? (
-              <LocationSection
-                key={locationSectionKey}
-                title={locationFieldDetail.title}
-                description={locationFieldDetail.description}
-                placeholder={locationFieldDetail.placeholder}
-                rows={locationFieldDetail.rows}
-                locationText={formData.location_text}
-                geometry={formData.location_object}
-                activeUploadFileName={projectGisUpload.uploadedFile?.fileName}
-                enableFileUpload
-                onLocationTextChange={handleLocationTextChange}
-                onLocationGeometryChange={handleLocationGeometryChange}
-              />
-            ) : null}
             <CollapsibleCard
               className="form-panel"
               title="Project form"
@@ -2577,6 +2562,26 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
                 </div>
               </Form>
             </CollapsibleCard>
+            {locationFieldDetail ? (
+              <LocationSection
+                key={locationSectionKey}
+                title="Location and Geospatial Screening"
+                description={locationFieldDetail.description}
+                placeholder={locationFieldDetail.placeholder}
+                rows={locationFieldDetail.rows}
+                locationText={formData.location_text}
+                geometry={formData.location_object}
+                activeUploadFileName={projectGisUpload.uploadedFile?.fileName}
+                enableFileUpload
+                onLocationTextChange={handleLocationTextChange}
+                onLocationGeometryChange={handleLocationGeometryChange}
+                geospatialResults={geospatialResults}
+                onRunGeospatialScreen={handleRunGeospatialScreen}
+                isRunningGeospatial={isGeospatialRunning}
+                hasGeometry={hasGeometry}
+                bufferMiles={DEFAULT_BUFFER_MILES}
+              />
+            ) : null}
         <PermittingChecklistSection
           items={permitChecklistItems}
           onAddItem={handleAddChecklistItem}
@@ -2594,11 +2599,6 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               }}
               fieldConfigs={nepaFieldConfigs}
               onFieldChange={handleNepaFieldChange}
-              geospatialResults={geospatialResults}
-              onRunGeospatialScreen={handleRunGeospatialScreen}
-              isRunningGeospatial={isGeospatialRunning}
-              hasGeometry={hasGeometry}
-              bufferMiles={DEFAULT_BUFFER_MILES}
               onSavePreScreeningData={handleSavePreScreeningData}
               onSubmitPreScreeningData={handleSubmitPreScreeningData}
               preScreeningSubmitState={decisionSubmitState}
