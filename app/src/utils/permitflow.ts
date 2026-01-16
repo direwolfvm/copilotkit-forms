@@ -12,6 +12,7 @@ import {
 type PermitflowFetchOptions = {
   supabaseUrl: string
   supabaseAnonKey: string
+  accessToken?: string
 }
 
 type PermitflowAuthSession = {
@@ -30,11 +31,11 @@ type PermitflowProjectRow = {
 type PermitflowProcessInstanceRow = {
   id?: number | null
   parent_project_id?: number | null
-  title?: string | null
   description?: string | null
   last_updated?: string | null
   created_at?: string | null
   process_model?: number | null
+  status?: string | null
 }
 
 type PermitflowCaseEventRow = {
@@ -46,6 +47,7 @@ type PermitflowCaseEventRow = {
 }
 
 const BASIC_PERMIT_LABEL = "Basic Permit"
+const BASIC_PERMIT_PROCESS_MODEL_ID = 1
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -165,8 +167,7 @@ function quotePostgrestValue(value: string): string {
 }
 
 function isBasicPermitProcess(row: PermitflowProcessInstanceRow): boolean {
-  const haystack = `${row.title ?? ""} ${row.description ?? ""}`.toLowerCase()
-  return haystack.includes(BASIC_PERMIT_LABEL.toLowerCase())
+  return row.process_model === BASIC_PERMIT_PROCESS_MODEL_ID
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -213,7 +214,7 @@ function buildPermitflowProjectPayload(
 }
 
 async function fetchPermitflowList<T>(
-  { supabaseUrl, supabaseAnonKey }: PermitflowFetchOptions,
+  { supabaseUrl, supabaseAnonKey, accessToken }: PermitflowFetchOptions,
   path: string,
   configure?: (endpoint: URL) => void
 ): Promise<T[]> {
@@ -226,7 +227,7 @@ async function fetchPermitflowList<T>(
     method: "GET",
     headers: {
       apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
+      Authorization: `Bearer ${accessToken ?? supabaseAnonKey}`,
       Accept: "application/json"
     }
   })
@@ -591,8 +592,6 @@ export async function authenticatePermitflowUser({
   }
 }
 
-const BASIC_PERMIT_PROCESS_MODEL_ID = 1
-
 type PermitflowSubmitResult = {
   projectId: number
   processInstanceId: number
@@ -603,16 +602,20 @@ async function createPermitflowRecord<T>(
   supabaseAnonKey: string,
   accessToken: string,
   table: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  options?: { upsert?: boolean }
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    apikey: supabaseAnonKey,
+    Authorization: `Bearer ${accessToken}`,
+    "content-type": "application/json",
+    Prefer: options?.upsert
+      ? "resolution=merge-duplicates,return=representation"
+      : "return=representation"
+  }
   const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
     method: "POST",
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-      "content-type": "application/json",
-      Prefer: "return=representation"
-    },
+    headers,
     body: JSON.stringify(payload)
   })
 
@@ -693,19 +696,41 @@ export async function submitPermitflowProject({
   }
 
   const timestamp = new Date().toISOString()
+  const options = { supabaseUrl, supabaseAnonKey, accessToken }
 
-  // Step 2: Create project record with user_id
+  // Step 2: Create or update project record with user_id (upsert)
   const projectPayload = buildPermitflowProjectPayload(formData, userId)
   const projectResult = await createPermitflowRecord<{ id: number }>(
     supabaseUrl,
     supabaseAnonKey,
     accessToken,
     "project",
-    projectPayload
+    projectPayload,
+    { upsert: true }
   )
   const projectId = parseNumericId(projectResult.id)
   if (typeof projectId !== "number") {
     throw new ProjectPersistenceError("PermitFlow project creation did not return a valid ID.")
+  }
+
+  // Check if a Basic Permit process_instance already exists for this project
+  const existingProcesses = await fetchPermitflowList<{ id: number }>(
+    options,
+    "/rest/v1/process_instance",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id")
+      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+      endpoint.searchParams.set("process_model", `eq.${BASIC_PERMIT_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+
+  if (existingProcesses.length > 0) {
+    // Process instance already exists, return early
+    const existingId = parseNumericId(existingProcesses[0].id)
+    if (typeof existingId === "number") {
+      return { projectId, processInstanceId: existingId }
+    }
   }
 
   // Step 3: Create process_instance record
@@ -855,16 +880,10 @@ export async function loadPermitflowProjectStatus(
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
-        "id,parent_project_id,title,description,last_updated,created_at,process_model"
+        "id,parent_project_id,description,last_updated,created_at,process_model,status"
       )
       endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
-      endpoint.searchParams.set(
-        "or",
-        [
-          `title.ilike.*${BASIC_PERMIT_LABEL}*`,
-          `description.ilike.*${BASIC_PERMIT_LABEL}*`
-        ].join(",")
-      )
+      endpoint.searchParams.set("process_model", `eq.${BASIC_PERMIT_PROCESS_MODEL_ID}`)
     }
   )
 
@@ -877,10 +896,9 @@ export async function loadPermitflowProjectStatus(
     const id = parseNumericId(row.id)
     if (typeof id === "number") {
       const description = typeof row.description === "string" ? row.description : null
-      const title = typeof row.title === "string" ? row.title : description
       basicPermitProcess = {
         id,
-        title,
+        title: BASIC_PERMIT_LABEL,
         description,
         lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
         createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
@@ -1047,16 +1065,10 @@ export async function loadBasicPermitProcessesForProjects(
       (endpoint) => {
         endpoint.searchParams.set(
           "select",
-          "id,parent_project_id,title,description,last_updated,created_at,process_model"
+          "id,parent_project_id,description,last_updated,created_at,process_model,status"
         )
         endpoint.searchParams.set("parent_project_id", `in.(${permitflowProjectIds.join(",")})`)
-        endpoint.searchParams.set(
-          "or",
-          [
-            `title.ilike.*${BASIC_PERMIT_LABEL}*`,
-            `description.ilike.*${BASIC_PERMIT_LABEL}*`
-          ].join(",")
-        )
+        endpoint.searchParams.set("process_model", `eq.${BASIC_PERMIT_PROCESS_MODEL_ID}`)
       }
     )
 
@@ -1101,10 +1113,9 @@ export async function loadBasicPermitProcessesForProjects(
         continue
       }
       const description = typeof row.description === "string" ? row.description : null
-      const title = typeof row.title === "string" ? row.title : description
       const summary: ProjectProcessSummary = {
         id,
-        title,
+        title: BASIC_PERMIT_LABEL,
         description,
         lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
         createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
