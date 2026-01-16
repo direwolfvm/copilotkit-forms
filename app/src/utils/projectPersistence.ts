@@ -246,7 +246,9 @@ export type PreScreeningAnalyticsPoint = {
   durationTotalDays: number | null
 }
 
-export async function loadPreScreeningAnalytics(): Promise<PreScreeningAnalyticsPoint[]> {
+export async function loadProcessAnalytics(
+  processModelId: number
+): Promise<PreScreeningAnalyticsPoint[]> {
   const supabaseUrl = getSupabaseUrl()
   const supabaseAnonKey = getSupabaseAnonKey()
 
@@ -266,7 +268,7 @@ export async function loadPreScreeningAnalytics(): Promise<PreScreeningAnalytics
         "select",
         ["id", "created_at", "last_updated", "process_model", "data_source_system"].join(",")
       )
-      endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.set("process_model", `eq.${processModelId}`)
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
     }
   )
@@ -436,6 +438,10 @@ export async function loadPreScreeningAnalytics(): Promise<PreScreeningAnalytics
   }
 
   return points
+}
+
+export async function loadPreScreeningAnalytics(): Promise<PreScreeningAnalyticsPoint[]> {
+  return loadProcessAnalytics(PRE_SCREENING_PROCESS_MODEL_ID)
 }
 
 export type ProjectHierarchy = {

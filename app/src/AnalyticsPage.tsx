@@ -24,24 +24,20 @@ import "./AnalyticsPage.css"
 import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
-import { ProcessInformationDetails } from "./components/ProcessInformationDetails"
 import {
-  loadPreScreeningAnalytics,
-  type PreScreeningAnalyticsPoint,
-  type ProcessInformation
+  loadProcessAnalytics,
+  PRE_SCREENING_PROCESS_MODEL_ID,
+  type PreScreeningAnalyticsPoint
 } from "./utils/projectPersistence"
-import {
-  BASIC_PERMIT_PROCESS_MODEL_ID,
-  loadPermitflowProcessInformation
-} from "./utils/permitflow"
+import { BASIC_PERMIT_PROCESS_MODEL_ID } from "./utils/permitflow"
 
 const publicApiKey = getPublicApiKey()
 const defaultRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
 
 const ANALYTICS_INSTRUCTIONS = [
-  "You are an analytics copilot for the HelpPermit.me pre-screening workflow.",
-  "Interpret completion volumes and average completion times to surface notable trends and anomalies.",
+  "You are an analytics copilot for the HelpPermit.me pre-screening and Basic Permit workflows.",
+  "Interpret completion volumes and average completion times to surface notable trends and anomalies across both processes.",
   "Reference missing data explicitly when gaps appear in the series."
 ].join("\n")
 
@@ -59,14 +55,17 @@ type ChartDatum = {
   durationSampleSize: number
 }
 
-function formatSummaryForCopilot(points: PreScreeningAnalyticsPoint[]): string {
+function formatSummaryForCopilot(
+  points: PreScreeningAnalyticsPoint[],
+  label: string
+): string {
   if (!Array.isArray(points) || points.length === 0) {
-    return "No pre-screening completions are available."
+    return `No ${label} completions are available.`
   }
 
   const completedPoints = points.filter((point) => typeof point.completionCount === "number")
   if (completedPoints.length === 0) {
-    return "No pre-screening completions are available."
+    return `No ${label} completions are available.`
   }
 
   const totalCompletions = completedPoints.reduce(
@@ -97,7 +96,7 @@ function formatSummaryForCopilot(points: PreScreeningAnalyticsPoint[]): string {
     .join("; ")
 
   return [
-    `Total completed pre-screening processes: ${totalCompletions}.`,
+    `Total completed ${label} processes: ${totalCompletions}.`,
     overallAverage !== null
       ? `Overall average completion time: ${overallAverage} days based on ${durationSampleSize} processes with start and completion timestamps.`
       : "Average completion time is unavailable because matching start timestamps are missing.",
@@ -175,9 +174,9 @@ function AnalyticsContent() {
   const [points, setPoints] = useState<PreScreeningAnalyticsPoint[]>([])
   const [status, setStatus] = useState<LoadState>("loading")
   const [error, setError] = useState<string | null>(null)
+  const [basicPermitPoints, setBasicPermitPoints] = useState<PreScreeningAnalyticsPoint[]>([])
   const [basicPermitStatus, setBasicPermitStatus] = useState<LoadState>("loading")
   const [basicPermitError, setBasicPermitError] = useState<string | null>(null)
-  const [basicPermitInfo, setBasicPermitInfo] = useState<ProcessInformation | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -186,7 +185,7 @@ function AnalyticsContent() {
       setStatus("loading")
       setError(null)
       try {
-        const analytics = await loadPreScreeningAnalytics()
+        const analytics = await loadProcessAnalytics(PRE_SCREENING_PROCESS_MODEL_ID)
         if (!isMounted) {
           return
         }
@@ -217,13 +216,11 @@ function AnalyticsContent() {
       setBasicPermitStatus("loading")
       setBasicPermitError(null)
       try {
-        const permitInfo = await loadPermitflowProcessInformation(
-          BASIC_PERMIT_PROCESS_MODEL_ID
-        )
+        const analytics = await loadProcessAnalytics(BASIC_PERMIT_PROCESS_MODEL_ID)
         if (!isMounted) {
           return
         }
-        setBasicPermitInfo(permitInfo)
+        setBasicPermitPoints(analytics)
         setBasicPermitStatus("success")
       } catch (caught) {
         if (!isMounted) {
@@ -232,7 +229,7 @@ function AnalyticsContent() {
         const message =
           caught instanceof Error
             ? caught.message
-            : "Failed to load Basic Permit process data."
+            : "Failed to load Basic Permit analytics data."
         setBasicPermitError(message)
         setBasicPermitStatus("error")
       }
@@ -248,9 +245,19 @@ function AnalyticsContent() {
       description:
         "Daily counts of completed pre-screening processes and the corresponding average completion time in days.",
       value: points,
-      convert: (_, value) => formatSummaryForCopilot(value)
+      convert: (_, value) => formatSummaryForCopilot(value, "pre-screening")
     },
     [points]
+  )
+
+  useCopilotReadable(
+    {
+      description:
+        "Daily counts of completed Basic Permit processes and the corresponding average completion time in days.",
+      value: basicPermitPoints,
+      convert: (_, value) => formatSummaryForCopilot(value, "Basic Permit")
+    },
+    [basicPermitPoints]
   )
 
   const chartData: ChartDatum[] = useMemo(
@@ -296,6 +303,54 @@ function AnalyticsContent() {
     }
   }, [points])
 
+  const basicPermitChartData: ChartDatum[] = useMemo(
+    () =>
+      basicPermitPoints.map((point) => ({
+        date: point.date,
+        completions: point.completionCount,
+        averageDays: point.averageCompletionDays,
+        durationSampleSize: point.durationSampleSize
+      })),
+    [basicPermitPoints]
+  )
+
+  const basicPermitHasCompletions = useMemo(
+    () => basicPermitPoints.some((point) => typeof point.completionCount === "number"),
+    [basicPermitPoints]
+  )
+
+  const basicPermitSummary = useMemo(() => {
+    const totalCompletions = basicPermitPoints.reduce(
+      (sum, point) => sum + (point.completionCount ?? 0),
+      0
+    )
+    const durationSampleSize = basicPermitPoints.reduce(
+      (sum, point) => sum + point.durationSampleSize,
+      0
+    )
+    const durationTotal = basicPermitPoints.reduce(
+      (sum, point) => sum + (point.durationTotalDays ?? 0),
+      0
+    )
+    const overallAverage =
+      durationSampleSize > 0
+        ? Math.round((durationTotal / durationSampleSize) * 100) / 100
+        : null
+    const firstCompletion = basicPermitPoints.find(
+      (point) => typeof point.completionCount === "number"
+    )
+    const lastCompletion = [...basicPermitPoints]
+      .reverse()
+      .find((point) => typeof point.completionCount === "number")
+
+    return {
+      totalCompletions,
+      overallAverage,
+      firstCompletionDate: firstCompletion?.date,
+      latestCompletionDate: lastCompletion?.date
+    }
+  }, [basicPermitPoints])
+
   return (
     <CopilotSidebar
       instructions={ANALYTICS_INSTRUCTIONS}
@@ -309,8 +364,8 @@ function AnalyticsContent() {
             <div>
               <h1>Analytics</h1>
               <p>
-                Track daily pre-screening completions and the time it takes to finish each review. Use the
-                Copilot to interpret trends or spot gaps in the workflow.
+                Track daily pre-screening and Basic Permit completions along with how long it takes to
+                finish each review. Use the Copilot to interpret trends or spot gaps in the workflow.
               </p>
             </div>
           </header>
@@ -379,23 +434,77 @@ function AnalyticsContent() {
             <article className="analytics-card">
               <header className="analytics-card__header">
                 <div>
-                  <h2 className="analytics-card__title">Basic Permit process</h2>
+                  <h2 className="analytics-card__title">Basic Permit overview</h2>
                   <p className="analytics-card__subtitle">
-                    Process model details from PermitFlow, formatted like the pre-screening process display.
+                    Totals and timing for all captured Basic Permit completions.
                   </p>
                 </div>
               </header>
               <div className="analytics-card__body">
                 {basicPermitStatus === "loading" ? (
-                  <p className="analytics-status">Loading Basic Permit details…</p>
+                  <p className="analytics-status">Loading Basic Permit analytics…</p>
                 ) : null}
                 {basicPermitStatus === "error" ? (
                   <p className="analytics-status analytics-status--error">
-                    {basicPermitError ?? "Unable to load Basic Permit details."}
+                    {basicPermitError ?? "Unable to load Basic Permit analytics."}
                   </p>
                 ) : null}
-                {basicPermitStatus === "success" && basicPermitInfo ? (
-                  <ProcessInformationDetails info={basicPermitInfo} />
+                {basicPermitStatus === "success" ? (
+                  <dl className="analytics-summary">
+                    <div className="analytics-summary__item">
+                      <dt className="analytics-summary__label">Total completed</dt>
+                      <dd className="analytics-summary__value">
+                        {basicPermitSummary.totalCompletions}
+                      </dd>
+                    </div>
+                    <div className="analytics-summary__item">
+                      <dt className="analytics-summary__label">Overall average</dt>
+                      <dd className="analytics-summary__value">
+                        {basicPermitSummary.overallAverage !== null
+                          ? `${basicPermitSummary.overallAverage} days`
+                          : "—"}
+                      </dd>
+                      {basicPermitSummary.overallAverage !== null ? (
+                        <dd className="analytics-summary__hint">
+                          Based on{" "}
+                          {basicPermitPoints.reduce(
+                            (sum, point) => sum + point.durationSampleSize,
+                            0
+                          )}{" "}
+                          processes.
+                        </dd>
+                      ) : null}
+                    </div>
+                    <div className="analytics-summary__item">
+                      <dt className="analytics-summary__label">Latest completion</dt>
+                      <dd className="analytics-summary__value">
+                        {basicPermitSummary.latestCompletionDate
+                          ? formatDisplayDate(basicPermitSummary.latestCompletionDate, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric"
+                            })
+                          : "—"}
+                      </dd>
+                      {basicPermitSummary.firstCompletionDate &&
+                      basicPermitSummary.latestCompletionDate ? (
+                        <dd className="analytics-summary__hint">
+                          Range{" "}
+                          {formatDisplayDate(basicPermitSummary.firstCompletionDate, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric"
+                          })}{" "}
+                          –{" "}
+                          {formatDisplayDate(basicPermitSummary.latestCompletionDate, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric"
+                          })}
+                        </dd>
+                      ) : null}
+                    </div>
+                  </dl>
                 ) : null}
               </div>
             </article>
@@ -489,6 +598,111 @@ function AnalyticsContent() {
                   ) : (
                     <p className="analytics-status analytics-status--muted">
                       No pre-screening completions have been recorded yet.
+                    </p>
+                  )
+                ) : null}
+              </div>
+            </article>
+
+            <article className="analytics-card analytics-card--chart">
+              <header className="analytics-card__header">
+                <div>
+                  <h2 className="analytics-card__title">Daily Basic Permit outcomes</h2>
+                  <p className="analytics-card__subtitle">
+                    A line chart with markers showing completed Basic Permit processes and the average
+                    completion time in days.
+                  </p>
+                </div>
+              </header>
+              <div className="analytics-card__body">
+                {basicPermitStatus === "loading" ? (
+                  <p className="analytics-status">Loading analytics…</p>
+                ) : null}
+                {basicPermitStatus === "error" ? (
+                  <p className="analytics-status analytics-status--error">{basicPermitError}</p>
+                ) : null}
+                {basicPermitStatus === "success" ? (
+                  basicPermitHasCompletions ? (
+                    <div className="analytics-chart">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart
+                          data={basicPermitChartData}
+                          margin={{ top: 16, right: 28, left: 12, bottom: 20 }}
+                        >
+                          <CartesianGrid stroke="rgba(7, 29, 66, 0.1)" strokeDasharray="3 3" />
+                          <XAxis
+                            dataKey="date"
+                            tickFormatter={formatAxisDate}
+                            tick={{ fontSize: 12, fill: "#071d42" }}
+                          />
+                          <YAxis
+                            yAxisId="left"
+                            allowDecimals={false}
+                            tick={{ fontSize: 12, fill: COMPLETIONS_COLOR, fontWeight: 600 }}
+                            axisLine={{ stroke: COMPLETIONS_COLOR }}
+                            tickLine={{ stroke: COMPLETIONS_COLOR }}
+                            label={{
+                              value: "Completed processes",
+                              angle: -90,
+                              position: "insideLeft",
+                              offset: 12,
+                              fill: COMPLETIONS_COLOR,
+                              fontWeight: 600
+                            }}
+                          />
+                          <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            tick={{ fontSize: 12, fill: AVERAGE_COLOR, fontWeight: 600 }}
+                            axisLine={{ stroke: AVERAGE_COLOR }}
+                            tickLine={{ stroke: AVERAGE_COLOR }}
+                            label={{
+                              value: "Avg completion (days)",
+                              angle: 90,
+                              position: "insideRight",
+                              offset: 12,
+                              fill: AVERAGE_COLOR,
+                              fontWeight: 600
+                            }}
+                          />
+                          <Tooltip content={<AnalyticsTooltip />} cursor={{ strokeDasharray: "3 3" }} />
+                          <Legend />
+                          <Line
+                            type="monotone"
+                            dataKey="completions"
+                            name="Completed processes"
+                            stroke={COMPLETIONS_COLOR}
+                            strokeWidth={2}
+                            connectNulls
+                            dot={{
+                              r: 4,
+                              fill: COMPLETIONS_COLOR,
+                              stroke: COMPLETIONS_ACCENT_COLOR,
+                              strokeWidth: 2
+                            }}
+                            yAxisId="left"
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="averageDays"
+                            name="Average completion time"
+                            stroke={AVERAGE_COLOR}
+                            strokeWidth={2}
+                            connectNulls
+                            dot={{
+                              r: 4,
+                              fill: AVERAGE_ACCENT_COLOR,
+                              stroke: AVERAGE_COLOR,
+                              strokeWidth: 2
+                            }}
+                            yAxisId="right"
+                          />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="analytics-status analytics-status--muted">
+                      No Basic Permit completions have been recorded yet.
                     </p>
                   )
                 ) : null}
