@@ -46,6 +46,12 @@ const COMPLETIONS_ACCENT_COLOR = "#0f2f66"
 const AVERAGE_COLOR = "#f08a24"
 const AVERAGE_ACCENT_COLOR = "#f4c95f"
 
+// Basic Permit chart colors
+const BASIC_PERMIT_COMPLETIONS_COLOR = "#0f7d43"
+const BASIC_PERMIT_COMPLETIONS_ACCENT_COLOR = "#0a5c32"
+const BASIC_PERMIT_AVERAGE_COLOR = "#9333ea"
+const BASIC_PERMIT_AVERAGE_ACCENT_COLOR = "#c084fc"
+
 type LoadState = "idle" | "loading" | "success" | "error"
 
 type ChartDatum = {
@@ -271,9 +277,25 @@ function AnalyticsContent() {
     [points]
   )
 
+  const basicPermitChartData: ChartDatum[] = useMemo(
+    () =>
+      basicPermitPoints.map((point) => ({
+        date: point.date,
+        completions: point.completionCount,
+        averageDays: point.averageCompletionDays,
+        durationSampleSize: point.durationSampleSize
+      })),
+    [basicPermitPoints]
+  )
+
   const hasCompletions = useMemo(
     () => points.some((point) => typeof point.completionCount === "number"),
     [points]
+  )
+
+  const hasBasicPermitCompletions = useMemo(
+    () => basicPermitPoints.some((point) => typeof point.completionCount === "number"),
+    [basicPermitPoints]
   )
 
   const summary = useMemo(() => {
@@ -299,25 +321,10 @@ function AnalyticsContent() {
       totalCompletions,
       overallAverage,
       firstCompletionDate: firstCompletion?.date,
-      latestCompletionDate: lastCompletion?.date
+      latestCompletionDate: lastCompletion?.date,
+      durationSampleSize
     }
   }, [points])
-
-  const basicPermitChartData: ChartDatum[] = useMemo(
-    () =>
-      basicPermitPoints.map((point) => ({
-        date: point.date,
-        completions: point.completionCount,
-        averageDays: point.averageCompletionDays,
-        durationSampleSize: point.durationSampleSize
-      })),
-    [basicPermitPoints]
-  )
-
-  const basicPermitHasCompletions = useMemo(
-    () => basicPermitPoints.some((point) => typeof point.completionCount === "number"),
-    [basicPermitPoints]
-  )
 
   const basicPermitSummary = useMemo(() => {
     const totalCompletions = basicPermitPoints.reduce(
@@ -347,7 +354,8 @@ function AnalyticsContent() {
       totalCompletions,
       overallAverage,
       firstCompletionDate: firstCompletion?.date,
-      latestCompletionDate: lastCompletion?.date
+      latestCompletionDate: lastCompletion?.date,
+      durationSampleSize
     }
   }, [basicPermitPoints])
 
@@ -395,8 +403,7 @@ function AnalyticsContent() {
                     </dd>
                     {summary.overallAverage !== null ? (
                       <dd className="analytics-summary__hint">
-                        Based on {points.reduce((sum, point) => sum + point.durationSampleSize, 0)}
-                        {' '}processes.
+                        Based on {summary.durationSampleSize} processes.
                       </dd>
                     ) : null}
                   </div>
@@ -466,12 +473,7 @@ function AnalyticsContent() {
                       </dd>
                       {basicPermitSummary.overallAverage !== null ? (
                         <dd className="analytics-summary__hint">
-                          Based on{" "}
-                          {basicPermitPoints.reduce(
-                            (sum, point) => sum + point.durationSampleSize,
-                            0
-                          )}{" "}
-                          processes.
+                          Based on {basicPermitSummary.durationSampleSize} processes.
                         </dd>
                       ) : null}
                     </div>
@@ -616,13 +618,13 @@ function AnalyticsContent() {
               </header>
               <div className="analytics-card__body">
                 {basicPermitStatus === "loading" ? (
-                  <p className="analytics-status">Loading analytics…</p>
+                  <p className="analytics-status">Loading Basic Permit analytics…</p>
                 ) : null}
                 {basicPermitStatus === "error" ? (
                   <p className="analytics-status analytics-status--error">{basicPermitError}</p>
                 ) : null}
                 {basicPermitStatus === "success" ? (
-                  basicPermitHasCompletions ? (
+                  hasBasicPermitCompletions ? (
                     <div className="analytics-chart">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart
@@ -638,30 +640,30 @@ function AnalyticsContent() {
                           <YAxis
                             yAxisId="left"
                             allowDecimals={false}
-                            tick={{ fontSize: 12, fill: COMPLETIONS_COLOR, fontWeight: 600 }}
-                            axisLine={{ stroke: COMPLETIONS_COLOR }}
-                            tickLine={{ stroke: COMPLETIONS_COLOR }}
+                            tick={{ fontSize: 12, fill: BASIC_PERMIT_COMPLETIONS_COLOR, fontWeight: 600 }}
+                            axisLine={{ stroke: BASIC_PERMIT_COMPLETIONS_COLOR }}
+                            tickLine={{ stroke: BASIC_PERMIT_COMPLETIONS_COLOR }}
                             label={{
-                              value: "Completed processes",
+                              value: "Completed permits",
                               angle: -90,
                               position: "insideLeft",
                               offset: 12,
-                              fill: COMPLETIONS_COLOR,
+                              fill: BASIC_PERMIT_COMPLETIONS_COLOR,
                               fontWeight: 600
                             }}
                           />
                           <YAxis
                             yAxisId="right"
                             orientation="right"
-                            tick={{ fontSize: 12, fill: AVERAGE_COLOR, fontWeight: 600 }}
-                            axisLine={{ stroke: AVERAGE_COLOR }}
-                            tickLine={{ stroke: AVERAGE_COLOR }}
+                            tick={{ fontSize: 12, fill: BASIC_PERMIT_AVERAGE_COLOR, fontWeight: 600 }}
+                            axisLine={{ stroke: BASIC_PERMIT_AVERAGE_COLOR }}
+                            tickLine={{ stroke: BASIC_PERMIT_AVERAGE_COLOR }}
                             label={{
                               value: "Avg completion (days)",
                               angle: 90,
                               position: "insideRight",
                               offset: 12,
-                              fill: AVERAGE_COLOR,
+                              fill: BASIC_PERMIT_AVERAGE_COLOR,
                               fontWeight: 600
                             }}
                           />
@@ -670,14 +672,14 @@ function AnalyticsContent() {
                           <Line
                             type="monotone"
                             dataKey="completions"
-                            name="Completed processes"
-                            stroke={COMPLETIONS_COLOR}
+                            name="Completed permits"
+                            stroke={BASIC_PERMIT_COMPLETIONS_COLOR}
                             strokeWidth={2}
                             connectNulls
                             dot={{
                               r: 4,
-                              fill: COMPLETIONS_COLOR,
-                              stroke: COMPLETIONS_ACCENT_COLOR,
+                              fill: BASIC_PERMIT_COMPLETIONS_COLOR,
+                              stroke: BASIC_PERMIT_COMPLETIONS_ACCENT_COLOR,
                               strokeWidth: 2
                             }}
                             yAxisId="left"
@@ -686,13 +688,13 @@ function AnalyticsContent() {
                             type="monotone"
                             dataKey="averageDays"
                             name="Average completion time"
-                            stroke={AVERAGE_COLOR}
+                            stroke={BASIC_PERMIT_AVERAGE_COLOR}
                             strokeWidth={2}
                             connectNulls
                             dot={{
                               r: 4,
-                              fill: AVERAGE_ACCENT_COLOR,
-                              stroke: AVERAGE_COLOR,
+                              fill: BASIC_PERMIT_AVERAGE_ACCENT_COLOR,
+                              stroke: BASIC_PERMIT_AVERAGE_COLOR,
                               strokeWidth: 2
                             }}
                             yAxisId="right"

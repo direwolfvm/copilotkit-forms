@@ -1156,3 +1156,203 @@ export async function loadBasicPermitProcessesForProjects(
     return new Map()
   }
 }
+
+export type BasicPermitAnalyticsPoint = {
+  date: string
+  completionCount: number | null
+  averageCompletionDays: number | null
+  durationSampleSize: number
+  durationTotalDays: number | null
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+function parseTimestampMillisLocal(value?: string | null): number | undefined {
+  if (!value) {
+    return undefined
+  }
+  const timestamp = Date.parse(value)
+  if (Number.isFinite(timestamp)) {
+    return timestamp
+  }
+  return undefined
+}
+
+function dayKeyFromMillisLocal(millis: number): string {
+  const date = new Date(millis)
+  return date.toISOString().slice(0, 10)
+}
+
+export async function loadBasicPermitAnalytics(): Promise<BasicPermitAnalyticsPoint[]> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("[analytics] PermitFlow credentials not configured")
+    return []
+  }
+
+  const options = { supabaseUrl, supabaseAnonKey }
+
+  try {
+    // Load all Basic Permit process instances
+    const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
+      options,
+      "/rest/v1/process_instance",
+      (endpoint) => {
+        endpoint.searchParams.set(
+          "select",
+          "id,created_at,last_updated,process_model,status"
+        )
+        endpoint.searchParams.set("process_model", `eq.${BASIC_PERMIT_PROCESS_MODEL_ID}`)
+      }
+    )
+
+    const processIds = processRows
+      .map((row) => parseNumericId(row.id))
+      .filter((id): id is number => typeof id === "number")
+
+    if (processIds.length === 0) {
+      return []
+    }
+
+    // Load all case events for those processes
+    const caseEvents = await fetchPermitflowList<PermitflowCaseEventRow>(
+      options,
+      "/rest/v1/case_event",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "id,parent_process_id,name,type,status,last_updated")
+        endpoint.searchParams.set("parent_process_id", `in.(${processIds.join(",")})`)
+      }
+    )
+
+    // Group events by process
+    const eventsByProcess = new Map<number, PermitflowCaseEventRow[]>()
+    for (const event of caseEvents) {
+      const processId = parseNumericId(event.parent_process_id)
+      if (typeof processId !== "number") {
+        continue
+      }
+      const events = eventsByProcess.get(processId) ?? []
+      events.push(event)
+      eventsByProcess.set(processId, events)
+    }
+
+    // Build a map from process ID to created_at timestamp
+    const processCreatedAt = new Map<number, number | undefined>()
+    for (const row of processRows) {
+      const id = parseNumericId(row.id)
+      if (typeof id === "number") {
+        processCreatedAt.set(id, parseTimestampMillisLocal(row.created_at))
+      }
+    }
+
+    // Aggregate completions by date
+    const aggregatesByDate = new Map<
+      string,
+      { count: number; durationSum: number; durationCount: number }
+    >()
+
+    for (const [processId, events] of eventsByProcess.entries()) {
+      // Sort events by timestamp
+      const sorted = [...events].sort((a, b) => {
+        const aTime = parseTimestampMillisLocal(a.last_updated)
+        const bTime = parseTimestampMillisLocal(b.last_updated)
+        if (typeof aTime !== "number" && typeof bTime !== "number") {
+          return 0
+        }
+        if (typeof aTime !== "number") {
+          return 1
+        }
+        if (typeof bTime !== "number") {
+          return -1
+        }
+        return aTime - bTime
+      })
+
+      // Find the completion event (status = 'complete', 'completed', or 'done')
+      const completionEvent = sorted.find((event) => {
+        const status = typeof event.status === "string" ? event.status.toLowerCase() : ""
+        return status === "complete" || status === "completed" || status === "done"
+      })
+
+      if (!completionEvent) {
+        continue
+      }
+
+      const completionMillis = parseTimestampMillisLocal(completionEvent.last_updated)
+      if (typeof completionMillis !== "number") {
+        continue
+      }
+
+      const completionDateKey = dayKeyFromMillisLocal(completionMillis)
+      const aggregate = aggregatesByDate.get(completionDateKey) ?? {
+        count: 0,
+        durationSum: 0,
+        durationCount: 0
+      }
+
+      aggregate.count += 1
+
+      // Calculate duration from process creation to completion
+      const startMillis = processCreatedAt.get(processId)
+      if (typeof startMillis === "number" && startMillis <= completionMillis) {
+        const durationDays = (completionMillis - startMillis) / MS_PER_DAY
+        if (Number.isFinite(durationDays) && durationDays >= 0) {
+          aggregate.durationSum += durationDays
+          aggregate.durationCount += 1
+        }
+      }
+
+      aggregatesByDate.set(completionDateKey, aggregate)
+    }
+
+    if (aggregatesByDate.size === 0) {
+      return []
+    }
+
+    // Generate continuous date range
+    const sortedDateKeys = [...aggregatesByDate.keys()].sort()
+    const points: BasicPermitAnalyticsPoint[] = []
+
+    const firstDate = sortedDateKeys[0]
+    const lastDate = sortedDateKeys[sortedDateKeys.length - 1]
+    const cursor = new Date(`${firstDate}T00:00:00Z`)
+    const end = new Date(`${lastDate}T00:00:00Z`)
+
+    while (cursor.getTime() <= end.getTime()) {
+      const dateKey = cursor.toISOString().slice(0, 10)
+      const aggregate = aggregatesByDate.get(dateKey)
+
+      if (aggregate) {
+        const average =
+          aggregate.durationCount > 0
+            ? Math.round((aggregate.durationSum / aggregate.durationCount) * 100) / 100
+            : null
+
+        points.push({
+          date: dateKey,
+          completionCount: aggregate.count > 0 ? aggregate.count : null,
+          averageCompletionDays: average,
+          durationSampleSize: aggregate.durationCount,
+          durationTotalDays: aggregate.durationCount > 0 ? aggregate.durationSum : null
+        })
+      } else {
+        points.push({
+          date: dateKey,
+          completionCount: null,
+          averageCompletionDays: null,
+          durationSampleSize: 0,
+          durationTotalDays: null
+        })
+      }
+
+      cursor.setUTCDate(cursor.getUTCDate() + 1)
+    }
+
+    return points
+  } catch (error) {
+    console.warn("[analytics] Failed to load Basic Permit analytics.", error)
+    return []
+  }
+}
