@@ -179,6 +179,65 @@ function determineBasicPermitStatus(
   return { variant: "pending", label: `${BASIC_PERMIT_LABEL} in progress` }
 }
 
+function isProcessComplete(process: ProjectProcessSummary): boolean {
+  if (isPreScreeningProcess(process)) {
+    return process.caseEvents.some((event) => event.eventType === PRE_SCREENING_COMPLETE_EVENT)
+  }
+
+  if (isBasicPermitProcess(process)) {
+    return process.caseEvents.some(
+      (event) => event.eventType?.toLowerCase() === BASIC_PERMIT_APPROVED_EVENT
+    )
+  }
+
+  return process.caseEvents.some((event) => {
+    const eventType = event.eventType?.toLowerCase()
+    if (event.status?.toLowerCase() === "complete") {
+      return true
+    }
+    return typeof eventType === "string" && eventType.includes("complete")
+  })
+}
+
+function isProcessDelayed(process: ProjectProcessSummary): boolean {
+  if (determinePreScreeningStatus(process)?.variant === "caution") {
+    return true
+  }
+
+  if (determineBasicPermitStatus(process)?.variant === "caution") {
+    return true
+  }
+
+  return process.caseEvents.some((event) => {
+    const status = event.status?.toLowerCase()
+    return status === "late" || status === "overdue" || status === "delayed"
+  })
+}
+
+function isPermitChecklistComplete(entry: ProjectHierarchy): boolean {
+  return entry.permittingChecklist.length > 0 && entry.permittingChecklist.every((item) => item.completed)
+}
+
+function determineProjectStatus(entry: ProjectHierarchy): { variant: ProcessStatusVariant; label: string } {
+  const hasProcesses = entry.processes.length > 0
+  const allProcessesComplete = hasProcesses && entry.processes.every(isProcessComplete)
+  const checklistComplete = isPermitChecklistComplete(entry)
+
+  if (allProcessesComplete && checklistComplete) {
+    return { variant: "complete", label: "Project complete" }
+  }
+
+  if (!hasProcesses) {
+    return { variant: "pending", label: "Project not started" }
+  }
+
+  if (entry.processes.some(isProcessDelayed)) {
+    return { variant: "caution", label: "Project needs attention" }
+  }
+
+  return { variant: "pending", label: "Project in progress" }
+}
+
 function getLatestCaseEvent(entry: ProjectHierarchy): CaseEventSummary | undefined {
   let latest: CaseEventSummary | undefined
   let latestTimestamp = -Infinity
@@ -289,8 +348,18 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
   }, [])
   const geometry = entry.project.geometry ?? undefined
   const latestEvent = getLatestCaseEvent(entry)
-  const preScreeningProcess = findPreScreeningProcess(entry.processes)
-  const preScreeningStatus = preScreeningProcess ? determinePreScreeningStatus(preScreeningProcess) : undefined
+  const projectStatus = useMemo(() => determineProjectStatus(entry), [entry])
+  const permitChecklistStatus = useMemo(() => {
+    const total = entry.permittingChecklist.length
+    if (total === 0) {
+      return { tone: "empty", label: "No checklist items" }
+    }
+    const completed = entry.permittingChecklist.filter((item) => item.completed).length
+    if (completed === total) {
+      return { tone: "complete", label: "Checklist complete" }
+    }
+    return { tone: "pending", label: `${completed} of ${total} complete` }
+  }, [entry.permittingChecklist])
 
   const handleGeometryChange = useCallback((_change: GeometryChange) => {
     // For read-only viewing, we don't need to handle changes
@@ -319,9 +388,7 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
             <Link to={`/portal/${entry.project.id}`} className="projects-tree__project-link">
               {projectTitle}
             </Link>
-            {preScreeningStatus ? (
-              <StatusIndicator variant={preScreeningStatus.variant} label={preScreeningStatus.label} />
-            ) : null}
+            <StatusIndicator variant={projectStatus.variant} label={projectStatus.label} />
             {latestEvent?.name || latestEvent?.eventType ? (
               <span className="projects-tree__latest-event">
                 <span className="projects-tree__latest-event-label">Latest event:</span>
@@ -369,6 +436,33 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
           ) : (
             <p className="projects-tree__empty">No processes recorded for this project.</p>
           )}
+          <div className="projects-tree__permit-checklist">
+            <div className="projects-tree__permit-checklist-header">
+              <span className="projects-tree__permit-checklist-title">Permitting checklist</span>
+              <span
+                className={`projects-tree__permit-checklist-status projects-tree__permit-checklist-status--${permitChecklistStatus.tone}`}
+              >
+                {permitChecklistStatus.label}
+              </span>
+            </div>
+            {entry.permittingChecklist.length > 0 ? (
+              <ul className="projects-tree__permit-checklist-list">
+                {entry.permittingChecklist.map((item, index) => (
+                  <li
+                    key={`${item.label}-${index}`}
+                    className={`projects-tree__permit-checklist-item${
+                      item.completed ? " projects-tree__permit-checklist-item--complete" : ""
+                    }`}
+                  >
+                    <span className="projects-tree__permit-checklist-marker" aria-hidden="true" />
+                    <span className="projects-tree__permit-checklist-label">{item.label}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="projects-tree__empty">No permitting checklist items recorded.</p>
+            )}
+          </div>
         </div>
       </details>
     </li>
