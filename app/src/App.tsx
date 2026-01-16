@@ -10,6 +10,7 @@ import DeveloperToolsPage from "./DeveloperToolsPage"
 import SettingsPage from "./SettingsPage"
 import AboutPage from "./AboutPage"
 import AnalyticsPage from "./AnalyticsPage"
+import ResourcesPage from "./ResourcesPage"
 import PermitStartPage from "./PermitStartPage"
 import { PermitInfoPage } from "./PermitInfoPage"
 import { useHolidayTheme } from "./holidayThemeContext"
@@ -281,6 +282,17 @@ function Layout() {
               Resource Check
             </NavLink>
             <NavLink
+              to="/resources"
+              data-tour="nav-link"
+              data-tour-title="Resources"
+              data-tour-intro="Browse the inventory of federal permits and authorizations."
+              className={({ isActive }) =>
+                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
+              }
+            >
+              Resources
+            </NavLink>
+            <NavLink
               to="/developer-tools"
               data-tour="nav-link"
               data-tour-title="Developer tools"
@@ -354,6 +366,7 @@ function App() {
           <Route path=":projectId" element={<PortalPage />} />
         </Route>
         <Route path="resource-check" element={<ResourceCheckPage />} />
+        <Route path="resources" element={<ResourcesPage />} />
         <Route path="permits/basic" element={<PermitStartPage />} />
         <Route path="permit-info/:permitId" element={<PermitInfoPage />} />
         <Route path="developer-tools" element={<DeveloperToolsPage />} />
