@@ -29,7 +29,7 @@ import {
   PRE_SCREENING_PROCESS_MODEL_ID,
   type PreScreeningAnalyticsPoint
 } from "./utils/projectPersistence"
-import { BASIC_PERMIT_PROCESS_MODEL_ID } from "./utils/permitflow"
+import { loadBasicPermitAnalytics } from "./utils/permitflow"
 
 const publicApiKey = getPublicApiKey()
 const defaultRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
@@ -222,7 +222,7 @@ function AnalyticsContent() {
       setBasicPermitStatus("loading")
       setBasicPermitError(null)
       try {
-        const analytics = await loadProcessAnalytics(BASIC_PERMIT_PROCESS_MODEL_ID)
+        const analytics = await loadBasicPermitAnalytics()
         if (!isMounted) {
           return
         }
