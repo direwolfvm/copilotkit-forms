@@ -24,10 +24,16 @@ import "./AnalyticsPage.css"
 import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
+import { ProcessInformationDetails } from "./components/ProcessInformationDetails"
 import {
   loadPreScreeningAnalytics,
-  type PreScreeningAnalyticsPoint
+  type PreScreeningAnalyticsPoint,
+  type ProcessInformation
 } from "./utils/projectPersistence"
+import {
+  BASIC_PERMIT_PROCESS_MODEL_ID,
+  loadPermitflowProcessInformation
+} from "./utils/permitflow"
 
 const publicApiKey = getPublicApiKey()
 const defaultRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
@@ -169,6 +175,9 @@ function AnalyticsContent() {
   const [points, setPoints] = useState<PreScreeningAnalyticsPoint[]>([])
   const [status, setStatus] = useState<LoadState>("loading")
   const [error, setError] = useState<string | null>(null)
+  const [basicPermitStatus, setBasicPermitStatus] = useState<LoadState>("loading")
+  const [basicPermitError, setBasicPermitError] = useState<string | null>(null)
+  const [basicPermitInfo, setBasicPermitInfo] = useState<ProcessInformation | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -193,6 +202,39 @@ function AnalyticsContent() {
             : "Failed to load analytics data."
         setError(message)
         setStatus("error")
+      }
+    })()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    ;(async () => {
+      setBasicPermitStatus("loading")
+      setBasicPermitError(null)
+      try {
+        const permitInfo = await loadPermitflowProcessInformation(
+          BASIC_PERMIT_PROCESS_MODEL_ID
+        )
+        if (!isMounted) {
+          return
+        }
+        setBasicPermitInfo(permitInfo)
+        setBasicPermitStatus("success")
+      } catch (caught) {
+        if (!isMounted) {
+          return
+        }
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : "Failed to load Basic Permit process data."
+        setBasicPermitError(message)
+        setBasicPermitStatus("error")
       }
     })()
 
@@ -331,6 +373,30 @@ function AnalyticsContent() {
                     ) : null}
                   </div>
                 </dl>
+              </div>
+            </article>
+
+            <article className="analytics-card">
+              <header className="analytics-card__header">
+                <div>
+                  <h2 className="analytics-card__title">Basic Permit process</h2>
+                  <p className="analytics-card__subtitle">
+                    Process model details from PermitFlow, formatted like the pre-screening process display.
+                  </p>
+                </div>
+              </header>
+              <div className="analytics-card__body">
+                {basicPermitStatus === "loading" ? (
+                  <p className="analytics-status">Loading Basic Permit details…</p>
+                ) : null}
+                {basicPermitStatus === "error" ? (
+                  <p className="analytics-status analytics-status--error">
+                    {basicPermitError ?? "Unable to load Basic Permit details."}
+                  </p>
+                ) : null}
+                {basicPermitStatus === "success" && basicPermitInfo ? (
+                  <ProcessInformationDetails info={basicPermitInfo} />
+                ) : null}
               </div>
             </article>
 
