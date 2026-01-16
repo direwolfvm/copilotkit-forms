@@ -40,7 +40,7 @@ import { CollapsibleCard, type CollapsibleCardStatus } from "./components/Collap
 import "./App.css"
 import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
-import { findPermitByLabel, getPermitInfoUrl } from "./utils/permitInventory"
+import { findPermitByLabel, getPermitInfoUrl, getPermitById, getPermitOptions } from "./utils/permitInventory"
 import {
   ProjectPersistenceError,
   saveProjectSnapshot,
@@ -214,6 +214,7 @@ type ChecklistUpsertInput = {
   completed?: boolean
   notes?: string
   source?: PermittingChecklistItem["source"]
+  permitId?: string
 }
 
 type DecisionSubmitState = {
@@ -1323,6 +1324,20 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     []
   )
 
+  const permitInventoryForCopilot = useMemo(() => getPermitOptions(), [])
+
+  useCopilotReadable(
+    {
+      description: "Federal permit inventory with IDs. When adding checklist items, prefer using permitId from this list for accurate linking.",
+      value: permitInventoryForCopilot,
+      convert: (_, value) =>
+        value
+          .map((p: { id: string; name: string; agency: string }) => `- ${p.id}: ${p.name} (${p.agency})`)
+          .join("\n")
+    },
+    [permitInventoryForCopilot]
+  )
+
   useCopilotReadable(
     {
       description: "Current permitting checklist items with completion status",
@@ -1357,7 +1372,8 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
               label,
               completed: typeof entry.completed === "boolean" ? entry.completed : undefined,
               notes: notes && notes.length ? notes : undefined,
-              source: entry.source
+              source: entry.source,
+              permitId: entry.permitId
             }
           })
         .filter((entry): entry is ChecklistUpsertInput => entry !== null)
@@ -1410,7 +1426,14 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           let itemLink: PermittingChecklistItem["link"] = undefined
           if (isBasicPermit) {
             itemLink = BASIC_PERMIT_LINK
+          } else if (entry.permitId) {
+            // Use permitId directly if provided (from CopilotKit action)
+            itemLink = {
+              href: getPermitInfoUrl(entry.permitId),
+              label: "Info"
+            }
           } else {
+            // Fall back to fuzzy matching by label
             const matchedPermit = findPermitByLabel(entry.label)
             if (matchedPermit) {
               itemLink = {
@@ -1778,7 +1801,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
     {
       name: "addPermittingChecklistItems",
       description:
-        "Add or update permitting checklist entries. Use this to track likely permits, approvals, or consultations the project will require.",
+        "Add or update permitting checklist entries. Use this to track likely permits, approvals, or consultations the project will require. Prefer using permitId from the federal permit inventory when available for accurate linking to permit info pages.",
       parameters: [
         {
           name: "items",
@@ -1786,10 +1809,16 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           description: "Checklist items to merge into the permitting tracker.",
           attributes: [
             {
+              name: "permitId",
+              type: "string",
+              description: "The ID from the federal permit inventory (e.g., 'section-404-clean-water-act'). When provided, the label and link will be automatically set from the inventory.",
+              required: false
+            },
+            {
               name: "label",
               type: "string",
-              description: "Name of the permit or authorization.",
-              required: true
+              description: "Name of the permit or authorization. Optional if permitId is provided.",
+              required: false
             },
             {
               name: "status",
@@ -1812,14 +1841,21 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           return
         }
         const entries: ChecklistUpsertInput[] = items.map((item) => {
-          const label = typeof item?.label === "string" ? item.label : ""
+          const permitId = typeof item?.permitId === "string" ? item.permitId : undefined
+          const permit = permitId ? getPermitById(permitId) : undefined
+
+          // Use permit name if found, otherwise use provided label
+          const label = permit?.name ?? (typeof item?.label === "string" ? item.label : "")
           const status = typeof item?.status === "string" ? item.status.toLowerCase() : undefined
+
           return {
             label,
             source: "copilot",
             notes: typeof item?.notes === "string" ? item.notes : undefined,
             completed:
-              status === "completed" ? true : status === "pending" ? false : undefined
+              status === "completed" ? true : status === "pending" ? false : undefined,
+            // Pass permitId so upsertPermittingChecklistItems can create the link
+            permitId: permit?.id
           }
         })
         upsertPermittingChecklistItems(entries)
@@ -1835,7 +1871,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         "Use the updateProjectForm action whenever you can fill in or revise structured fields.",
         "Important fields include:",
         ...projectFieldDetails.map((field) => `- ${field.title}: ${field.description}`),
-        "Use addPermittingChecklistItems to maintain the permitting checklist. Suggest permits from the major federal inventory when relevant.",
+        "Use addPermittingChecklistItems to maintain the permitting checklist. IMPORTANT: When adding permits, always use the permitId from the federal permit inventory (provided in context) instead of just the label. This ensures proper linking to permit information pages. For example, use permitId='section-404-clean-water-act' for CWA Section 404 permits.",
         "Use resetProjectForm when the user asks to start over."
       ].join("\n"),
     []

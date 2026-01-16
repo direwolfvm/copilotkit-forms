@@ -652,18 +652,205 @@ export const permitInventory: PermitInfo[] = [
     activityTrigger: "Contract approved by the Secretary that authorizes possession of Indian land for a specific purpose and term.",
     description: "Lease allows the possession of Indian land for wind energy evaluation in exchange for pre‐defined royalties.",
     statuteRegulation: ""
+  },
+  {
+    id: "clean-water-act-section-401-water-quality-certification",
+    name: "Clean Water Act Section 401 Water Quality Certification",
+    responsibleAgency: "State or EPA",
+    responsibleOffice: "State Water Quality Agency or EPA Region",
+    projectType: "All",
+    activityTrigger: "Any activity that may result in a discharge to waters of the United States and requires a federal license or permit.",
+    description: "Section 401 of the Clean Water Act requires that any applicant for a federal license or permit to conduct any activity that may result in a discharge to waters of the United States must obtain a certification from the state (or EPA where appropriate) that the discharge will comply with applicable water quality standards.",
+    statuteRegulation: "Clean Water Act Section 401 (33 USC 1341)"
+  },
+  {
+    id: "coastal-zone-management-act-consistency-determination",
+    name: "Coastal Zone Management Act Consistency Determination",
+    responsibleAgency: "State Coastal Zone Management Agency",
+    responsibleOffice: "State Coastal Zone Management Agency with NOAA oversight",
+    projectType: "All",
+    activityTrigger: "Federal actions or federally permitted activities that may affect coastal uses or resources.",
+    description: "Under the Coastal Zone Management Act (CZMA), federal agency activities that affect any land or water use or natural resource of the coastal zone must be consistent to the maximum extent practicable with the enforceable policies of approved state coastal management programs. Applicants for federal licenses or permits affecting the coastal zone must provide the state with a consistency certification.",
+    statuteRegulation: "Coastal Zone Management Act (16 USC 1451-1466), 15 CFR Part 930"
   }
 ]
 
+// Common keywords for fuzzy matching
+function extractKeywords(text: string): string[] {
+  const normalized = text.toLowerCase()
+    .replace(/[–—-]/g, " ")
+    .replace(/[()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  // Extract meaningful words (skip common filler words)
+  const stopWords = new Set(["the", "of", "a", "an", "and", "or", "for", "to", "in", "on", "by", "act", "permit", "authorization", "consultation", "review", "determination"])
+  return normalized.split(" ").filter(word => word.length > 2 && !stopWords.has(word))
+}
+
+// Calculate keyword overlap score
+function keywordOverlapScore(labelKeywords: string[], permitKeywords: string[]): number {
+  let matches = 0
+  for (const keyword of labelKeywords) {
+    if (permitKeywords.some(pk => pk.includes(keyword) || keyword.includes(pk))) {
+      matches++
+    }
+  }
+  return matches
+}
+
+// Key pattern matchers for common permit naming variations
+const PERMIT_ALIASES: Record<string, string[]> = {
+  "section-404-clean-water-act": [
+    "clean water act section 404",
+    "cwa section 404",
+    "cwa 404",
+    "section 404",
+    "wetlands permit"
+  ],
+  "clean-water-act-section-402-permit-national-pollutant-discha": [
+    "clean water act section 402",
+    "cwa section 402",
+    "cwa 402",
+    "npdes",
+    "section 402"
+  ],
+  "section-10-of-the-rivers-and-harbors-act-of-1899": [
+    "rivers and harbors act section 10",
+    "rivers harbors section 10",
+    "section 10 rivers",
+    "section 10 permit"
+  ],
+  "endangered-species-act-consultation-doi-fws": [
+    "endangered species act section 7",
+    "esa section 7",
+    "esa consultation",
+    "section 7 consultation",
+    "usfws consultation",
+    "fws consultation"
+  ],
+  "endangered-species-act-consultation-noaa-nmfs": [
+    "nmfs esa consultation",
+    "noaa esa consultation",
+    "marine esa consultation"
+  ],
+  "section-106-review": [
+    "national historic preservation act section 106",
+    "nhpa section 106",
+    "section 106 consultation",
+    "historic preservation review"
+  ],
+  "right-of-way-authorization-doi-blm": [
+    "federal land policy and management act right-of-way",
+    "flpma right-of-way",
+    "blm right-of-way",
+    "federal land right-of-way"
+  ],
+  "magnuson-stevens-fishery-conservation-and-management-act-sec": [
+    "essential fish habitat",
+    "efh consultation",
+    "magnuson-stevens"
+  ],
+  "fish-and-wildlife-coordination-act-review-doi-fws": [
+    "fish and wildlife coordination act",
+    "fwca review"
+  ],
+  "marine-mammal-protection-act-mmpa-incidental-take-authorizat": [
+    "marine mammal protection act",
+    "mmpa",
+    "incidental take authorization"
+  ],
+  "migratory-bird-treaty-act-permits": [
+    "migratory bird treaty act",
+    "mbta permit"
+  ],
+  "bald-and-golden-eagle-protection-permit": [
+    "eagle protection permit",
+    "bald eagle permit",
+    "golden eagle permit",
+    "bgepa"
+  ],
+  "section-408-permit": [
+    "section 408",
+    "usace 408"
+  ],
+  "coastal-zone-management-act-consistency-determination": [
+    "coastal zone management act",
+    "czma consistency",
+    "czma",
+    "coastal consistency"
+  ],
+  "clean-water-act-section-401-water-quality-certification": [
+    "clean water act section 401",
+    "cwa section 401",
+    "cwa 401",
+    "section 401",
+    "water quality certification",
+    "401 certification"
+  ]
+}
+
 export function findPermitByLabel(label: string): PermitInfo | undefined {
   const normalized = label.toLowerCase().trim()
+
+  // 1. Exact match
   const exact = permitInventory.find(p => p.name.toLowerCase() === normalized)
   if (exact) return exact
-  return permitInventory.find(
+
+  // 2. Check aliases
+  for (const [permitId, aliases] of Object.entries(PERMIT_ALIASES)) {
+    if (aliases.some(alias => normalized.includes(alias) || alias.includes(normalized))) {
+      const permit = permitInventory.find(p => p.id === permitId)
+      if (permit) return permit
+    }
+  }
+
+  // 3. Substring match
+  const substringMatch = permitInventory.find(
     p => normalized.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(normalized)
   )
+  if (substringMatch) return substringMatch
+
+  // 4. Keyword overlap scoring
+  const labelKeywords = extractKeywords(label)
+  if (labelKeywords.length === 0) return undefined
+
+  let bestMatch: PermitInfo | undefined
+  let bestScore = 0
+
+  for (const permit of permitInventory) {
+    const permitKeywords = extractKeywords(permit.name)
+    const score = keywordOverlapScore(labelKeywords, permitKeywords)
+
+    // Require at least 2 keyword matches for a valid match
+    if (score > bestScore && score >= 2) {
+      bestScore = score
+      bestMatch = permit
+    }
+  }
+
+  return bestMatch
 }
 
 export function getPermitInfoUrl(permitId: string): string {
   return "/permit-info/" + permitId
+}
+
+// Get permit by ID
+export function getPermitById(id: string): PermitInfo | undefined {
+  return permitInventory.find(p => p.id === id)
+}
+
+// Get all permit names for suggestions
+export function getPermitNames(): string[] {
+  return permitInventory.map(p => p.name)
+}
+
+// Get permit name/id pairs for CopilotKit
+export function getPermitOptions(): Array<{ id: string; name: string; agency: string }> {
+  return permitInventory.map(p => ({
+    id: p.id,
+    name: p.name,
+    agency: p.responsibleAgency
+  }))
 }
