@@ -611,6 +611,79 @@ function AnalyticsContent() {
               </div>
             </article>
 
+            <article className="analytics-card">
+              <header className="analytics-card__header">
+                <div>
+                  <h2 className="analytics-card__title">Complex Review overview</h2>
+                  <p className="analytics-card__subtitle">
+                    Totals and timing for all captured Complex Review completions.
+                  </p>
+                </div>
+              </header>
+              <div className="analytics-card__body">
+                {complexReviewStatus === "loading" ? (
+                  <p className="analytics-status">Loading Complex Review analytics…</p>
+                ) : null}
+                {complexReviewStatus === "error" ? (
+                  <p className="analytics-status analytics-status--error">
+                    {complexReviewError ?? "Unable to load Complex Review analytics."}
+                  </p>
+                ) : null}
+                {complexReviewStatus === "success" ? (
+                  <dl className="analytics-summary">
+                    <div className="analytics-summary__item">
+                      <dt className="analytics-summary__label">Total completed</dt>
+                      <dd className="analytics-summary__value">
+                        {complexReviewSummary.totalCompletions}
+                      </dd>
+                    </div>
+                    <div className="analytics-summary__item">
+                      <dt className="analytics-summary__label">Overall average</dt>
+                      <dd className="analytics-summary__value">
+                        {complexReviewSummary.overallAverage !== null
+                          ? `${complexReviewSummary.overallAverage} days`
+                          : "—"}
+                      </dd>
+                      {complexReviewSummary.overallAverage !== null ? (
+                        <dd className="analytics-summary__hint">
+                          Based on {complexReviewSummary.durationSampleSize} processes.
+                        </dd>
+                      ) : null}
+                    </div>
+                    <div className="analytics-summary__item">
+                      <dt className="analytics-summary__label">Latest completion</dt>
+                      <dd className="analytics-summary__value">
+                        {complexReviewSummary.latestCompletionDate
+                          ? formatDisplayDate(complexReviewSummary.latestCompletionDate, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric"
+                            })
+                          : "—"}
+                      </dd>
+                      {complexReviewSummary.firstCompletionDate &&
+                      complexReviewSummary.latestCompletionDate ? (
+                        <dd className="analytics-summary__hint">
+                          Range{" "}
+                          {formatDisplayDate(complexReviewSummary.firstCompletionDate, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric"
+                          })}{" "}
+                          –{" "}
+                          {formatDisplayDate(complexReviewSummary.latestCompletionDate, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric"
+                          })}
+                        </dd>
+                      ) : null}
+                    </div>
+                  </dl>
+                ) : null}
+              </div>
+            </article>
+
             <article className="analytics-card analytics-card--chart">
               <header className="analytics-card__header">
                 <div>
@@ -807,79 +880,6 @@ function AnalyticsContent() {
                       No Basic Permit completions have been recorded yet.
                     </p>
                   )
-                ) : null}
-              </div>
-            </article>
-
-            <article className="analytics-card">
-              <header className="analytics-card__header">
-                <div>
-                  <h2 className="analytics-card__title">Complex Review overview</h2>
-                  <p className="analytics-card__subtitle">
-                    Totals and timing for all captured Complex Review completions.
-                  </p>
-                </div>
-              </header>
-              <div className="analytics-card__body">
-                {complexReviewStatus === "loading" ? (
-                  <p className="analytics-status">Loading Complex Review analytics…</p>
-                ) : null}
-                {complexReviewStatus === "error" ? (
-                  <p className="analytics-status analytics-status--error">
-                    {complexReviewError ?? "Unable to load Complex Review analytics."}
-                  </p>
-                ) : null}
-                {complexReviewStatus === "success" ? (
-                  <dl className="analytics-summary">
-                    <div className="analytics-summary__item">
-                      <dt className="analytics-summary__label">Total completed</dt>
-                      <dd className="analytics-summary__value">
-                        {complexReviewSummary.totalCompletions}
-                      </dd>
-                    </div>
-                    <div className="analytics-summary__item">
-                      <dt className="analytics-summary__label">Overall average</dt>
-                      <dd className="analytics-summary__value">
-                        {complexReviewSummary.overallAverage !== null
-                          ? `${complexReviewSummary.overallAverage} days`
-                          : "—"}
-                      </dd>
-                      {complexReviewSummary.overallAverage !== null ? (
-                        <dd className="analytics-summary__hint">
-                          Based on {complexReviewSummary.durationSampleSize} processes.
-                        </dd>
-                      ) : null}
-                    </div>
-                    <div className="analytics-summary__item">
-                      <dt className="analytics-summary__label">Latest completion</dt>
-                      <dd className="analytics-summary__value">
-                        {complexReviewSummary.latestCompletionDate
-                          ? formatDisplayDate(complexReviewSummary.latestCompletionDate, {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric"
-                            })
-                          : "—"}
-                      </dd>
-                      {complexReviewSummary.firstCompletionDate &&
-                      complexReviewSummary.latestCompletionDate ? (
-                        <dd className="analytics-summary__hint">
-                          Range{" "}
-                          {formatDisplayDate(complexReviewSummary.firstCompletionDate, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric"
-                          })}{" "}
-                          –{" "}
-                          {formatDisplayDate(complexReviewSummary.latestCompletionDate, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric"
-                          })}
-                        </dd>
-                      ) : null}
-                    </div>
-                  </dl>
                 ) : null}
               </div>
             </article>
