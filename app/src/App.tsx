@@ -12,6 +12,7 @@ import AboutPage from "./AboutPage"
 import AnalyticsPage from "./AnalyticsPage"
 import ResourcesPage from "./ResourcesPage"
 import PermitStartPage from "./PermitStartPage"
+import ComplexReviewStartPage from "./ComplexReviewStartPage"
 import { PermitInfoPage } from "./PermitInfoPage"
 import { useHolidayTheme } from "./holidayThemeContext"
 import Snowfall from "./components/Snowfall"
@@ -368,6 +369,7 @@ function App() {
         <Route path="resource-check" element={<ResourceCheckPage />} />
         <Route path="resources" element={<ResourcesPage />} />
         <Route path="permits/basic" element={<PermitStartPage />} />
+        <Route path="reviews/complex" element={<ComplexReviewStartPage />} />
         <Route path="permit-info/:permitId" element={<PermitInfoPage />} />
         <Route path="developer-tools" element={<DeveloperToolsPage />} />
         <Route path="about" element={<AboutPage />} />

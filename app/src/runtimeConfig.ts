@@ -5,6 +5,8 @@ interface CopilotRuntimeConfig {
   supabaseAnonKey?: string | null
   permitflowUrl?: string | null
   permitflowAnonKey?: string | null
+  reviewworksUrl?: string | null
+  reviewworksAnonKey?: string | null
 }
 
 declare global {
@@ -75,5 +77,21 @@ export function getPermitflowAnonKey(): string | undefined {
     normalize(envVars.PERMITFLOW_SUPABASE_ANON_KEY) ??
     normalize(envVars.NEXT_PUBLIC_PERMITFLOW_SUPABASE_ANON_KEY) ??
     normalize(readRuntimeConfigFromWindow()?.permitflowAnonKey ?? undefined)
+  )
+}
+
+export function getReviewworksUrl(): string | undefined {
+  return (
+    normalize(envVars.REVIEWWORKS_SUPABASE_URL) ??
+    normalize(envVars.NEXT_PUBLIC_REVIEWWORKS_SUPABASE_URL) ??
+    normalize(readRuntimeConfigFromWindow()?.reviewworksUrl ?? undefined)
+  )
+}
+
+export function getReviewworksAnonKey(): string | undefined {
+  return (
+    normalize(envVars.REVIEWWORKS_SUPABASE_ANON_KEY) ??
+    normalize(envVars.NEXT_PUBLIC_REVIEWWORKS_SUPABASE_ANON_KEY) ??
+    normalize(readRuntimeConfigFromWindow()?.reviewworksAnonKey ?? undefined)
   )
 }

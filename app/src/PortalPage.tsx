@@ -83,6 +83,11 @@ const BASIC_PERMIT_LINK = { href: "/permits/basic", label: "Start this permit." 
 const BASIC_PERMIT_PROJECT_PARAM = "projectId"
 const BASIC_PERMIT_CHECKLIST_KEY = toChecklistKey(BASIC_PERMIT_LABEL)
 
+const COMPLEX_REVIEW_LABEL = "Complex Review"
+const COMPLEX_REVIEW_LINK = { href: "/reviews/complex", label: "Start this review." }
+const COMPLEX_REVIEW_PROJECT_PARAM = "projectId"
+const COMPLEX_REVIEW_CHECKLIST_KEY = toChecklistKey(COMPLEX_REVIEW_LABEL)
+
 type UpdatesPayload = Record<string, unknown>
 
 const SUPPORTED_DOCUMENT_EXTENSIONS = ["pdf", "docx", "jpg", "jpeg", "png"] as const
@@ -156,57 +161,99 @@ function createBasicPermitChecklistItem(): PermittingChecklistItem {
   }
 }
 
+function createComplexReviewChecklistItem(): PermittingChecklistItem {
+  return {
+    id: generateChecklistItemId(),
+    label: COMPLEX_REVIEW_LABEL,
+    completed: false,
+    source: "seed",
+    link: COMPLEX_REVIEW_LINK
+  }
+}
+
 function appendProjectIdToPermitLink(link: PermittingChecklistItem["link"], projectId?: string) {
   if (!link || !projectId) {
     return link
   }
-  if (!link.href.startsWith(BASIC_PERMIT_LINK.href)) {
-    return link
+  // Handle Basic Permit links
+  if (link.href.startsWith(BASIC_PERMIT_LINK.href)) {
+    if (link.href.includes(`${BASIC_PERMIT_PROJECT_PARAM}=`)) {
+      return link
+    }
+    const separator = link.href.includes("?") ? "&" : "?"
+    return {
+      ...link,
+      href: `${link.href}${separator}${BASIC_PERMIT_PROJECT_PARAM}=${encodeURIComponent(
+        projectId
+      )}`
+    }
   }
-  if (link.href.includes(`${BASIC_PERMIT_PROJECT_PARAM}=`)) {
-    return link
+  // Handle Complex Review links
+  if (link.href.startsWith(COMPLEX_REVIEW_LINK.href)) {
+    if (link.href.includes(`${COMPLEX_REVIEW_PROJECT_PARAM}=`)) {
+      return link
+    }
+    const separator = link.href.includes("?") ? "&" : "?"
+    return {
+      ...link,
+      href: `${link.href}${separator}${COMPLEX_REVIEW_PROJECT_PARAM}=${encodeURIComponent(
+        projectId
+      )}`
+    }
   }
-  const separator = link.href.includes("?") ? "&" : "?"
-  return {
-    ...link,
-    href: `${link.href}${separator}${BASIC_PERMIT_PROJECT_PARAM}=${encodeURIComponent(
-      projectId
-    )}`
-  }
+  return link
 }
 
 function createDefaultPermittingChecklist(): PermittingChecklistItem[] {
-  return [createBasicPermitChecklistItem()]
+  return [createBasicPermitChecklistItem(), createComplexReviewChecklistItem()]
 }
 
 function toChecklistKey(label: string) {
   return normalizeChecklistLabel(label).toLowerCase()
 }
 
-function ensureBasicPermitChecklistItem(items: PermittingChecklistItem[]): PermittingChecklistItem[] {
+function ensureDefaultChecklistItems(items: PermittingChecklistItem[]): PermittingChecklistItem[] {
   let hasBasicPermit = false
+  let hasComplexReview = false
   let updated = false
 
   const next = items.map((item) => {
-    if (toChecklistKey(item.label) !== BASIC_PERMIT_CHECKLIST_KEY) {
-      return item
+    const key = toChecklistKey(item.label)
+    if (key === BASIC_PERMIT_CHECKLIST_KEY) {
+      hasBasicPermit = true
+      if (!item.link) {
+        updated = true
+        return { ...item, link: BASIC_PERMIT_LINK }
+      }
     }
-    hasBasicPermit = true
-    if (item.link) {
-      return item
+    if (key === COMPLEX_REVIEW_CHECKLIST_KEY) {
+      hasComplexReview = true
+      if (!item.link) {
+        updated = true
+        return { ...item, link: COMPLEX_REVIEW_LINK }
+      }
     }
-    updated = true
-    return {
-      ...item,
-      link: BASIC_PERMIT_LINK
-    }
+    return item
   })
 
+  const toAdd: PermittingChecklistItem[] = []
   if (!hasBasicPermit) {
-    return [...next, createBasicPermitChecklistItem()]
+    toAdd.push(createBasicPermitChecklistItem())
+  }
+  if (!hasComplexReview) {
+    toAdd.push(createComplexReviewChecklistItem())
+  }
+
+  if (toAdd.length > 0) {
+    return [...next, ...toAdd]
   }
 
   return updated ? next : items
+}
+
+// Alias for backward compatibility
+function ensureBasicPermitChecklistItem(items: PermittingChecklistItem[]): PermittingChecklistItem[] {
+  return ensureDefaultChecklistItems(items)
 }
 
 type ChecklistUpsertInput = {
@@ -1390,6 +1437,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
         const key = toChecklistKey(entry.label)
         const existingIndex = indexByKey.get(key)
         const isBasicPermit = key === BASIC_PERMIT_CHECKLIST_KEY
+        const isComplexReview = key === COMPLEX_REVIEW_CHECKLIST_KEY
         if (existingIndex !== undefined) {
           const existing = next[existingIndex]
           let updated = false
@@ -1405,9 +1453,13 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
           if (sourceValue && existing.source !== sourceValue) {
             updated = true
           }
-          const nextLink =
-            isBasicPermit && !existing.link ? BASIC_PERMIT_LINK : existing.link
+          let nextLink = existing.link
           if (isBasicPermit && !existing.link) {
+            nextLink = BASIC_PERMIT_LINK
+            updated = true
+          }
+          if (isComplexReview && !existing.link) {
+            nextLink = COMPLEX_REVIEW_LINK
             updated = true
           }
           if (updated) {
@@ -1422,10 +1474,12 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             changed = true
           }
         } else {
-          // Look up permit info link for non-Basic Permit items
+          // Look up permit info link for special items first
           let itemLink: PermittingChecklistItem["link"] = undefined
           if (isBasicPermit) {
             itemLink = BASIC_PERMIT_LINK
+          } else if (isComplexReview) {
+            itemLink = COMPLEX_REVIEW_LINK
           } else if (entry.permitId) {
             // Use permitId directly if provided (from CopilotKit action)
             itemLink = {
