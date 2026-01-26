@@ -48,6 +48,22 @@ function resolvePermitflowAnonKey() {
   );
 }
 
+function resolveReviewworksUrl() {
+  return (
+    normalizeEnvValue(process.env.VITE_REVIEWWORKS_SUPABASE_URL) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_REVIEWWORKS_SUPABASE_URL) ??
+    normalizeEnvValue(process.env.REVIEWWORKS_SUPABASE_URL)
+  );
+}
+
+function resolveReviewworksAnonKey() {
+  return (
+    normalizeEnvValue(process.env.VITE_REVIEWWORKS_SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_REVIEWWORKS_SUPABASE_ANON_KEY) ??
+    normalizeEnvValue(process.env.REVIEWWORKS_SUPABASE_ANON_KEY)
+  );
+}
+
 app.use(express.json({ limit: "1mb" }));
 
 function normalizeEnvValue(value) {
@@ -710,6 +726,16 @@ app.get("/env.js", (req, res) => {
   const permitflowAnonKey = resolvePermitflowAnonKey();
   if (permitflowAnonKey) {
     config.permitflowAnonKey = permitflowAnonKey;
+  }
+
+  const reviewworksUrl = resolveReviewworksUrl();
+  if (reviewworksUrl) {
+    config.reviewworksUrl = reviewworksUrl;
+  }
+
+  const reviewworksAnonKey = resolveReviewworksAnonKey();
+  if (reviewworksAnonKey) {
+    config.reviewworksAnonKey = reviewworksAnonKey;
   }
 
   res.setHeader("Cache-Control", "no-store");
