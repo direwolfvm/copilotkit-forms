@@ -17,8 +17,7 @@ export interface PermitInfo {
 
 const MODERN_APP_PERMIT_IDS = new Set([
   "section-404-clean-water-act",
-  "endangered-species-act-consultation-doi-fws",
-  "endangered-species-act-consultation-noaa-nmfs"
+  "endangered-species-act-consultation-doi-fws"
 ])
 
 export function getIntegrationStatus(permitId: string): IntegrationStatus {
