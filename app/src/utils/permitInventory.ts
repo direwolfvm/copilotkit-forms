@@ -1,6 +1,8 @@
 // Auto-generated from Environmental Review and Authorization Inventory (3.27.23).xlsx
 // Do not edit manually
 
+export type IntegrationStatus = "integrated" | "modern-app" | "manual"
+
 export interface PermitInfo {
   id: string
   name: string
@@ -10,9 +12,31 @@ export interface PermitInfo {
   activityTrigger: string
   description: string
   statuteRegulation: string
+  integrationStatus: IntegrationStatus
 }
 
-export const permitInventory: PermitInfo[] = [
+const MODERN_APP_PERMIT_IDS = new Set([
+  "section-404-clean-water-act",
+  "endangered-species-act-consultation-doi-fws",
+  "endangered-species-act-consultation-noaa-nmfs"
+])
+
+export function getIntegrationStatus(permitId: string): IntegrationStatus {
+  if (MODERN_APP_PERMIT_IDS.has(permitId)) {
+    return "modern-app"
+  }
+  return "manual"
+}
+
+export const INTEGRATION_STATUS_LABELS: Record<IntegrationStatus, string> = {
+  "integrated": "Integration with HelpPermit.me",
+  "modern-app": "Modern Web Application",
+  "manual": "No Integration / Manual Process"
+}
+
+type RawPermitInfo = Omit<PermitInfo, "integrationStatus">
+
+const rawPermitInventory: RawPermitInfo[] = [
   {
     id: "authorization-for-liquefied-natural-gas-terminal-facilities-",
     name: "Authorization for Liquefied Natural Gas Terminal Facilities, Onshore or in State Waters",
@@ -674,6 +698,11 @@ export const permitInventory: PermitInfo[] = [
     statuteRegulation: "Coastal Zone Management Act (16 USC 1451-1466), 15 CFR Part 930"
   }
 ]
+
+export const permitInventory: PermitInfo[] = rawPermitInventory.map((permit) => ({
+  ...permit,
+  integrationStatus: getIntegrationStatus(permit.id)
+}))
 
 // Common keywords for fuzzy matching
 function extractKeywords(text: string): string[] {

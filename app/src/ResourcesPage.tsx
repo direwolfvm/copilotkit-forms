@@ -1,8 +1,19 @@
 import { useState, useMemo } from "react"
 import { Link } from "react-router-dom"
 import "./App.css"
-import { permitInventory, getPermitInfoUrl } from "./utils/permitInventory"
-import type { PermitInfo } from "./utils/permitInventory"
+import { permitInventory, getPermitInfoUrl, INTEGRATION_STATUS_LABELS } from "./utils/permitInventory"
+import type { PermitInfo, IntegrationStatus } from "./utils/permitInventory"
+
+const INTEGRATION_STATUS_OPTIONS: IntegrationStatus[] = ["integrated", "modern-app", "manual"]
+
+function IntegrationStatusBadge({ status }: { status: IntegrationStatus }) {
+  return (
+    <span className={`integration-badge integration-badge--${status}`}>
+      <span className="integration-badge__dot" aria-hidden="true" />
+      <span className="integration-badge__label">{INTEGRATION_STATUS_LABELS[status]}</span>
+    </span>
+  )
+}
 
 // Group permits by agency
 function groupByAgency(permits: PermitInfo[]): Map<string, PermitInfo[]> {
@@ -20,6 +31,7 @@ function groupByAgency(permits: PermitInfo[]): Map<string, PermitInfo[]> {
 export default function ResourcesPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedAgency, setSelectedAgency] = useState<string>("all")
+  const [selectedStatus, setSelectedStatus] = useState<string>("all")
 
   // Get unique agencies for filter dropdown
   const agencies = useMemo(() => {
@@ -27,7 +39,7 @@ export default function ResourcesPage() {
     return Array.from(agencySet).sort()
   }, [])
 
-  // Filter permits based on search and agency filter
+  // Filter permits based on search, agency filter, and status filter
   const filteredPermits = useMemo(() => {
     return permitInventory.filter(permit => {
       const matchesSearch = searchQuery === "" ||
@@ -37,9 +49,11 @@ export default function ResourcesPage() {
 
       const matchesAgency = selectedAgency === "all" || permit.responsibleAgency === selectedAgency
 
-      return matchesSearch && matchesAgency
+      const matchesStatus = selectedStatus === "all" || permit.integrationStatus === selectedStatus
+
+      return matchesSearch && matchesAgency && matchesStatus
     })
-  }, [searchQuery, selectedAgency])
+  }, [searchQuery, selectedAgency, selectedStatus])
 
   // Group filtered permits by agency
   const groupedPermits = useMemo(() => groupByAgency(filteredPermits), [filteredPermits])
@@ -87,6 +101,25 @@ export default function ResourcesPage() {
               })}
             </select>
           </div>
+          <div className="resources-page__status-filter">
+            <label htmlFor="status-filter" className="visually-hidden">Filter by integration status</label>
+            <select
+              id="status-filter"
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="resources-page__select"
+            >
+              <option value="all">All Statuses</option>
+              {INTEGRATION_STATUS_OPTIONS.map(status => {
+                const count = permitInventory.filter(p => p.integrationStatus === status).length
+                return (
+                  <option key={status} value={status}>
+                    {INTEGRATION_STATUS_LABELS[status]} ({count})
+                  </option>
+                )
+              })}
+            </select>
+          </div>
         </div>
 
         <p className="resources-page__results-count">
@@ -108,7 +141,10 @@ export default function ResourcesPage() {
                           to={getPermitInfoUrl(permit.id)}
                           className="resources-page__permit-link"
                         >
-                          <span className="resources-page__permit-name">{permit.name}</span>
+                          <span className="resources-page__permit-top">
+                            <span className="resources-page__permit-name">{permit.name}</span>
+                            <IntegrationStatusBadge status={permit.integrationStatus} />
+                          </span>
                           <span className="resources-page__permit-office">{permit.responsibleOffice}</span>
                         </Link>
                       </li>

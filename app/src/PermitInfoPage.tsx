@@ -1,5 +1,15 @@
 import { Link, useParams } from "react-router-dom"
-import { permitInventory, type PermitInfo } from "./utils/permitInventory"
+import { permitInventory, INTEGRATION_STATUS_LABELS } from "./utils/permitInventory"
+import type { PermitInfo, IntegrationStatus } from "./utils/permitInventory"
+
+function IntegrationStatusBadge({ status }: { status: IntegrationStatus }) {
+  return (
+    <span className={`integration-badge integration-badge--${status}`}>
+      <span className="integration-badge__dot" aria-hidden="true" />
+      <span className="integration-badge__label">{INTEGRATION_STATUS_LABELS[status]}</span>
+    </span>
+  )
+}
 
 function PermitInfoContent({ permit }: { permit: PermitInfo }) {
   return (
@@ -14,6 +24,7 @@ function PermitInfoContent({ permit }: { permit: PermitInfo }) {
           {permit.responsibleOffice ? (
             <span className="permit-info__office">{permit.responsibleOffice}</span>
           ) : null}
+          <IntegrationStatusBadge status={permit.integrationStatus} />
         </div>
       </header>
 
