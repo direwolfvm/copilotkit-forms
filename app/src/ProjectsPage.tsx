@@ -9,6 +9,7 @@ import {
   type ProjectProcessSummary
 } from "./utils/projectPersistence"
 import { loadBasicPermitProcessesForProjects } from "./utils/permitflow"
+import { loadComplexReviewProcessesForProjects } from "./utils/reviewworks"
 import { ArcgisSketchMap, type GeometryChange } from "./components/ArcgisSketchMap"
 
 const PRE_SCREENING_COMPLETE_EVENT = "Pre-screening complete"
@@ -16,6 +17,8 @@ const PRE_SCREENING_INITIATED_EVENT = "Pre-screening initiated"
 const PRE_SCREENING_ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const BASIC_PERMIT_LABEL = "Basic Permit"
 const BASIC_PERMIT_APPROVED_EVENT = "project_approved"
+const COMPLEX_REVIEW_LABEL = "Complex Review"
+const COMPLEX_REVIEW_APPROVED_EVENT = "project_approved"
 
 type PreScreeningStatus = "complete" | "pending" | "caution"
 type ProcessStatusVariant = "complete" | "pending" | "caution"
@@ -175,6 +178,44 @@ function determineBasicPermitStatus(
   return { variant: "pending", label: `${BASIC_PERMIT_LABEL} in progress` }
 }
 
+function isComplexReviewProcess(process: ProjectProcessSummary): boolean {
+  const haystack = `${process.title ?? ""} ${process.description ?? ""}`.toLowerCase()
+  return haystack.includes("complex review")
+}
+
+function determineComplexReviewStatus(
+  process: ProjectProcessSummary
+): { variant: ProcessStatusVariant; label: string } | undefined {
+  if (!isComplexReviewProcess(process)) {
+    return undefined
+  }
+
+  const hasApproval = process.caseEvents.some(
+    (event) => event.eventType?.toLowerCase() === COMPLEX_REVIEW_APPROVED_EVENT
+  )
+  if (hasApproval) {
+    return { variant: "complete", label: `${COMPLEX_REVIEW_LABEL} complete` }
+  }
+
+  const latestEvent = process.caseEvents[0]
+  if (!latestEvent) {
+    return undefined
+  }
+
+  const eventStatus = latestEvent.status?.toLowerCase()
+
+  if (eventStatus === "late" || eventStatus === "overdue" || eventStatus === "delayed") {
+    return { variant: "caution", label: `${COMPLEX_REVIEW_LABEL} delayed` }
+  }
+
+  const latestTimestamp = parseTimestampMillis(latestEvent.lastUpdated)
+  if (latestTimestamp && Date.now() - latestTimestamp > PRE_SCREENING_ONE_WEEK_MS) {
+    return { variant: "caution", label: `${COMPLEX_REVIEW_LABEL} pending for over 7 days` }
+  }
+
+  return { variant: "pending", label: `${COMPLEX_REVIEW_LABEL} in progress` }
+}
+
 function isProcessComplete(process: ProjectProcessSummary): boolean {
   if (isPreScreeningProcess(process)) {
     return process.caseEvents.some((event) => event.eventType === PRE_SCREENING_COMPLETE_EVENT)
@@ -183,6 +224,12 @@ function isProcessComplete(process: ProjectProcessSummary): boolean {
   if (isBasicPermitProcess(process)) {
     return process.caseEvents.some(
       (event) => event.eventType?.toLowerCase() === BASIC_PERMIT_APPROVED_EVENT
+    )
+  }
+
+  if (isComplexReviewProcess(process)) {
+    return process.caseEvents.some(
+      (event) => event.eventType?.toLowerCase() === COMPLEX_REVIEW_APPROVED_EVENT
     )
   }
 
@@ -201,6 +248,10 @@ function isProcessDelayed(process: ProjectProcessSummary): boolean {
   }
 
   if (determineBasicPermitStatus(process)?.variant === "caution") {
+    return true
+  }
+
+  if (determineComplexReviewStatus(process)?.variant === "caution") {
     return true
   }
 
@@ -265,6 +316,7 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
   const latestCaseEvent = process.caseEvents[0]
   const preScreeningStatus = determinePreScreeningStatus(process)
   const basicPermitStatus = determineBasicPermitStatus(process)
+  const complexReviewStatus = determineComplexReviewStatus(process)
   const latestEventLabel = latestCaseEvent?.name || latestCaseEvent?.eventType
 
   return (
@@ -290,6 +342,9 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
             ) : null}
             {basicPermitStatus ? (
               <StatusIndicator variant={basicPermitStatus.variant} label={basicPermitStatus.label} />
+            ) : null}
+            {complexReviewStatus ? (
+              <StatusIndicator variant={complexReviewStatus.variant} label={complexReviewStatus.label} />
             ) : null}
             {latestEventLabel ? (
               <span className="projects-tree__latest-event">
@@ -479,18 +534,21 @@ export function ProjectsPage() {
         if (!isMounted) {
           return
         }
-        const permitflowProcessesByProject = await loadBasicPermitProcessesForProjects(
-          hierarchy.map((entry) => entry.project)
-        )
+        const projectList = hierarchy.map((entry) => entry.project)
+        const [permitflowProcessesByProject, reviewworksProcessesByProject] = await Promise.all([
+          loadBasicPermitProcessesForProjects(projectList),
+          loadComplexReviewProcessesForProjects(projectList)
+        ])
         if (!isMounted) {
           return
         }
         const merged = hierarchy.map((entry) => {
           const permitflowProcesses = permitflowProcessesByProject.get(entry.project.id) ?? []
-          if (permitflowProcesses.length === 0) {
+          const reviewworksProcesses = reviewworksProcessesByProject.get(entry.project.id) ?? []
+          if (permitflowProcesses.length === 0 && reviewworksProcesses.length === 0) {
             return entry
           }
-          const combinedProcesses = [...entry.processes, ...permitflowProcesses]
+          const combinedProcesses = [...entry.processes, ...permitflowProcesses, ...reviewworksProcesses]
           combinedProcesses.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
           return {
             ...entry,
