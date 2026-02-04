@@ -112,8 +112,12 @@ export default function AboutPage() {
                 </tr>
                 <tr>
                   <th scope="row">2. Support Application Data Sharing</th>
-                  <td>⚙️ Partial / API-ready</td>
-                  <td>All data is accessible through RESTful APIs, enabling cross-system data exchange and developer integration.</td>
+                  <td>✅ Supported</td>
+                  <td>
+                    HelpPermit.me now includes explicit integrations with{" "}
+                    <a href="https://reviewworks.app.cloud.gov/">ReviewWorks</a> and{" "}
+                    <a href="https://permitflow.app.cloud.gov/">PermitFlow</a>, with shared project and case data exchanged across systems.
+                  </td>
                 </tr>
                 <tr>
                   <th scope="row">3. Automated Project Screening</th>
@@ -127,8 +131,12 @@ export default function AboutPage() {
                 </tr>
                 <tr>
                   <th scope="row">5. Case Management / Workflow</th>
-                  <td>❌ Not implemented</td>
-                  <td>The current version does not include user roles, task assignments, or workflow automation.</td>
+                  <td>⚙️ Partial / Integrated</td>
+                  <td>
+                    Case management is supported through integrated demonstration systems,{" "}
+                    <a href="https://reviewworks.app.cloud.gov/">ReviewWorks</a> and{" "}
+                    <a href="https://permitflow.app.cloud.gov/">PermitFlow</a>, which receive and manage shared case data from HelpPermit.me.
+                  </td>
                 </tr>
                 <tr>
                   <th scope="row">6. Integrated GIS Analysis</th>

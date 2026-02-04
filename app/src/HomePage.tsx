@@ -7,6 +7,22 @@ import { ArcgisSketchMap } from "./components/ArcgisSketchMap"
 
 const TOUR_STORAGE_KEY = "homeSiteTourComplete"
 
+type FeaturePanel =
+  | {
+      kind: "internal"
+      title: string
+      description: string
+      to: string
+      linkLabel: string
+    }
+  | {
+      kind: "external"
+      title: string
+      description: string
+      href: string
+      linkLabel: string
+    }
+
 const cards = [
   {
     title: "Projects overview",
@@ -31,8 +47,9 @@ const cards = [
   }
 ]
 
-const featurePanels = [
+const featurePanels: FeaturePanel[] = [
   {
+    kind: "internal",
     title: "About HelpPermit.me",
     description:
       "Learn about the ideas behind this demo and how these tools can support more efficient permitting and environmental review processes.",
@@ -40,6 +57,23 @@ const featurePanels = [
     linkLabel: "Read about the project"
   },
   {
+    kind: "external",
+    title: "ReviewWorks demo system",
+    description:
+      "Visit the ReviewWorks demonstration environment to see the integrated case-management experience that exchanges project and case data with HelpPermit.me.",
+    href: "https://reviewworks.app.cloud.gov/",
+    linkLabel: "Open ReviewWorks"
+  },
+  {
+    kind: "external",
+    title: "PermitFlow demo system",
+    description:
+      "Visit the PermitFlow demonstration environment to explore its case-management workflows and shared data integration with HelpPermit.me.",
+    href: "https://permitflow.app.cloud.gov/",
+    linkLabel: "Open PermitFlow"
+  },
+  {
+    kind: "internal",
     title: "Developer tools",
     description:
       "Explore the developer console to see how the CopilotKit integrations power AI-assisted workflows across the HelpPermit.me experience.",
@@ -149,12 +183,21 @@ export default function HomePage() {
               <h2 className="home-panel__title">{panel.title}</h2>
               <p className="home-panel__body">{panel.description}</p>
             </div>
-            <Link to={panel.to} className="home-panel__action">
-              <span>{panel.linkLabel}</span>
-              <span aria-hidden="true" className="home-panel__action-icon">
-                →
-              </span>
-            </Link>
+            {panel.kind === "external" ? (
+              <a href={panel.href} className="home-panel__action" target="_blank" rel="noreferrer">
+                <span>{panel.linkLabel}</span>
+                <span aria-hidden="true" className="home-panel__action-icon">
+                  →
+                </span>
+              </a>
+            ) : (
+              <Link to={panel.to} className="home-panel__action">
+                <span>{panel.linkLabel}</span>
+                <span aria-hidden="true" className="home-panel__action-icon">
+                  →
+                </span>
+              </Link>
+            )}
           </article>
         ))}
       </section>
