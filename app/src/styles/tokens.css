@@ -1,5 +1,233 @@
 :root {
+  color-scheme: light dark;
   /* Primitive palette */
+  --color-navy-950: #ece7e1;
+  --color-navy-900: #dfd7cf;
+  --color-navy-800: #f3efea;
+  --color-navy-700: #cec4b9;
+  --color-navy-500: #8f8172;
+  --color-navy-300: #716457;
+  --color-gold-300: #d4b86a;
+  --color-white: #ffffff;
+  --color-ink-900: #1a1816;
+  --color-ink-700: #6b6560;
+
+  /* Semantic tokens (CIO-style naming) */
+  --background: #f5f3f0;
+  --foreground: var(--color-ink-900);
+  --foreground-strong: #0f0e0d;
+  --foreground-inverse: #f5f3f0;
+
+  --card: var(--color-white);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--card-foreground);
+
+  --primary: #1a1816;
+  --primary-strong: #0f0e0d;
+  --primary-foreground: #f5f3f0;
+  --secondary: #eceae7;
+  --secondary-foreground: var(--foreground-strong);
+  --muted: #eceae7;
+  --muted-foreground: var(--color-ink-700);
+  --accent: var(--primary);
+  --accent-foreground: var(--primary-foreground);
+
+  --border: #00000012;
+  --border-strong: #00000026;
+  --input: var(--border);
+  --ring: #9a948f;
+
+  --destructive: #df2225;
+  --success: #4a8a38;
+  --warning: #8a6e20;
+  --info: #2e6eaa;
+  --info-subtle: #326eb41f;
+  --info-border: #2e6eaa66;
+  --code-surface: #2a2a2a;
+  --code-foreground: #e2e8f0;
+
+  /* Alpha primitives */
+  --alpha-accent-04: rgba(26, 24, 22, 0.04);
+  --alpha-accent-06: rgba(26, 24, 22, 0.06);
+  --alpha-accent-08: rgba(26, 24, 22, 0.08);
+  --alpha-accent-12: rgba(26, 24, 22, 0.12);
+  --alpha-accent-14: rgba(26, 24, 22, 0.14);
+  --alpha-accent-15: rgba(26, 24, 22, 0.15);
+  --alpha-accent-18: rgba(26, 24, 22, 0.18);
+  --alpha-accent-20: rgba(26, 24, 22, 0.2);
+  --alpha-accent-22: rgba(26, 24, 22, 0.22);
+  --alpha-accent-25: rgba(26, 24, 22, 0.25);
+  --alpha-accent-26: rgba(26, 24, 22, 0.26);
+  --alpha-accent-30: rgba(26, 24, 22, 0.3);
+  --alpha-accent-40: rgba(26, 24, 22, 0.4);
+  --alpha-accent-55: rgba(26, 24, 22, 0.55);
+
+  --alpha-heading-06: rgba(26, 24, 22, 0.06);
+  --alpha-heading-08: rgba(26, 24, 22, 0.08);
+  --alpha-heading-15: rgba(26, 24, 22, 0.15);
+  --alpha-heading-30: rgba(26, 24, 22, 0.3);
+  --alpha-heading-35: rgba(26, 24, 22, 0.35);
+  --alpha-heading-40: rgba(26, 24, 22, 0.4);
+  --alpha-heading-45: rgba(26, 24, 22, 0.45);
+  --alpha-heading-50: rgba(26, 24, 22, 0.5);
+  --alpha-heading-52: rgba(26, 24, 22, 0.52);
+  --alpha-heading-55: rgba(26, 24, 22, 0.55);
+  --alpha-heading-58: rgba(26, 24, 22, 0.58);
+  --alpha-heading-60: rgba(26, 24, 22, 0.6);
+  --alpha-heading-65: rgba(26, 24, 22, 0.65);
+
+  --alpha-white-08: rgba(255, 255, 255, 0.08);
+  --alpha-white-45: rgba(255, 255, 255, 0.45);
+  --alpha-white-60: rgba(255, 255, 255, 0.6);
+
+  --alpha-deep-12: rgba(26, 24, 22, 0.12);
+  --alpha-deep-42: rgba(26, 24, 22, 0.42);
+
+  --alpha-slate-22: rgba(26, 24, 22, 0.22);
+  --alpha-slate-25: rgba(26, 24, 22, 0.25);
+  --alpha-slate-45: rgba(26, 24, 22, 0.45);
+  --alpha-slate-55: rgba(26, 24, 22, 0.55);
+  --alpha-slate-blue-40: rgba(26, 24, 22, 0.4);
+
+  --shadow: 0 40px 80px -45px rgba(26, 24, 22, 0.3);
+  --shadow-subtle: 0 24px 48px -40px rgba(26, 24, 22, 0.22);
+
+  /* Compatibility aliases for existing app styles */
+  --theme-navy-950: var(--color-navy-950);
+  --theme-navy-900: var(--color-navy-900);
+  --theme-navy-800: var(--color-navy-800);
+  --theme-navy-700: var(--color-navy-700);
+  --theme-navy-500: var(--color-navy-500);
+  --theme-navy-300: var(--color-navy-300);
+  --theme-gold-300: var(--color-gold-300);
+
+  --surface: var(--card);
+  --surface-muted: var(--muted);
+  --color-text: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-heading: var(--foreground-strong);
+  --color-text-inverse: var(--foreground-inverse);
+  --accent-dark: var(--primary-strong);
+  --accent-contrast: var(--primary-foreground);
+  --callout-bg: var(--info-subtle);
+  --callout-border: var(--info-border);
+
+  /* Missing tokens now explicitly defined */
+  --card-background: var(--card);
+  --color-primary: var(--primary);
+  --color-danger: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  /* Layout/system tokens */
+  --copilot-frame-side-offset: clamp(1.35rem, 3vw, 3rem);
+  --copilot-frame-width: clamp(22rem, 28vw, 30rem);
+  --layout-site-main-padding-top: 1.25rem;
+  --layout-site-main-padding-bottom: 4rem;
+  --layout-app-top-offset: 3rem;
+  --site-header-height: 4rem;
+  --site-banner-height: 0px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark primitives */
+    --color-navy-950: #111111;
+    --color-navy-900: #1a1a1a;
+    --color-navy-800: #161616;
+    --color-navy-700: #2a2a2a;
+    --color-navy-500: #706b66;
+    --color-navy-300: #9a948f;
+    --color-gold-300: #d4b86a;
+    --color-ink-900: #e8e4df;
+    --color-ink-700: #b9b3ad;
+
+    /* Dark semantic layer */
+    --background: #1a1a1a;
+    --foreground: #e8e4df;
+    --foreground-strong: #f4f0eb;
+    --foreground-inverse: #1a1a1a;
+
+    --card: #222222;
+    --card-foreground: var(--foreground);
+    --popover: #222222;
+    --popover-foreground: var(--foreground);
+
+    --primary: #e8e4df;
+    --primary-strong: #f4f0eb;
+    --primary-foreground: #1a1a1a;
+    --secondary: #2a2a2a;
+    --secondary-foreground: #e8e4df;
+    --muted: #2a2a2a;
+    --muted-foreground: #9a9590;
+
+    --border: #ffffff1a;
+    --border-strong: #ffffff2a;
+    --input: #ffffff24;
+    --ring: #706b66;
+
+    --destructive: #ff6568;
+    --success: #8bc472;
+    --warning: #d4b86a;
+    --info: #6aacdc;
+    --info-subtle: #6aacdc26;
+    --info-border: #6aacdc66;
+    --code-surface: #0f0f0f;
+    --code-foreground: #f4f0eb;
+
+    /* Dark alpha primitives */
+    --alpha-accent-04: rgba(232, 228, 223, 0.04);
+    --alpha-accent-06: rgba(232, 228, 223, 0.06);
+    --alpha-accent-08: rgba(232, 228, 223, 0.08);
+    --alpha-accent-12: rgba(232, 228, 223, 0.12);
+    --alpha-accent-14: rgba(232, 228, 223, 0.14);
+    --alpha-accent-15: rgba(232, 228, 223, 0.15);
+    --alpha-accent-18: rgba(232, 228, 223, 0.18);
+    --alpha-accent-20: rgba(232, 228, 223, 0.2);
+    --alpha-accent-22: rgba(232, 228, 223, 0.22);
+    --alpha-accent-25: rgba(232, 228, 223, 0.25);
+    --alpha-accent-26: rgba(232, 228, 223, 0.26);
+    --alpha-accent-30: rgba(232, 228, 223, 0.3);
+    --alpha-accent-40: rgba(232, 228, 223, 0.4);
+    --alpha-accent-55: rgba(232, 228, 223, 0.55);
+
+    --alpha-heading-06: rgba(232, 228, 223, 0.06);
+    --alpha-heading-08: rgba(232, 228, 223, 0.08);
+    --alpha-heading-15: rgba(232, 228, 223, 0.15);
+    --alpha-heading-30: rgba(232, 228, 223, 0.3);
+    --alpha-heading-35: rgba(232, 228, 223, 0.35);
+    --alpha-heading-40: rgba(232, 228, 223, 0.4);
+    --alpha-heading-45: rgba(232, 228, 223, 0.45);
+    --alpha-heading-50: rgba(232, 228, 223, 0.5);
+    --alpha-heading-52: rgba(232, 228, 223, 0.52);
+    --alpha-heading-55: rgba(232, 228, 223, 0.55);
+    --alpha-heading-58: rgba(232, 228, 223, 0.58);
+    --alpha-heading-60: rgba(232, 228, 223, 0.6);
+    --alpha-heading-65: rgba(232, 228, 223, 0.65);
+
+    --alpha-white-08: rgba(255, 255, 255, 0.08);
+    --alpha-white-45: rgba(255, 255, 255, 0.45);
+    --alpha-white-60: rgba(255, 255, 255, 0.6);
+
+    --alpha-deep-12: rgba(0, 0, 0, 0.18);
+    --alpha-deep-42: rgba(0, 0, 0, 0.5);
+
+    --alpha-slate-22: rgba(0, 0, 0, 0.22);
+    --alpha-slate-25: rgba(0, 0, 0, 0.25);
+    --alpha-slate-45: rgba(0, 0, 0, 0.45);
+    --alpha-slate-55: rgba(0, 0, 0, 0.55);
+    --alpha-slate-blue-40: rgba(0, 0, 0, 0.4);
+
+    --shadow: 0 36px 72px -44px rgba(0, 0, 0, 0.55);
+    --shadow-subtle: 0 20px 44px -34px rgba(0, 0, 0, 0.45);
+  }
+}
+
+:root[data-design-theme="old"] {
+  color-scheme: light;
+
+  /* Legacy primitives */
   --color-navy-950: #031430;
   --color-navy-900: #071d42;
   --color-navy-800: #0b2a5b;
@@ -11,7 +239,7 @@
   --color-ink-900: #11263c;
   --color-ink-700: #3a5478;
 
-  /* Semantic tokens (CIO-style naming) */
+  /* Legacy semantic layer */
   --background: var(--color-navy-950);
   --foreground: var(--color-ink-900);
   --foreground-strong: var(--color-navy-900);
@@ -20,7 +248,7 @@
   --card: var(--color-white);
   --card-foreground: var(--foreground);
   --popover: var(--card);
-  --popover-foreground: var(--card-foreground);
+  --popover-foreground: var(--foreground);
 
   --primary: var(--color-navy-500);
   --primary-strong: #0f2f66;
@@ -29,8 +257,6 @@
   --secondary-foreground: var(--foreground-strong);
   --muted: rgba(255, 255, 255, 0.92);
   --muted-foreground: var(--color-ink-700);
-  --accent: var(--primary);
-  --accent-foreground: var(--primary-foreground);
 
   --border: rgba(7, 29, 66, 0.18);
   --border-strong: rgba(7, 29, 66, 0.28);
@@ -46,7 +272,7 @@
   --code-surface: #0f172a;
   --code-foreground: #e2e8f0;
 
-  /* Alpha primitives */
+  /* Legacy alpha primitives */
   --alpha-accent-04: rgba(31, 79, 153, 0.04);
   --alpha-accent-06: rgba(31, 79, 153, 0.06);
   --alpha-accent-08: rgba(31, 79, 153, 0.08);
@@ -91,40 +317,4 @@
 
   --shadow: 0 40px 80px -45px rgba(3, 20, 48, 0.5);
   --shadow-subtle: 0 24px 48px -40px rgba(3, 20, 48, 0.35);
-
-  /* Compatibility aliases for existing app styles */
-  --theme-navy-950: var(--color-navy-950);
-  --theme-navy-900: var(--color-navy-900);
-  --theme-navy-800: var(--color-navy-800);
-  --theme-navy-700: var(--color-navy-700);
-  --theme-navy-500: var(--color-navy-500);
-  --theme-navy-300: var(--color-navy-300);
-  --theme-gold-300: var(--color-gold-300);
-
-  --surface: var(--card);
-  --surface-muted: var(--muted);
-  --color-text: var(--foreground);
-  --color-text-muted: var(--muted-foreground);
-  --color-heading: var(--foreground-strong);
-  --color-text-inverse: var(--foreground-inverse);
-  --accent-dark: var(--primary-strong);
-  --accent-contrast: var(--primary-foreground);
-  --callout-bg: var(--info-subtle);
-  --callout-border: var(--info-border);
-
-  /* Missing tokens now explicitly defined */
-  --card-background: var(--card);
-  --color-primary: var(--primary);
-  --color-danger: var(--destructive);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-
-  /* Layout/system tokens */
-  --copilot-frame-side-offset: clamp(1.35rem, 3vw, 3rem);
-  --copilot-frame-width: clamp(22rem, 28vw, 30rem);
-  --layout-site-main-padding-top: 1.25rem;
-  --layout-site-main-padding-bottom: 4rem;
-  --layout-app-top-offset: 3rem;
-  --site-header-height: 4rem;
-  --site-banner-height: 0px;
 }
