@@ -223,3 +223,98 @@
     --shadow-subtle: 0 20px 44px -34px rgba(0, 0, 0, 0.45);
   }
 }
+
+:root[data-design-theme="old"] {
+  color-scheme: light;
+
+  /* Legacy primitives */
+  --color-navy-950: #031430;
+  --color-navy-900: #071d42;
+  --color-navy-800: #0b2a5b;
+  --color-navy-700: #123a7a;
+  --color-navy-500: #1f4f99;
+  --color-navy-300: #3f6db8;
+  --color-gold-300: #f4c95f;
+  --color-white: #ffffff;
+  --color-ink-900: #11263c;
+  --color-ink-700: #3a5478;
+
+  /* Legacy semantic layer */
+  --background: var(--color-navy-950);
+  --foreground: var(--color-ink-900);
+  --foreground-strong: var(--color-navy-900);
+  --foreground-inverse: #f4f7fc;
+
+  --card: var(--color-white);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+
+  --primary: var(--color-navy-500);
+  --primary-strong: #0f2f66;
+  --primary-foreground: #fefefe;
+  --secondary: rgba(255, 255, 255, 0.92);
+  --secondary-foreground: var(--foreground-strong);
+  --muted: rgba(255, 255, 255, 0.92);
+  --muted-foreground: var(--color-ink-700);
+
+  --border: rgba(7, 29, 66, 0.18);
+  --border-strong: rgba(7, 29, 66, 0.28);
+  --input: var(--border);
+  --ring: color-mix(in srgb, var(--primary) 35%, white 65%);
+
+  --destructive: #b91c1c;
+  --success: #15803d;
+  --warning: #d97706;
+  --info: #0366d6;
+  --info-subtle: rgba(31, 79, 153, 0.08);
+  --info-border: rgba(31, 79, 153, 0.35);
+  --code-surface: #0f172a;
+  --code-foreground: #e2e8f0;
+
+  /* Legacy alpha primitives */
+  --alpha-accent-04: rgba(31, 79, 153, 0.04);
+  --alpha-accent-06: rgba(31, 79, 153, 0.06);
+  --alpha-accent-08: rgba(31, 79, 153, 0.08);
+  --alpha-accent-12: rgba(31, 79, 153, 0.12);
+  --alpha-accent-14: rgba(31, 79, 153, 0.14);
+  --alpha-accent-15: rgba(31, 79, 153, 0.15);
+  --alpha-accent-18: rgba(31, 79, 153, 0.18);
+  --alpha-accent-20: rgba(31, 79, 153, 0.2);
+  --alpha-accent-22: rgba(31, 79, 153, 0.22);
+  --alpha-accent-25: rgba(31, 79, 153, 0.25);
+  --alpha-accent-26: rgba(31, 79, 153, 0.26);
+  --alpha-accent-30: rgba(31, 79, 153, 0.3);
+  --alpha-accent-40: rgba(31, 79, 153, 0.4);
+  --alpha-accent-55: rgba(31, 79, 153, 0.55);
+
+  --alpha-heading-06: rgba(7, 29, 66, 0.06);
+  --alpha-heading-08: rgba(7, 29, 66, 0.08);
+  --alpha-heading-15: rgba(7, 29, 66, 0.15);
+  --alpha-heading-30: rgba(7, 29, 66, 0.3);
+  --alpha-heading-35: rgba(7, 29, 66, 0.35);
+  --alpha-heading-40: rgba(7, 29, 66, 0.4);
+  --alpha-heading-45: rgba(7, 29, 66, 0.45);
+  --alpha-heading-50: rgba(7, 29, 66, 0.5);
+  --alpha-heading-52: rgba(7, 29, 66, 0.52);
+  --alpha-heading-55: rgba(7, 29, 66, 0.55);
+  --alpha-heading-58: rgba(7, 29, 66, 0.58);
+  --alpha-heading-60: rgba(7, 29, 66, 0.6);
+  --alpha-heading-65: rgba(7, 29, 66, 0.65);
+
+  --alpha-white-08: rgba(255, 255, 255, 0.08);
+  --alpha-white-45: rgba(255, 255, 255, 0.45);
+  --alpha-white-60: rgba(255, 255, 255, 0.6);
+
+  --alpha-deep-12: rgba(3, 20, 48, 0.12);
+  --alpha-deep-42: rgba(3, 20, 48, 0.42);
+
+  --alpha-slate-22: rgba(17, 24, 39, 0.22);
+  --alpha-slate-25: rgba(17, 24, 39, 0.25);
+  --alpha-slate-45: rgba(17, 24, 39, 0.45);
+  --alpha-slate-55: rgba(17, 25, 40, 0.55);
+  --alpha-slate-blue-40: rgba(15, 31, 52, 0.4);
+
+  --shadow: 0 40px 80px -45px rgba(3, 20, 48, 0.5);
+  --shadow-subtle: 0 24px 48px -40px rgba(3, 20, 48, 0.35);
+}

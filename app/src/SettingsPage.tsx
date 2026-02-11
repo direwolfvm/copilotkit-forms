@@ -8,6 +8,7 @@ import {
   type ProjectHierarchy
 } from "./utils/projectPersistence"
 import { useHolidayTheme } from "./holidayThemeContext"
+import { useDesignTheme } from "./designThemeContext"
 
 import "./App.css"
 
@@ -195,6 +196,7 @@ export default function SettingsPage() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const { isChristmasThemeEnabled, setChristmasThemeEnabled } = useHolidayTheme()
+  const { designTheme, setDesignTheme } = useDesignTheme()
 
   useEffect(() => {
     let isActive = true
@@ -271,6 +273,28 @@ export default function SettingsPage() {
               type="checkbox"
               checked={isChristmasThemeEnabled}
               onChange={(event) => setChristmasThemeEnabled(event.target.checked)}
+            />
+          </label>
+        </section>
+
+        <section className="settings__section" aria-labelledby="settings-design-theme-heading">
+          <h2 id="settings-design-theme-heading">Visual theme</h2>
+          <p className="settings__description">
+            Choose between the new design-token palette and the legacy color palette used before the migration.
+          </p>
+          <label className="settings__switch" htmlFor="settings-legacy-theme-toggle">
+            <div className="settings__switch-text">
+              <span className="settings__label">Legacy theme</span>
+              <span className="settings__hint">
+                Use the previous navy-and-gold appearance instead of the new neutral palette.
+              </span>
+            </div>
+            <input
+              id="settings-legacy-theme-toggle"
+              className="settings__switch-input"
+              type="checkbox"
+              checked={designTheme === "old"}
+              onChange={(event) => setDesignTheme(event.target.checked ? "old" : "new")}
             />
           </label>
         </section>
