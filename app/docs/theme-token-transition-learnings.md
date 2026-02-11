@@ -1,113 +1,266 @@
-# Theme Token Transition Learnings (Agent Guide)
+# Theme Token Transition Runbook (LLM Agent)
 
-This document captures a practical rollout pattern for migrating an existing app to a token-driven theme system in two phases.
+This is an execution guide for an LLM agent to migrate an app to a token-first theme system with low regression risk.
 
-## Goal
+Use two phases:
 
-Move styling to a stable token architecture first, then change visual values safely.
+1. Phase 1: migrate architecture to semantic tokens (minimal visual change).
+2. Phase 2: update token values to the new theme.
 
-## Phase 1: Migrate Architecture (No Visual Change Required)
+Include a user-facing selector to switch between `legacy` and `new` themes, and place it in User Profile settings when available.
 
-Objective: standardize how styles are referenced without forcing an immediate redesign.
+---
 
-### Scope
+## 1. Operating Rules for the Agent
 
-- Map existing style literals to semantic tokens.
-- Introduce token layers:
-  - Primitive tokens (raw colors/spacing/radius/shadows)
-  - Semantic tokens (surface, text, border, accent, etc.)
-- Replace direct literals in component/page styles with semantic tokens.
-- Keep current look as close as possible to baseline to reduce risk.
+- Do not mix architecture migration and visual redesign in one commit.
+- Keep component markup stable during Phase 1.
+- Prefer centralized token updates over per-component color edits.
+- Maintain backward-compatible token aliases until migration is complete.
+- Run validation after every milestone.
 
-### USDWS implementation notes
+Branch naming recommendation:
 
-- Keep USDWS component classes and structure intact.
-- Introduce your app-level token file and map tokens to USDWS-compatible usage points.
-- If overriding USDWS variables, do so in one centralized stylesheet to avoid drift.
+- `codex/theme-token-phase1`
+- `codex/theme-token-phase2`
+- `codex/theme-token-toggle`
 
-### Tailwind implementation notes
+---
 
-- Move theme values into `tailwind.config` (or CSS variable-backed theme extension).
-- Prefer semantic utility aliases over hard-coded palette classes in components.
-- Add lint/guardrail checks that prevent introducing new raw literals in app styles.
+## 2. Repo-Specific Anchors (Current Project)
 
-### Exit criteria
+Use these files as the source of truth in this repo:
 
-- No net visual regression (or only intentional, documented deltas).
-- Components/pages consume semantic tokens rather than ad hoc literals.
-- Build/test/lint pass.
+- Token definitions: `app/src/styles/tokens.css`
+- Global styles: `app/src/App.css`, `app/src/index.css`
+- Theme state/context: `app/src/designThemeContext.tsx`
+- Theme toggle UI: `app/src/SettingsPage.tsx`
+- Guardrail script: `app/scripts/check-style-literals.sh`
+- NPM scripts: `app/package.json`
 
-## Phase 2: Update Token Values (Apply New Theme)
+Validation commands:
 
-Objective: switch visual language by changing token values, not component code.
+- `npm run check:style-tokens`
+- `npm run build`
+- `npm run test:run` (if changed behavior intersects tested areas)
 
-### Scope
+---
 
-- Update token values for new theme palette/typography/elevation.
-- Support browser `prefers-color-scheme` for light/dark where appropriate.
-- Validate contrast and readability for critical UI states:
-  - default, hover, focus, disabled, error, success.
+## 3. Phase 1: Architecture Migration (USDWS or Tailwind)
 
-### Recommended strategy
+### Objective
 
-- Keep semantic token names stable.
-- Change primitives and semantic mappings in token files only.
-- Avoid page-by-page visual rewrites unless a specific component needs exceptions.
+Move from scattered color literals and ad hoc variables to semantic tokens, while preserving existing visuals as much as possible.
 
-### Exit criteria
+### Required outputs
 
-- Theme changes are visible through token updates alone.
-- No component-level hard-coded color regressions.
-- Core workflows are validated in desktop/mobile and light/dark contexts.
+- Centralized token file(s) with primitive + semantic layers.
+- Style usage switched to semantic tokens.
+- Guardrail to block new raw color literals outside token files.
+- Build/lint/test passing.
 
-## Selector Switch (New vs Legacy)
+### Step-by-step procedure
 
-Add a theme selector to let users choose between legacy and new visual tokens during transition.
+1. Baseline audit.
+   - Inventory raw color literals and undefined token usage.
+   - Example:
+     - `rg -n "#[0-9a-fA-F]{3,8}|rgba?\\(" app/src/*.css`
+     - `rg -n "var\\(--[a-zA-Z0-9-]+\\)" app/src/*.css`
+2. Define token layers.
+   - Primitive tokens: raw palette, shadows, alpha ramps.
+   - Semantic tokens: `--background`, `--foreground`, `--card`, `--primary`, `--muted`, `--border`, `--destructive`, etc.
+3. Add compatibility aliases.
+   - Keep old token names mapped to semantic tokens during migration.
+4. Replace direct literals in styles.
+   - Replace with semantic tokens first.
+   - Avoid editing component logic unless required.
+5. Add/enable guardrail.
+   - Ensure raw literals outside token files fail checks.
+   - In this repo, use `npm run check:style-tokens`.
+6. Validate and commit.
+   - Run: `npm run check:style-tokens && npm run build`.
+   - Commit message example: `refactor styles to semantic token architecture`.
 
-### Behavior
+### USDWS-specific instructions
 
-- Persist selection in `localStorage` (e.g., `design-theme`).
-- Apply a root attribute (e.g., `data-design-theme="old|new"`).
-- Default recommendation during migration:
-  - Set `legacy` as default first if rollout risk is high.
-  - Move default to `new` when validated.
+- Keep USDWS class structure and component markup unchanged.
+- Map app semantics to USDWS-compatible variable usage points.
+- Put USDWS overrides in one centralized token/override file.
+- Do not fork per-component palette variants unless unavoidable.
 
-### CSS structure
+### Tailwind-specific instructions
 
-- Base token set (default theme).
-- `@media (prefers-color-scheme: dark)` overrides for dark mode.
-- `[data-design-theme="old"]` override block for legacy values.
-- Keep override precedence explicit so selected theme wins consistently.
+- Move color/system values into `tailwind.config` and/or CSS variables.
+- Use semantic utility aliases (`bg-surface`, `text-foreground`, etc.).
+- Remove hard-coded palette classes from component code where possible.
+- Enforce no-raw-literals via lint/check scripts.
 
-## Placement Recommendation
+### Phase 1 acceptance criteria
 
-Place the selector in **User Profile** settings if one exists.
+- Semantic tokens are the primary style contract.
+- Raw color literals exist only in token definition files.
+- No meaningful visual regression beyond documented exceptions.
+- Build and checks pass.
 
-- Preferred location: profile/preferences area where users expect personalization controls.
-- Fallback location: global Settings page if no profile surface exists yet.
-- Label recommendation:
-  - Section: `Visual theme`
-  - Toggle: `Legacy theme`
-  - Help text: explain legacy vs new appearance and that preference is saved.
+---
 
-## Implementation Checklist (Agent)
+## 4. Phase 2: Token Value Migration (Apply New Theme)
 
-1. Inventory style literals and token usage gaps.
-2. Land Phase 1 refactor with minimal visual change.
-3. Add guardrails (lint/script) to prevent new literals.
-4. Add selector switch plumbing (`context/state + localStorage + root data attribute`).
-5. Land Phase 2 token value updates.
-6. Verify in local runtime and Docker image build.
-7. Confirm browser cache is not masking new bundles.
-8. Commit with clear separation:
-   - architecture commits
-   - token-value/theme commits
-   - UX toggle commits
+### Objective
 
-## Common Pitfalls
+Change visual design by editing token values, not by rewriting component styles.
 
-- Assuming architecture migration should visibly change the UI in Phase 1.
-- Token overrides not applying due to CSS order/specificity.
-- Testing the wrong local port/container and misreading results.
-- Browser cache showing stale JS/CSS bundles after rebuild.
+### Required outputs
+
+- Updated token values for the new theme (light/dark as needed).
+- Existing semantic token names unchanged.
+- Contrast/accessibility review for key states.
+
+### Step-by-step procedure
+
+1. Freeze semantic names from Phase 1.
+   - Do not rename semantic tokens during value migration.
+2. Update values in token source(s) only.
+   - In this repo: `app/src/styles/tokens.css`.
+3. Add/verify dark-mode behavior.
+   - Use `@media (prefers-color-scheme: dark)` where applicable.
+4. Validate high-risk UI states.
+   - Buttons, focus rings, links, alerts, disabled controls, table contrast.
+5. Validate app flows.
+   - Critical pages and forms in desktop and mobile widths.
+6. Build and commit.
+   - Run: `npm run check:style-tokens && npm run build`.
+   - Commit message example: `update semantic token values for new theme`.
+
+### Phase 2 acceptance criteria
+
+- Theme change is driven by token values only.
+- No new component-level hard-coded color regressions.
+- Visual output is consistent across light/dark contexts.
+- Build and checks pass.
+
+---
+
+## 5. Theme Selector Switch (Legacy vs New)
+
+### Requirement
+
+Implement a persisted selector so users can choose between legacy and new theme values during rollout.
+
+### Placement
+
+- Preferred: User Profile -> Preferences (if profile exists).
+- Fallback: global Settings page.
+
+### Behavior contract
+
+- Storage key: `design-theme` (or equivalent stable key).
+- Root attribute: `data-design-theme="old|new"`.
+- Persist selection in `localStorage`.
+- Apply root attribute at initialization to avoid flash/mismatch.
+- Default recommendation during risk-managed rollout: `legacy` (`old`).
+
+### Implementation pattern (React example)
+
+1. Create theme context/provider.
+   - Expose `designTheme` and `setDesignTheme`.
+2. Wrap app root with provider.
+3. Add settings/profile toggle.
+   - Section label: `Visual theme`
+   - Toggle label: `Legacy theme`
+   - Help text: describe `legacy` vs `new`.
+4. Implement CSS precedence.
+   - Base theme values.
+   - Dark-mode overrides.
+   - `[data-design-theme="old"]` legacy override block placed last so explicit user choice wins.
+
+### Verification checks
+
+- Toggle updates live UI immediately.
+- Refresh preserves selected theme.
+- Dark-mode browser preference still works for non-legacy mode.
+- Legacy mode reliably overrides dark-mode palette when selected.
+
+---
+
+## 6. Commit and PR Sequencing
+
+Keep changes reviewable and isolated:
+
+1. Phase 1 architecture commit(s)
+   - token structure + aliasing + literal replacement + guardrail
+2. Phase 2 value commit(s)
+   - theme values and dark-mode adjustments
+3. Selector UX commit(s)
+   - context/provider + profile/settings toggle + persistence
+
+Example commit messages:
+
+- `refactor styles to semantic token architecture`
+- `add token literal guardrail script`
+- `update semantic token values for new visual theme`
+- `add persisted legacy/new visual theme toggle`
+
+---
+
+## 7. Validation Matrix (Minimum)
+
+Run technical checks:
+
+- `npm run check:style-tokens`
+- `npm run build`
+- `npm run test:run` (if impacted)
+
+Run visual checks:
+
+- Home/dashboard/settings/profile pages
+- Forms with validation states
+- Tables/cards/modals
+- Desktop + mobile viewport
+- Browser light + dark preferences
+- Legacy + new selector combinations
+
+Run deployment checks:
+
+- Local container launches correctly.
+- Served JS/CSS bundle includes latest changes (no stale cache).
+- If publishing image, verify Linux platforms:
+  - `linux/amd64`
+  - `linux/arm64`
+
+---
+
+## 8. Common Failure Modes and Fixes
+
+- UI looks unchanged after migration.
+  - Cause: only architecture changed (expected in Phase 1), or stale bundle.
+  - Fix: confirm phase intent and clear browser cache/rebuild image.
+- Toggle exists in code but not UI.
+  - Cause: stale container or wrong port/app instance.
+  - Fix: inspect served bundle and container routing.
+- Theme selection not persisting.
+  - Cause: storage key mismatch or provider not mounted at root.
+  - Fix: verify initialization path and provider wiring.
+- Legacy override not winning.
+  - Cause: CSS order/specificity.
+  - Fix: move `[data-design-theme="old"]` block after other overrides.
+
+---
+
+## 9. Agent Handoff Template
+
+Use this in PR or task handoff:
+
+- Scope completed:
+  - Phase completed (`1`, `2`, or `toggle`)
+  - Files touched
+- Validation run:
+  - Commands executed and result
+- Behavior summary:
+  - What changed visually vs architecturally
+- Risks:
+  - Known follow-ups or residual regressions
+- Deployment:
+  - Branch/commit
+  - Docker image tag/digest (if published)
 
