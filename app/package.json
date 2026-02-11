@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "check:style-tokens": "bash ./scripts/check-style-literals.sh",
+    "sync:env:gcloud": "bash ./scripts/sync-env-from-gcloud.sh",
     "preview": "vite preview",
     "start": "node server.mjs",
     "test": "vitest",
