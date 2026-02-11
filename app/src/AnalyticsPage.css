@@ -94,7 +94,7 @@
 }
 
 .analytics-status--error {
-  color: color-mix(in srgb, #c43d4b 85%, var(--color-text) 15%);
+  color: color-mix(in srgb, var(--destructive) 85%, var(--color-text) 15%);
   font-weight: 600;
 }
 

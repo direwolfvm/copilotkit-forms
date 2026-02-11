@@ -45,14 +45,14 @@
   padding: 1.5rem 1.75rem;
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-  background: color-mix(in srgb, #f8f5ff 65%, var(--surface) 35%);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface) 92%);
   box-shadow: var(--shadow-subtle);
 }
 
 .developer-tools__callout h2 {
   margin: 0;
   font-size: 1.2rem;
-  color: color-mix(in srgb, #4b3a88 85%, var(--color-heading) 15%);
+  color: color-mix(in srgb, var(--accent-dark) 85%, var(--color-heading) 15%);
 }
 
 .developer-tools__callout p {
@@ -118,24 +118,24 @@
 }
 
 .swagger-panel__method--get {
-  background: color-mix(in srgb, #0366d6 75%, var(--surface) 25%);
-  color: #f7fbff;
+  background: color-mix(in srgb, var(--info) 75%, var(--surface) 25%);
+  color: var(--primary-foreground);
 }
 
 .swagger-panel__method--post {
-  background: color-mix(in srgb, #1a7f37 75%, var(--surface) 25%);
-  color: #f3fff5;
+  background: color-mix(in srgb, var(--success) 75%, var(--surface) 25%);
+  color: var(--primary-foreground);
 }
 
 .swagger-panel__method--patch,
 .swagger-panel__method--put {
-  background: color-mix(in srgb, #f08a24 78%, var(--surface) 22%);
-  color: #fffaf2;
+  background: color-mix(in srgb, var(--warning) 78%, var(--surface) 22%);
+  color: var(--primary-foreground);
 }
 
 .swagger-panel__method--delete {
-  background: color-mix(in srgb, #d03b3b 78%, var(--surface) 22%);
-  color: #fff6f6;
+  background: color-mix(in srgb, var(--destructive) 78%, var(--surface) 22%);
+  color: var(--primary-foreground);
 }
 
 .swagger-panel__header h3 {
@@ -197,7 +197,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: color-mix(in srgb, #d03b3b 70%, var(--color-text) 30%);
+  color: color-mix(in srgb, var(--destructive) 70%, var(--color-text) 30%);
 }
 
 
@@ -205,8 +205,8 @@
   margin: 0;
   padding: 1rem;
   border-radius: 12px;
-  background: color-mix(in srgb, #0f172a 90%, var(--surface) 10%);
-  color: #e2e8f0;
+  background: color-mix(in srgb, var(--code-surface) 90%, var(--surface) 10%);
+  color: var(--code-foreground);
   overflow-x: auto;
   font-size: 0.9rem;
   line-height: 1.5;

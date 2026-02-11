@@ -1,3 +1,5 @@
+@import "./styles/tokens.css";
+
 :root {
   font-family: var(--usa-font-family-sans, "Public Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   line-height: 1.6;
@@ -7,36 +9,6 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --theme-navy-950: #031430;
-  --theme-navy-900: #071d42;
-  --theme-navy-800: #0b2a5b;
-  --theme-navy-700: #123a7a;
-  --theme-navy-500: #1f4f99;
-  --theme-navy-300: #3f6db8;
-  --theme-gold-300: #f4c95f;
-  --background: var(--theme-navy-950);
-  --surface: #ffffff;
-  --surface-muted: rgba(255, 255, 255, 0.92);
-  --border: rgba(7, 29, 66, 0.18);
-  --border-strong: rgba(7, 29, 66, 0.28);
-  --color-text: #11263c;
-  --color-text-muted: #3a5478;
-  --color-heading: #071d42;
-  --color-text-inverse: #f4f7fc;
-  --accent: #1f4f99;
-  --accent-dark: #0f2f66;
-  --accent-contrast: #fefefe;
-  --callout-bg: rgba(31, 79, 153, 0.08);
-  --callout-border: rgba(31, 79, 153, 0.35);
-  --shadow: 0 40px 80px -45px rgba(3, 20, 48, 0.5);
-  --shadow-subtle: 0 24px 48px -40px rgba(3, 20, 48, 0.35);
-  --copilot-frame-side-offset: clamp(1.35rem, 3vw, 3rem);
-  --copilot-frame-width: clamp(22rem, 28vw, 30rem);
-  --layout-site-main-padding-top: 1.25rem;
-  --layout-site-main-padding-bottom: 4rem;
-  --layout-app-top-offset: 3rem;
-  --site-header-height: 4rem;
-  --site-banner-height: 0px;
 }
 
 a {
@@ -53,7 +25,7 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(31, 79, 153, 0.55), transparent 45%),
+    radial-gradient(circle at top left, var(--alpha-accent-55), transparent 45%),
     linear-gradient(180deg, var(--theme-navy-950) 0%, var(--theme-navy-800) 38%, var(--theme-navy-900) 100%);
   color: var(--color-text-inverse);
 }
