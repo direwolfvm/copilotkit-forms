@@ -13,11 +13,11 @@ const DATA_ATTRIBUTE = "data-design-theme"
 
 function getStoredDesignTheme(): DesignTheme {
   if (typeof window === "undefined") {
-    return "new"
+    return "old"
   }
 
   const storedValue = window.localStorage.getItem(STORAGE_KEY)
-  return storedValue === "old" ? "old" : "new"
+  return storedValue === "new" ? "new" : "old"
 }
 
 function applyDesignTheme(theme: DesignTheme) {
