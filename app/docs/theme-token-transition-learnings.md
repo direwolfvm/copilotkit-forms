@@ -145,7 +145,7 @@ Change visual design by editing token values, not by rewriting component styles.
 
 ### Requirement
 
-Implement a persisted selector so users can choose between legacy and new theme values during rollout.
+Implement a persisted theme picker so users can choose between multiple theme value sets during rollout.
 
 ### Placement
 
@@ -155,31 +155,79 @@ Implement a persisted selector so users can choose between legacy and new theme 
 ### Behavior contract
 
 - Storage key: `design-theme` (or equivalent stable key).
-- Root attribute: `data-design-theme="old|new"`.
+- Root attribute: `data-design-theme="<theme-id>"`.
 - Persist selection in `localStorage`.
 - Apply root attribute at initialization to avoid flash/mismatch.
 - Default recommendation during risk-managed rollout: `legacy` (`old`).
+
+Theme IDs recommendation (stable strings; don’t rename later):
+
+- `old` (legacy)
+- `new` (token-migrated baseline)
+- `gold-marble` (new theme; see below)
 
 ### Implementation pattern (React example)
 
 1. Create theme context/provider.
    - Expose `designTheme` and `setDesignTheme`.
 2. Wrap app root with provider.
-3. Add settings/profile toggle.
+3. Add settings/profile picker (preferred UI: `<select>` or radio group).
    - Section label: `Visual theme`
-   - Toggle label: `Legacy theme`
-   - Help text: describe `legacy` vs `new`.
+   - Control label: `Theme`
+   - Help text: describe the options and that the preference is saved.
 4. Implement CSS precedence.
    - Base theme values.
    - Dark-mode overrides.
-   - `[data-design-theme="old"]` legacy override block placed last so explicit user choice wins.
+   - `[data-design-theme="<theme-id>"]` override blocks placed last so explicit user choice wins.
 
 ### Verification checks
 
-- Toggle updates live UI immediately.
+- Picker updates live UI immediately.
 - Refresh preserves selected theme.
 - Dark-mode browser preference still works for non-legacy mode.
 - Legacy mode reliably overrides dark-mode palette when selected.
+
+### Add a New Theme: Gold + Marble (Token-Only)
+
+Goal: introduce a third theme that is visually distinct, primarily gold-forward, with a white “marble-like” background texture, without rewriting component styles.
+
+Implementation steps (repo-specific):
+
+1. Extend the theme type and persistence.
+   - File: `app/src/designThemeContext.tsx`
+   - Change `DesignTheme` from `"new" | "old"` to `"new" | "old" | "gold-marble"`.
+   - Update the storage read logic to recognize `"gold-marble"` explicitly (unknown values should fall back to default).
+2. Update the picker UI.
+   - File: `app/src/SettingsPage.tsx` (or User Profile preferences page if it exists)
+   - Replace the binary switch with a picker control that sets:
+     - `old` -> “Legacy”
+     - `new` -> “New (token baseline)”
+     - `gold-marble` -> “Gold + Marble”
+3. Add token overrides.
+   - File: `app/src/styles/tokens.css`
+   - Add a new override block after the dark-mode block(s), similar to `:root[data-design-theme="old"]`:
+     - `:root[data-design-theme="gold-marble"] { ... }`
+   - Guidance for values:
+     - Keep semantic tokens stable: `--background`, `--card`, `--foreground`, `--primary`, `--border`, etc.
+     - Make `--primary` / `--accent` gold-forward.
+     - Keep `--foreground` high-contrast (ink/near-black) for readability on light marble.
+     - Prefer warm neutrals for `--muted` surfaces, not gray-blue.
+4. Optional (recommended): add a background texture hook for “marble”.
+   - Token-only color changes cannot produce a marble effect unless the app consumes a token for background image/texture.
+   - If allowed to make a small CSS architecture change, add a single optional token and consume it globally:
+     - Add token: `--background-texture` (default `none`).
+     - Apply in a global rule (e.g., `app/src/index.css`):
+       - `body { background-image: var(--background-texture); background-size: ...; }`
+   - In `:root[data-design-theme="gold-marble"]`, set `--background-texture` to layered gradients that read as subtle marble veining.
+
+Validation gates for adding `gold-marble`:
+
+- `npm run check:style-tokens` must pass (no new raw literals outside `tokens.css`).
+- `npm run build` must pass.
+- Visual spot-check:
+  - Buttons/links/focus rings are readable and meet contrast expectations.
+  - Cards/surfaces look intentional on the textured background.
+  - “Gold” is used as accent/primary, not as body text color.
 
 ---
 
@@ -263,4 +311,3 @@ Use this in PR or task handoff:
 - Deployment:
   - Branch/commit
   - Docker image tag/digest (if published)
-
