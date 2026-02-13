@@ -1,5 +1,6 @@
 :root {
   color-scheme: light dark;
+  --background-texture: none;
   /* Primitive palette */
   --color-navy-950: #ece7e1;
   --color-navy-900: #dfd7cf;
@@ -317,4 +318,106 @@
 
   --shadow: 0 40px 80px -45px rgba(3, 20, 48, 0.5);
   --shadow-subtle: 0 24px 48px -40px rgba(3, 20, 48, 0.35);
+}
+
+:root[data-design-theme="gold-marble"] {
+  color-scheme: light;
+
+  /* Gold + marble primitives (warm whites + gold accents) */
+  --color-navy-950: #f7f4ee;
+  --color-navy-900: #f3efe6;
+  --color-navy-800: #fcfaf6;
+  --color-navy-700: #e6ddcf;
+  --color-navy-500: #a89060;
+  --color-navy-300: #7f6a44;
+  --color-gold-300: #d4b86a;
+  --color-white: #ffffff;
+  --color-ink-900: #1a1816;
+  --color-ink-700: #6b6560;
+
+  /* Semantic layer */
+  --background: #f7f4ee;
+  --foreground: var(--color-ink-900);
+  --foreground-strong: #0f0e0d;
+  --foreground-inverse: #f7f4ee;
+
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+
+  --primary: #8a6e20;
+  --primary-strong: #6f571a;
+  --primary-foreground: #ffffff;
+  --secondary: #f3efe6;
+  --secondary-foreground: var(--foreground-strong);
+  --muted: #f3efe6;
+  --muted-foreground: var(--color-ink-700);
+  --accent: var(--primary);
+  --accent-foreground: var(--primary-foreground);
+
+  --border: rgba(26, 24, 22, 0.12);
+  --border-strong: rgba(26, 24, 22, 0.22);
+  --input: var(--border);
+  --ring: #b89a4b;
+
+  --destructive: #df2225;
+  --success: #4a8a38;
+  --warning: #8a6e20;
+  --info: #2e6eaa;
+  --info-subtle: rgba(46, 110, 170, 0.12);
+  --info-border: rgba(46, 110, 170, 0.4);
+  --code-surface: #2a2a2a;
+  --code-foreground: #e2e8f0;
+
+  /* Alpha primitives tuned for gold accent */
+  --alpha-accent-04: rgba(138, 110, 32, 0.04);
+  --alpha-accent-06: rgba(138, 110, 32, 0.06);
+  --alpha-accent-08: rgba(138, 110, 32, 0.08);
+  --alpha-accent-12: rgba(138, 110, 32, 0.12);
+  --alpha-accent-14: rgba(138, 110, 32, 0.14);
+  --alpha-accent-15: rgba(138, 110, 32, 0.15);
+  --alpha-accent-18: rgba(138, 110, 32, 0.18);
+  --alpha-accent-20: rgba(138, 110, 32, 0.2);
+  --alpha-accent-22: rgba(138, 110, 32, 0.22);
+  --alpha-accent-25: rgba(138, 110, 32, 0.25);
+  --alpha-accent-26: rgba(138, 110, 32, 0.26);
+  --alpha-accent-30: rgba(138, 110, 32, 0.3);
+  --alpha-accent-40: rgba(138, 110, 32, 0.4);
+  --alpha-accent-55: rgba(138, 110, 32, 0.55);
+
+  --alpha-heading-06: rgba(26, 24, 22, 0.06);
+  --alpha-heading-08: rgba(26, 24, 22, 0.08);
+  --alpha-heading-15: rgba(26, 24, 22, 0.15);
+  --alpha-heading-30: rgba(26, 24, 22, 0.3);
+  --alpha-heading-35: rgba(26, 24, 22, 0.35);
+  --alpha-heading-40: rgba(26, 24, 22, 0.4);
+  --alpha-heading-45: rgba(26, 24, 22, 0.45);
+  --alpha-heading-50: rgba(26, 24, 22, 0.5);
+  --alpha-heading-52: rgba(26, 24, 22, 0.52);
+  --alpha-heading-55: rgba(26, 24, 22, 0.55);
+  --alpha-heading-58: rgba(26, 24, 22, 0.58);
+  --alpha-heading-60: rgba(26, 24, 22, 0.6);
+  --alpha-heading-65: rgba(26, 24, 22, 0.65);
+
+  --alpha-white-08: rgba(255, 255, 255, 0.08);
+  --alpha-white-45: rgba(255, 255, 255, 0.45);
+  --alpha-white-60: rgba(255, 255, 255, 0.6);
+
+  --alpha-deep-12: rgba(26, 24, 22, 0.12);
+  --alpha-deep-42: rgba(26, 24, 22, 0.42);
+
+  --alpha-slate-22: rgba(26, 24, 22, 0.22);
+  --alpha-slate-25: rgba(26, 24, 22, 0.25);
+  --alpha-slate-45: rgba(26, 24, 22, 0.45);
+  --alpha-slate-55: rgba(26, 24, 22, 0.55);
+  --alpha-slate-blue-40: rgba(26, 24, 22, 0.4);
+
+  --shadow: 0 40px 80px -45px rgba(26, 24, 22, 0.28);
+  --shadow-subtle: 0 24px 48px -40px rgba(26, 24, 22, 0.18);
+
+  --background-texture: radial-gradient(circle at 20% 30%, rgba(212, 184, 106, 0.16), transparent 55%),
+    radial-gradient(circle at 78% 72%, rgba(138, 110, 32, 0.1), transparent 60%),
+    repeating-linear-gradient(135deg, rgba(26, 24, 22, 0.026) 0 1px, transparent 1px 14px),
+    repeating-linear-gradient(45deg, rgba(26, 24, 22, 0.02) 0 1px, transparent 1px 18px);
 }

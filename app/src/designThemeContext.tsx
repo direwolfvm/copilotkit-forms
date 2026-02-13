@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
-export type DesignTheme = "new" | "old"
+export type DesignTheme = "new" | "old" | "gold-marble"
 
 type DesignThemeContextValue = {
   designTheme: DesignTheme
@@ -17,7 +17,15 @@ function getStoredDesignTheme(): DesignTheme {
   }
 
   const storedValue = window.localStorage.getItem(STORAGE_KEY)
-  return storedValue === "new" ? "new" : "old"
+  if (storedValue === "new") {
+    return "new"
+  }
+
+  if (storedValue === "gold-marble") {
+    return "gold-marble"
+  }
+
+  return "old"
 }
 
 function applyDesignTheme(theme: DesignTheme) {

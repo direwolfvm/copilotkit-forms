@@ -30,6 +30,14 @@ body {
   color: var(--color-text-inverse);
 }
 
+:root[data-design-theme="gold-marble"] body {
+  background: var(--background);
+  background-image: var(--background-texture);
+  background-repeat: repeat;
+  background-size: 900px 900px;
+  color: var(--color-text);
+}
+
 #root {
   min-height: 100vh;
 }

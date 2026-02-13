@@ -8,7 +8,7 @@ import {
   type ProjectHierarchy
 } from "./utils/projectPersistence"
 import { useHolidayTheme } from "./holidayThemeContext"
-import { useDesignTheme } from "./designThemeContext"
+import { useDesignTheme, type DesignTheme } from "./designThemeContext"
 
 import "./App.css"
 
@@ -280,23 +280,24 @@ export default function SettingsPage() {
         <section className="settings__section" aria-labelledby="settings-design-theme-heading">
           <h2 id="settings-design-theme-heading">Visual theme</h2>
           <p className="settings__description">
-            Choose between the new design-token palette and the legacy color palette used before the migration.
+            Choose between multiple visual themes. Your selection is saved to this device.
           </p>
-          <label className="settings__switch" htmlFor="settings-legacy-theme-toggle">
-            <div className="settings__switch-text">
-              <span className="settings__label">Legacy theme</span>
-              <span className="settings__hint">
-                Use the previous navy-and-gold appearance instead of the new neutral palette.
-              </span>
-            </div>
-            <input
-              id="settings-legacy-theme-toggle"
-              className="settings__switch-input"
-              type="checkbox"
-              checked={designTheme === "old"}
-              onChange={(event) => setDesignTheme(event.target.checked ? "old" : "new")}
-            />
-          </label>
+          <div className="settings__control">
+            <label className="settings__field" htmlFor="settings-design-theme-select">
+              <span className="settings__label">Theme</span>
+              <select
+                id="settings-design-theme-select"
+                className="settings__select"
+                value={designTheme}
+                onChange={(event) => setDesignTheme(event.target.value as DesignTheme)}
+              >
+                <option value="old">Legacy</option>
+                <option value="new">New (token baseline)</option>
+                <option value="gold-marble">Gold + Marble</option>
+              </select>
+              <span className="settings__hint">Theme preference is stored in local browser storage.</span>
+            </label>
+          </div>
         </section>
 
         <section className="settings__section settings__section--danger" aria-labelledby="settings-projects-heading">
