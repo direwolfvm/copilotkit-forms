@@ -449,38 +449,44 @@ function formatIpacSummary(summary: IpacSummary | undefined): string[] {
   return lines
 }
 
-export function formatGeospatialResultsSummary(results: GeospatialResultsState): string {
+export function formatGeospatialResultsSummary(results: GeospatialResultsState | undefined | null): string {
+  const safeResults: GeospatialResultsState = results ?? {
+    nepassist: { status: 'idle' },
+    ipac: { status: 'idle' },
+    messages: []
+  }
+
   const lines: string[] = []
   lines.push('Geospatial screening results:')
 
-  const lastRun = formatDateTime(results.lastRunAt)
+  const lastRun = formatDateTime(safeResults.lastRunAt)
   lines.push(`Last run: ${lastRun ?? 'not yet run'}`)
 
-  if (results.messages && results.messages.length > 0) {
+  if (safeResults.messages && safeResults.messages.length > 0) {
     lines.push('System messages:')
-    for (const message of results.messages) {
+    for (const message of safeResults.messages) {
       lines.push(`- ${message}`)
     }
   }
 
-  const nepaStatus = describeServiceStatus(results.nepassist.status)
+  const nepaStatus = describeServiceStatus(safeResults.nepassist.status)
   lines.push(`NEPA Assist status: ${nepaStatus}`)
-  if (results.nepassist.status === 'error' && results.nepassist.error) {
-    lines.push(`- Error: ${results.nepassist.error}`)
-  } else if (results.nepassist.status === 'success') {
+  if (safeResults.nepassist.status === 'error' && safeResults.nepassist.error) {
+    lines.push(`- Error: ${safeResults.nepassist.error}`)
+  } else if (safeResults.nepassist.status === 'success') {
     lines.push('- Findings:')
-    for (const finding of formatNepassistSummary(results.nepassist.summary)) {
+    for (const finding of formatNepassistSummary(safeResults.nepassist.summary)) {
       lines.push(`  - ${finding}`)
     }
   }
 
-  const ipacStatus = describeServiceStatus(results.ipac.status)
+  const ipacStatus = describeServiceStatus(safeResults.ipac.status)
   lines.push(`IPaC status: ${ipacStatus}`)
-  if (results.ipac.status === 'error' && results.ipac.error) {
-    lines.push(`- Error: ${results.ipac.error}`)
-  } else if (results.ipac.status === 'success') {
+  if (safeResults.ipac.status === 'error' && safeResults.ipac.error) {
+    lines.push(`- Error: ${safeResults.ipac.error}`)
+  } else if (safeResults.ipac.status === 'success') {
     lines.push('- Summary:')
-    for (const entry of formatIpacSummary(results.ipac.summary)) {
+    for (const entry of formatIpacSummary(safeResults.ipac.summary)) {
       lines.push(`  - ${entry}`)
     }
   }

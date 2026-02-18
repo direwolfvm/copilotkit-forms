@@ -18,8 +18,7 @@ import {
   summarizeIpac,
   summarizeNepassist
 } from "./utils/geospatial"
-import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
-import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
+import { getRuntimeUrl } from "./runtimeConfig"
 
 function createInitialGeospatialResults(): GeospatialResultsState {
   return {
@@ -28,6 +27,16 @@ function createInitialGeospatialResults(): GeospatialResultsState {
     messages: [],
     lastRunAt: undefined
   }
+}
+
+function ensureGeospatialResults(results: GeospatialResultsState | undefined | null): GeospatialResultsState {
+  return (
+    results ?? {
+      nepassist: { status: "idle" },
+      ipac: { status: "idle" },
+      messages: []
+    }
+  )
 }
 
 function formatTimestamp(timestamp?: string) {
@@ -48,14 +57,15 @@ function countHighPriorityFindings(items: NepassistSummaryItem[] | undefined) {
   return items.filter((item) => item.severity === "yes" || item.severity === "ondemand").length
 }
 
-function buildImplicationLines(results: GeospatialResultsState): string[] {
+function buildImplicationLines(results: GeospatialResultsState | undefined | null): string[] {
+  const safeResults = ensureGeospatialResults(results)
   const lines: string[] = []
 
-  if (!results.lastRunAt) {
+  if (!safeResults.lastRunAt) {
     return lines
   }
 
-  const nepa = results.nepassist
+  const nepa = safeResults.nepassist
   if (nepa.status === "success" && nepa.summary) {
     const elevated = countHighPriorityFindings(nepa.summary)
     if (elevated > 0) {
@@ -75,7 +85,7 @@ function buildImplicationLines(results: GeospatialResultsState): string[] {
     lines.push("NEPA: Screening has not returned any findings yet.")
   }
 
-  const ipac = results.ipac
+  const ipac = safeResults.ipac
   if (ipac.status === "success" && ipac.summary) {
     if (ipac.summary.listedSpecies.length > 0 || ipac.summary.criticalHabitats.length > 0) {
       const species = ipac.summary.listedSpecies.slice(0, 5).join(", ")
@@ -136,21 +146,21 @@ function buildImplicationLines(results: GeospatialResultsState): string[] {
   return lines
 }
 
-function formatImplicationsForCopilot(results: GeospatialResultsState) {
-  const lines = buildImplicationLines(results)
-  if (!results.lastRunAt || lines.length === 0) {
+function formatImplicationsForCopilot(results: GeospatialResultsState | undefined | null) {
+  const safeResults = ensureGeospatialResults(results)
+  const lines = buildImplicationLines(safeResults)
+  if (!safeResults.lastRunAt || lines.length === 0) {
     return "No geospatial screening has been completed yet."
   }
 
   return [
     "Resource implications summary:",
-    `Last run: ${formatTimestamp(results.lastRunAt) ?? "unknown"}`,
+    `Last run: ${formatTimestamp(safeResults.lastRunAt) ?? "unknown"}`,
     ...lines.map((line) => `- ${line}`)
   ].join("\n")
 }
 
-const publicApiKey = getPublicApiKey()
-const defaultRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
+const defaultRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
 
 export function ResourceCheckContent() {
   const [geometry, setGeometry] = useState<string | undefined>(undefined)
@@ -614,7 +624,7 @@ export function ResourceCheckContent() {
 export default function ResourceCheckPage() {
   const effectiveRuntimeUrl = defaultRuntimeUrl
   return (
-    <CopilotKit publicApiKey={publicApiKey || undefined} runtimeUrl={effectiveRuntimeUrl || undefined}>
+    <CopilotKit runtimeUrl={effectiveRuntimeUrl} useSingleEndpoint>
       <ResourceCheckContent />
     </CopilotKit>
   )
