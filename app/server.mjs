@@ -14,6 +14,9 @@ const port = parseInt(process.env.PORT ?? "8080", 10);
 const customAdkBaseUrl =
   normalizeEnvValue(process.env.COPILOTKIT_CUSTOM_ADK_URL) ??
   "https://permitting-adk-650621702399.us-east4.run.app";
+const copilotkitRuntimeProxyBaseUrl =
+  normalizeEnvValue(process.env.COPILOTKIT_RUNTIME_PROXY_BASE_URL) ??
+  "https://copilotkit-runtime.app.cloud.gov/copilotkit";
 
 function resolveSupabaseUrl() {
   return (
@@ -237,6 +240,78 @@ async function proxySupabaseRequest(req, res) {
   } catch (error) {
     console.error("Supabase proxy error", error);
     res.status(502).json({ error: "Failed to reach Supabase" });
+  }
+}
+
+async function proxyCopilotkitRuntimeRequest(req, res) {
+  const requestedPath = req.url ?? "/";
+  const baseUrl = copilotkitRuntimeProxyBaseUrl.replace(/\/+$/, "");
+  const proxyPath = requestedPath === "/" ? "" : requestedPath;
+  const targetUrl = new URL(`${baseUrl}${proxyPath}`);
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (!value) {
+      continue;
+    }
+
+    const lowerKey = key.toLowerCase();
+    if (lowerKey === "host" || lowerKey === "content-length") {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      headers.set(key, value.join(","));
+    } else {
+      headers.set(key, value);
+    }
+  }
+
+  const method = req.method?.toUpperCase() ?? "GET";
+  const hasBody = !["GET", "HEAD"].includes(method);
+
+  let body;
+  if (hasBody) {
+    if (req.is("application/json") && req.body && typeof req.body === "object") {
+      body = JSON.stringify(req.body);
+      headers.set("content-type", "application/json");
+    } else if (typeof req.body === "string" || req.body instanceof Buffer) {
+      body = req.body;
+    } else {
+      body = await readRawRequestBody(req);
+    }
+  }
+
+  try {
+    const response = await fetch(targetUrl, {
+      method,
+      headers,
+      body,
+      redirect: "follow",
+    });
+
+    res.status(response.status);
+    response.headers.forEach((value, key) => {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey === "transfer-encoding" ||
+        lowerKey === "content-length" ||
+        lowerKey === "content-encoding"
+      ) {
+        return;
+      }
+      res.setHeader(key, value);
+    });
+
+    if (response.body) {
+      const nodeStream = Readable.fromWeb(response.body);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (error) {
+    console.error("CopilotKit runtime proxy error", error);
+    res.status(502).json({ error: "Failed to reach CopilotKit runtime" });
   }
 }
 
@@ -691,15 +766,10 @@ app.use("/api/supabase", proxySupabaseRequest);
 
 app.use("/api/custom-adk", proxyCustomAdkRequest);
 
+app.use("/api/copilotkit-runtime", proxyCopilotkitRuntimeRequest);
+
 app.get("/env.js", (req, res) => {
   const config = {};
-
-  const publicApiKey =
-    normalizeEnvValue(process.env.VITE_COPILOTKIT_PUBLIC_API_KEY) ??
-    normalizeEnvValue(process.env.COPILOTKIT_PUBLIC_API_KEY);
-  if (publicApiKey) {
-    config.publicApiKey = publicApiKey;
-  }
 
   const runtimeUrl =
     normalizeEnvValue(process.env.VITE_COPILOTKIT_RUNTIME_URL) ??

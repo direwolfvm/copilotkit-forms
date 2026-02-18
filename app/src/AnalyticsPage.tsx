@@ -21,8 +21,7 @@ import "./copilot-overrides.css"
 import "./App.css"
 import "./AnalyticsPage.css"
 
-import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
-import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
+import { getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
 import {
   loadProcessAnalytics,
@@ -32,8 +31,7 @@ import {
 import { loadBasicPermitAnalytics } from "./utils/permitflow"
 import { loadComplexReviewAnalytics } from "./utils/reviewworks"
 
-const publicApiKey = getPublicApiKey()
-const defaultRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
+const defaultRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
 
 const ANALYTICS_INSTRUCTIONS = [
@@ -1002,8 +1000,7 @@ export default function AnalyticsPage() {
 
   return (
     <CopilotKit
-      publicApiKey={publicApiKey || undefined}
-      runtimeUrl={effectiveRuntimeUrl || undefined}
+      runtimeUrl={effectiveRuntimeUrl}
     >
       <AnalyticsContent />
     </CopilotKit>

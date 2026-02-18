@@ -8,7 +8,6 @@ import introJs from "intro.js"
 import "intro.js/introjs.css"
 import {
   CopilotKit,
-  type SuggestionItem,
   useCopilotAction,
   useCopilotReadable
 } from "@copilotkit/react-core"
@@ -17,7 +16,6 @@ import {
   RenderSuggestion,
   type RenderSuggestionsListProps
 } from "@copilotkit/react-ui"
-import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
 import "@copilotkit/react-ui/styles.css"
 import "./copilot-overrides.css"
 
@@ -38,7 +36,7 @@ import {
 import { ProcessInformationDetails } from "./components/ProcessInformationDetails"
 import { CollapsibleCard, type CollapsibleCardStatus } from "./components/CollapsibleCard"
 import "./App.css"
-import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
+import { getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
 import { findPermitByLabel, getPermitInfoUrl, getPermitById, getPermitOptions } from "./utils/permitInventory"
 import {
@@ -729,7 +727,7 @@ function ProgressPanel({
 }
 
 type ProjectFormWithCopilotProps = {
-  showApiKeyWarning: boolean
+  showRuntimeWarning: boolean
 }
 
 
@@ -843,7 +841,7 @@ function ProcessInformationModal({
   )
 }
 
-function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotProps) {
+function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotProps) {
   const { projectId } = useParams<{ projectId?: string }>()
   const isMountedRef = useRef(true)
   const [formData, setFormData] = useState<ProjectFormData>(() => {
@@ -1933,7 +1931,7 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
 
   const [conversationStartersHidden, setConversationStartersHidden] = useState(false)
 
-  const conversationStarters: SuggestionItem[] = useMemo(
+  const conversationStarters = useMemo(
     () => [
       {
         title: "How do I start?",
@@ -2508,13 +2506,13 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
             </div>
           ) : null}
 
-          {showApiKeyWarning ? (
+          {showRuntimeWarning ? (
             <div className="usa-alert usa-alert--warning usa-alert--slim" role="alert">
               <div className="usa-alert__body">
-                <h3 className="usa-alert__heading">No Copilot Cloud key detected.</h3>
+                <h3 className="usa-alert__heading">Copilot runtime URL not configured.</h3>
                 <p className="usa-alert__text">
-                  Set <code>VITE_COPILOTKIT_PUBLIC_API_KEY</code> in a <code>.env</code> file to enable live Copilot
-                    responses. The form will continue to work without it.
+                  Set <code>VITE_COPILOTKIT_RUNTIME_URL</code> in <code>.env</code>. The form will continue to work
+                  without live Copilot responses.
                 </p>
               </div>
             </div>
@@ -2731,22 +2729,21 @@ function ProjectFormWithCopilot({ showApiKeyWarning }: ProjectFormWithCopilotPro
   )
 }
 
-const publicApiKey = getPublicApiKey()
-const defaultRuntimeUrl = getRuntimeUrl() || COPILOT_CLOUD_CHAT_URL
+const defaultRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
 
 function PortalPage() {
   const { runtimeMode } = useCopilotRuntimeSelection()
+  const runtimeUrl = getRuntimeUrl()
 
-  const effectiveRuntimeUrl = runtimeMode === "custom" ? CUSTOM_ADK_PROXY_URL : defaultRuntimeUrl
-  const showApiKeyWarning = runtimeMode === "default" && !publicApiKey
+  const effectiveRuntimeUrl = runtimeMode === "custom" ? CUSTOM_ADK_PROXY_URL : runtimeUrl ?? defaultRuntimeUrl
+  const showRuntimeWarning = runtimeMode === "default" && !runtimeUrl
 
   return (
     <CopilotKit
       key={runtimeMode}
-      publicApiKey={publicApiKey || undefined}
-      runtimeUrl={effectiveRuntimeUrl || undefined}
+      runtimeUrl={effectiveRuntimeUrl}
     >
-      <ProjectFormWithCopilot showApiKeyWarning={showApiKeyWarning} />
+      <ProjectFormWithCopilot showRuntimeWarning={showRuntimeWarning} />
     </CopilotKit>
   )
 }

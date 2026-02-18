@@ -16,9 +16,8 @@
     "test:bench": "vitest bench"
   },
   "dependencies": {
-    "@copilotkit/react-core": "^1.10.5",
-    "@copilotkit/react-ui": "^1.10.5",
-    "@copilotkit/runtime": "^1.10.5",
+    "@copilotkit/react-core": "1.51.3",
+    "@copilotkit/react-ui": "1.51.3",
     "@rjsf/core": "^5.24.13",
     "@rjsf/utils": "^5.24.13",
     "@rjsf/validator-ajv8": "^5.24.13",

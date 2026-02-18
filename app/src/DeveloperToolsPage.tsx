@@ -8,8 +8,7 @@ import "./copilot-overrides.css"
 import "./App.css"
 import "./DeveloperToolsPage.css"
 
-import { getPublicApiKey, getRuntimeUrl } from "./runtimeConfig"
-import { COPILOT_CLOUD_CHAT_URL } from "@copilotkit/shared"
+import { getRuntimeUrl } from "./runtimeConfig"
 
 interface EndpointDoc {
   title: string
@@ -238,7 +237,7 @@ function DeveloperToolsContent({ hasCopilotConfiguration }: DeveloperToolsConten
         <div className="developer-tools__callout" role="alert">
           <h2>Copilot chat is turned off</h2>
           <p>
-            Add <code>VITE_COPILOTKIT_PUBLIC_API_KEY</code> or <code>VITE_COPILOTKIT_RUNTIME_URL</code> environment variables to
+            Add <code>VITE_COPILOTKIT_RUNTIME_URL</code> to
             enable the developer copilot sidebar. The reference documentation below is always available.
           </p>
         </div>
@@ -317,13 +316,11 @@ function DeveloperToolsContent({ hasCopilotConfiguration }: DeveloperToolsConten
 }
 
 export default function DeveloperToolsPage() {
-  const publicApiKey = getPublicApiKey()
-  const runtimeUrl = getRuntimeUrl()
-  const effectiveRuntimeUrl = runtimeUrl || COPILOT_CLOUD_CHAT_URL
-  const hasCopilotConfiguration = Boolean(publicApiKey || runtimeUrl)
+  const effectiveRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
+  const hasCopilotConfiguration = Boolean(effectiveRuntimeUrl)
 
   return (
-    <CopilotKit publicApiKey={publicApiKey || undefined} runtimeUrl={effectiveRuntimeUrl || undefined}>
+    <CopilotKit runtimeUrl={effectiveRuntimeUrl}>
       <DeveloperToolsContent hasCopilotConfiguration={hasCopilotConfiguration} />
     </CopilotKit>
   )

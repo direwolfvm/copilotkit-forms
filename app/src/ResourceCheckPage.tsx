@@ -624,7 +624,7 @@ export function ResourceCheckContent() {
 export default function ResourceCheckPage() {
   const effectiveRuntimeUrl = defaultRuntimeUrl
   return (
-    <CopilotKit runtimeUrl={effectiveRuntimeUrl} useSingleEndpoint>
+    <CopilotKit runtimeUrl={effectiveRuntimeUrl}>
       <ResourceCheckContent />
     </CopilotKit>
   )
