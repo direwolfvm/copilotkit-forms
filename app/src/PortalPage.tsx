@@ -76,6 +76,15 @@ const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
   (permit) => `${permit.title}: ${permit.description}`
 )
 
+const COPILOT_READABLE_MAX_CHARS = 8000
+
+function limitCopilotReadableText(text: string, label: string): string {
+  if (text.length <= COPILOT_READABLE_MAX_CHARS) {
+    return text
+  }
+  return `${text.slice(0, COPILOT_READABLE_MAX_CHARS)}\n\n[${label} truncated for Copilot context]`
+}
+
 const BASIC_PERMIT_LABEL = "Basic Permit"
 const BASIC_PERMIT_LINK = { href: "/permits/basic", label: "Start this permit." }
 const BASIC_PERMIT_PROJECT_PARAM = "projectId"
@@ -1355,7 +1364,11 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     {
       description: "Latest geospatial screening results including NEPA Assist and IPaC findings",
       value: geospatialResults,
-      convert: (_, value) => formatGeospatialResultsSummary(value)
+      convert: (_, value) =>
+        limitCopilotReadableText(
+          formatGeospatialResultsSummary(value),
+          "Geospatial screening summary"
+        )
     },
     [geospatialResults]
   )
@@ -1378,9 +1391,12 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       value: permitInventoryForCopilot,
       convert: (_, value) =>
         Array.isArray(value) && value.length > 0
-          ? value
-              .map((p: { id: string; name: string; agency: string }) => `- ${p.id}: ${p.name} (${p.agency})`)
-              .join("\n")
+          ? limitCopilotReadableText(
+              value
+                .map((p: { id: string; name: string; agency: string }) => `- ${p.id}: ${p.name} (${p.agency})`)
+                .join("\n"),
+              "Federal permit inventory"
+            )
           : "No permit inventory entries available."
     },
     [permitInventoryForCopilot]
@@ -1776,6 +1792,8 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
         }
       ],
       handler: async ({ updates, sponsor_contact }: { updates?: UpdatesPayload; sponsor_contact?: ProjectContact }) => {
+        let updateCount = 0
+        let contactUpdateCount = 0
         setFormData((previous) => {
           const next: ProjectFormData = { ...previous }
           if (updates && typeof updates === "object") {
@@ -1789,19 +1807,23 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
               if (isNumericProjectField(key)) {
                 if (shouldDelete) {
                   assignProjectField(next, key, undefined)
+                  updateCount += 1
                 } else if (typeof rawValue === "number") {
                   assignProjectField(next, key, rawValue as ProjectFormData[SimpleProjectField])
+                  updateCount += 1
                 } else {
                   const parsed = Number(
                     typeof rawValue === "string" ? rawValue : String(rawValue)
                   )
                   if (!Number.isNaN(parsed)) {
                     assignProjectField(next, key, parsed as ProjectFormData[SimpleProjectField])
+                    updateCount += 1
                   }
                 }
               } else {
                 if (shouldDelete) {
                   assignProjectField(next, key, undefined)
+                  updateCount += 1
                 } else {
                   const stringValue =
                     typeof rawValue === "string"
@@ -1811,6 +1833,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                         : undefined
                   if (stringValue !== undefined) {
                     assignProjectField(next, key, stringValue as ProjectFormData[SimpleProjectField])
+                    updateCount += 1
                   }
                 }
               }
@@ -1822,8 +1845,10 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             for (const [contactKey, value] of Object.entries(sponsor_contact)) {
               if (value === undefined || value === null || value === "") {
                 delete mergedContact[contactKey as keyof ProjectContact]
+                contactUpdateCount += 1
               } else {
                 mergedContact[contactKey as keyof ProjectContact] = value as string
+                contactUpdateCount += 1
               }
             }
             if (Object.keys(mergedContact).length > 0) {
@@ -1835,6 +1860,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
 
           return applyGeneratedProjectId(next, previous.id)
         })
+        return `Updated project form (${updateCount} field changes, ${contactUpdateCount} sponsor contact changes).`
       }
     },
     [setFormData]
@@ -1847,6 +1873,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       handler: async () => {
         setFormData(createEmptyProjectData())
         setLastSaved(undefined)
+        return "Project form reset to its initial state."
       }
     },
     [setFormData]
@@ -1893,7 +1920,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       ],
       handler: async ({ items }) => {
         if (!Array.isArray(items)) {
-          return
+          return "No permitting checklist updates were applied because no items were provided."
         }
         const entries: ChecklistUpsertInput[] = items.map((item) => {
           const permitId = typeof item?.permitId === "string" ? item.permitId : undefined
@@ -1914,6 +1941,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
           }
         })
         upsertPermittingChecklistItems(entries)
+        return `Updated permitting checklist (${entries.length} item${entries.length === 1 ? "" : "s"} processed).`
       }
     },
     [upsertPermittingChecklistItems]
@@ -2745,6 +2773,7 @@ function PortalPage() {
     <CopilotKit
       key={runtimeMode}
       runtimeUrl={effectiveRuntimeUrl}
+      useSingleEndpoint
     >
       <ProjectFormWithCopilot showRuntimeWarning={showRuntimeWarning} />
     </CopilotKit>
