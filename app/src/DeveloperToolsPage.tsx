@@ -183,7 +183,7 @@ function DeveloperToolsContent({ hasCopilotConfiguration }: DeveloperToolsConten
   const copilotInstructions = useMemo(
     () =>
       [
-        "You are the developer tools copilot for HelpPermit.me.",
+        "You are the developer tools copilot for HelpPermitMe.",
         "Explain how the Supabase REST API mirrors the project's database schema and how backend proxies protect secrets.",
         "Use the provided reference material when answering questions about endpoints, required keys, or data relationships.",
         "If someone asks for API keys, remind them to use environment variables and never expose secrets client-side."
@@ -195,7 +195,7 @@ function DeveloperToolsContent({ hasCopilotConfiguration }: DeveloperToolsConten
 
   useCopilotReadable(
     {
-      description: "Supabase REST documentation for HelpPermit.me",
+      description: "Supabase REST documentation for HelpPermitMe",
       value: knowledgeBase,
       available: hasCopilotConfiguration ? "enabled" : "disabled",
       convert: (_: unknown, sections: SectionDoc[]) =>

@@ -170,7 +170,7 @@ function Layout() {
               <summary className="site-banner__summary">Here’s how you know</summary>
               <div className="site-banner__content">
                 <p>
-                  HelpPermit.me is a demonstration project and uses a custom domain instead of a
+                  HelpPermitMe is a demonstration project and uses a custom domain instead of a
                   <code>.gov</code> address.
                 </p>
                 <ul>
@@ -197,7 +197,7 @@ function Layout() {
                   : "site-header__brand-link"
               }
             >
-              <span className="site-header__title">HelpPermit.me</span>
+              <span className="site-header__title">HelpPermitMe</span>
               <span className="site-header__tagline">(an unofficial demo)</span>
             </NavLink>
           </div>
@@ -230,7 +230,7 @@ function Layout() {
           <NavLink
             to="/about"
             data-tour="nav-link"
-            data-tour-title="About HelpPermit.me"
+            data-tour-title="About HelpPermitMe"
               data-tour-intro="Learn about the purpose of this demo experience."
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
@@ -349,7 +349,7 @@ function Layout() {
           </a>
           ...
         </p>
-        <p className="site-footer__copyright">© {currentYear} HelpPermit.me. All rights reserved.</p>
+        <p className="site-footer__copyright">© {currentYear} HelpPermitMe. All rights reserved.</p>
       </footer>
     </div>
   )

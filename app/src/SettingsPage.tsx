@@ -240,7 +240,7 @@ export default function SettingsPage() {
       <div className="settings__inner">
         <header className="settings__header">
           <h1 id="settings-heading">Settings</h1>
-          <p>Configure how HelpPermit.me connects to Copilot runtimes used throughout the portal.</p>
+          <p>Configure how HelpPermitMe connects to Copilot runtimes used throughout the portal.</p>
         </header>
 
         <section className="settings__section" aria-labelledby="settings-runtime-heading">
@@ -260,7 +260,7 @@ export default function SettingsPage() {
         <section className="settings__section" aria-labelledby="settings-theme-heading">
           <h2 id="settings-theme-heading">Seasonal theme</h2>
           <p className="settings__description">
-            Add a festive touch to HelpPermit.me with falling snowflakes and holiday cheer in the navigation.
+            Add a festive touch to HelpPermitMe with falling snowflakes and holiday cheer in the navigation.
           </p>
           <label className="settings__switch" htmlFor="settings-christmas-toggle">
             <div className="settings__switch-text">

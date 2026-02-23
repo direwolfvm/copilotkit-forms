@@ -5,10 +5,10 @@ export default function AboutPage() {
     <article className="app about-page">
       <div className="app__inner">
         <header className="about-page__header">
-          <p className="about-page__eyebrow">About HelpPermit.me</p>
+          <p className="about-page__eyebrow">About HelpPermitMe</p>
           <h1>Technology and permitting and environmental review</h1>
           <p>
-            HelpPermit.me is a very unofficial demonstration platform that brings the <strong>Council on Environmental Quality (CEQ)</strong>
+            HelpPermitMe is a very unofficial demonstration platform that brings the <strong>Council on Environmental Quality (CEQ)</strong>
             {" "}
             Permitting Technology Action Plan to life (absolutely no connection to official CEQ, FYI).
           </p>
@@ -27,7 +27,7 @@ export default function AboutPage() {
         <section className="about-page__section" aria-labelledby="about-mission-heading">
           <h2 id="about-mission-heading">Mission</h2>
           <p>
-            HelpPermit.me demonstrates how key elements of the <strong>Permitting Action Plan</strong> and its
+            HelpPermitMe demonstrates how key elements of the <strong>Permitting Action Plan</strong> and its
             {" "}
             <strong>Service Delivery Standards</strong> can be realized through open, modular technology. By building directly on
             CEQ’s <strong>federal data standards</strong>, the platform showcases how agencies can modernize permitting without
@@ -42,11 +42,11 @@ export default function AboutPage() {
           <p className="about-page__lead">Each standard is mapped to specific capabilities inside the demo.</p>
           <div className="about-page__table-wrapper">
             <table>
-              <caption className="visually-hidden">How HelpPermit.me implements CEQ service delivery standards</caption>
+              <caption className="visually-hidden">How HelpPermitMe implements CEQ service delivery standards</caption>
               <thead>
                 <tr>
                   <th scope="col">CEQ Standard</th>
-                  <th scope="col">Implementation in HelpPermit.me</th>
+                  <th scope="col">Implementation in HelpPermitMe</th>
                   <th scope="col">Description</th>
                 </tr>
               </thead>
@@ -92,11 +92,11 @@ export default function AboutPage() {
           <h2 id="about-requirements-heading">Alignment with Minimum Functional Requirements</h2>
           <p className="about-page__lead">
             The CEQ Permitting Technology Action Plan identifies ten <strong>minimum functional requirements</strong> for modern
-            systems. HelpPermit.me implements or demonstrates several of these, serving as a model for scalable adoption.
+            systems. HelpPermitMe implements or demonstrates several of these, serving as a model for scalable adoption.
           </p>
           <div className="about-page__table-wrapper">
             <table>
-              <caption className="visually-hidden">Status of CEQ minimum functional requirements in HelpPermit.me</caption>
+              <caption className="visually-hidden">Status of CEQ minimum functional requirements in HelpPermitMe</caption>
               <thead>
                 <tr>
                   <th scope="col">Requirement</th>
@@ -114,7 +114,7 @@ export default function AboutPage() {
                   <th scope="row">2. Support Application Data Sharing</th>
                   <td>✅ Supported</td>
                   <td>
-                    HelpPermit.me now includes explicit integrations with{" "}
+                    HelpPermitMe now includes explicit integrations with{" "}
                     <a href="https://reviewworks.app.cloud.gov/">ReviewWorks</a> and{" "}
                     <a href="https://permitflow.app.cloud.gov/">PermitFlow</a>, with shared project and case data exchanged across systems.
                   </td>
@@ -135,7 +135,7 @@ export default function AboutPage() {
                   <td>
                     Case management is supported through integrated demonstration systems,{" "}
                     <a href="https://reviewworks.app.cloud.gov/">ReviewWorks</a> and{" "}
-                    <a href="https://permitflow.app.cloud.gov/">PermitFlow</a>, which receive and manage shared case data from HelpPermit.me.
+                    <a href="https://permitflow.app.cloud.gov/">PermitFlow</a>, which receive and manage shared case data from HelpPermitMe.
                   </td>
                 </tr>
                 <tr>
@@ -211,7 +211,7 @@ export default function AboutPage() {
         <section className="about-page__section" aria-labelledby="about-limitations-heading">
           <h2 id="about-limitations-heading">What’s Not Included (Yet)</h2>
           <p>
-            HelpPermit.me is intentionally a lightweight demonstration, not a production case management system. It does
+            HelpPermitMe is intentionally a lightweight demonstration, not a production case management system. It does
             <strong> not</strong> currently implement:
           </p>
           <ul className="about-page__list">
@@ -227,7 +227,7 @@ export default function AboutPage() {
         <section className="about-page__section" aria-labelledby="about-importance-heading">
           <h2 id="about-importance-heading">Why This Matters</h2>
           <p>
-            By showing a working prototype built directly on CEQ’s standards, HelpPermit.me provides a <strong>reference architecture</strong> for the next generation of permitting technology:
+            By showing a working prototype built directly on CEQ’s standards, HelpPermitMe provides a <strong>reference architecture</strong> for the next generation of permitting technology:
           </p>
           <ul className="about-page__list">
             <li>Demonstrates a modern, API-first approach</li>
@@ -236,7 +236,7 @@ export default function AboutPage() {
             <li>Provides a testbed for AI-assisted, data-driven permitting</li>
           </ul>
           <p>
-            HelpPermit.me serves as both <strong>a teaching tool</strong> and <strong>a blueprint</strong>—proving that the CEQ vision can be implemented
+            HelpPermitMe serves as both <strong>a teaching tool</strong> and <strong>a blueprint</strong>—proving that the CEQ vision can be implemented
             with open technology, reusable components, and modern design principles.
           </p>
         </section>

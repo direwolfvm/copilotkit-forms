@@ -28,7 +28,7 @@ export function getIntegrationStatus(permitId: string): IntegrationStatus {
 }
 
 export const INTEGRATION_STATUS_LABELS: Record<IntegrationStatus, string> = {
-  "integrated": "Integration with HelpPermit.me",
+  "integrated": "Integration with HelpPermitMe",
   "modern-app": "Modern Web Application",
   "manual": "No Integration / Manual Process"
 }

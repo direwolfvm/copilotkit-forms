@@ -50,7 +50,7 @@ const cards = [
 const featurePanels: FeaturePanel[] = [
   {
     kind: "internal",
-    title: "About HelpPermit.me",
+    title: "About HelpPermitMe",
     description:
       "Learn about the ideas behind this demo and how these tools can support more efficient permitting and environmental review processes.",
     to: "/about",
@@ -60,7 +60,7 @@ const featurePanels: FeaturePanel[] = [
     kind: "external",
     title: "ReviewWorks demo system",
     description:
-      "Visit the ReviewWorks demonstration environment to see the integrated case-management experience that exchanges project and case data with HelpPermit.me.",
+      "Visit the ReviewWorks demonstration environment to see the integrated case-management experience that exchanges project and case data with HelpPermitMe.",
     href: "https://reviewworks.app.cloud.gov/",
     linkLabel: "Open ReviewWorks"
   },
@@ -68,7 +68,7 @@ const featurePanels: FeaturePanel[] = [
     kind: "external",
     title: "PermitFlow demo system",
     description:
-      "Visit the PermitFlow demonstration environment to explore its case-management workflows and shared data integration with HelpPermit.me.",
+      "Visit the PermitFlow demonstration environment to explore its case-management workflows and shared data integration with HelpPermitMe.",
     href: "https://permitflow.app.cloud.gov/",
     linkLabel: "Open PermitFlow"
   },
@@ -76,7 +76,7 @@ const featurePanels: FeaturePanel[] = [
     kind: "internal",
     title: "Developer tools",
     description:
-      "Explore the developer console to see how the CopilotKit integrations power AI-assisted workflows across the HelpPermit.me experience.",
+      "Explore the developer console to see how the CopilotKit integrations power AI-assisted workflows across the HelpPermitMe experience.",
     to: "/developer-tools",
     linkLabel: "Open developer tools"
   }
@@ -148,7 +148,7 @@ export default function HomePage() {
       <section className="home__hero" aria-labelledby="home-hero-heading">
         <div className="home__hero-top">
           <div className="home__hero-headings">
-            <p className="home__eyebrow">Welcome to HelpPermit.me</p>
+            <p className="home__eyebrow">Welcome to HelpPermitMe</p>
             <h1 id="home-hero-heading">Explore technology in permitting and environmental review</h1>
           </div>
           <button type="button" className="home__tour-button" onClick={() => startTour()}>
@@ -156,12 +156,12 @@ export default function HomePage() {
           </button>
         </div>
         <p className="home__intro">
-          HelpPermit.me is an  demo that showcases how technology tools like AI can streamline project intake and review. Explore the
+          HelpPermitMe is an  demo that showcases how technology tools like AI can streamline project intake and review. Explore the
           tools below to see how project tracking, application portals, and geospatial screening tools come together in one place.
         </p>
       </section>
 
-      <section className="home__cards" aria-label="Explore HelpPermit.me">
+      <section className="home__cards" aria-label="Explore HelpPermitMe">
         {cards.map((card) => (
           <article key={card.title} className="home-card">
             <h2 className="home-card__title">{card.title}</h2>
@@ -176,7 +176,7 @@ export default function HomePage() {
         ))}
       </section>
 
-      <section className="home__feature-panels" aria-label="Dive deeper into HelpPermit.me">
+      <section className="home__feature-panels" aria-label="Dive deeper into HelpPermitMe">
         {featurePanels.map((panel) => (
           <article key={panel.title} className="home-panel">
             <div className="home-panel__content">

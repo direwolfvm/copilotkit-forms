@@ -35,7 +35,7 @@ const defaultRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
 
 const ANALYTICS_INSTRUCTIONS = [
-  "You are an analytics copilot for the HelpPermit.me pre-screening, Basic Permit, and Complex Review workflows.",
+  "You are an analytics copilot for the HelpPermitMe pre-screening, Basic Permit, and Complex Review workflows.",
   "Interpret completion volumes and average completion times to surface notable trends and anomalies across all processes.",
   "Reference missing data explicitly when gaps appear in the series."
 ].join("\n")
