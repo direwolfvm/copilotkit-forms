@@ -76,7 +76,8 @@ const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
   (permit) => `${permit.title}: ${permit.description}`
 )
 
-const COPILOT_READABLE_MAX_CHARS = 8000
+const COPILOT_READABLE_MAX_CHARS = 2000
+const COPILOT_PERMIT_INVENTORY_MAX_ITEMS = 40
 
 function limitCopilotReadableText(text: string, label: string): string {
   if (text.length <= COPILOT_READABLE_MAX_CHARS) {
@@ -94,8 +95,6 @@ const COMPLEX_REVIEW_LABEL = "Complex Review"
 const COMPLEX_REVIEW_LINK = { href: "/reviews/complex", label: "Start this review." }
 const COMPLEX_REVIEW_PROJECT_PARAM = "projectId"
 const COMPLEX_REVIEW_CHECKLIST_KEY = toChecklistKey(COMPLEX_REVIEW_LABEL)
-
-type UpdatesPayload = Record<string, unknown>
 
 const SUPPORTED_DOCUMENT_EXTENSIONS = ["pdf", "docx", "jpg", "jpeg", "png"] as const
 const SUPPORTED_DOCUMENT_ACCEPT = [
@@ -1345,15 +1344,6 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
 
   useCopilotReadable(
     {
-      description: "Current CEQ project form data as formatted JSON",
-      value: formData,
-      convert: (_, value) => JSON.stringify(value, null, 2)
-    },
-    [formData]
-  )
-
-  useCopilotReadable(
-    {
       description: "Human-readable project summary",
       value: formatProjectSummary(formData)
     },
@@ -1393,6 +1383,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
         Array.isArray(value) && value.length > 0
           ? limitCopilotReadableText(
               value
+                .slice(0, COPILOT_PERMIT_INVENTORY_MAX_ITEMS)
                 .map((p: { id: string; name: string; agency: string }) => `- ${p.id}: ${p.name} (${p.agency})`)
                 .join("\n"),
               "Federal permit inventory"
@@ -1769,13 +1760,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
           name: "updates",
           type: "object",
           description:
-            "Project field values to merge into the form. Strings should align with CEQ data standard semantics.",
-          attributes: projectFieldDetails.map((field) => ({
-            name: field.key,
-            type: "string",
-            description: field.description,
-            required: false
-          }))
+            "Project field values to merge into the form. Keys should be CEQ project field IDs (for example: title, project_identifier, sponsor_name, lead_agency, location_text). Provide only changed fields."
         },
         {
           name: "sponsor_contact",
@@ -1791,13 +1776,19 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
           ]
         }
       ],
-      handler: async ({ updates, sponsor_contact }: { updates?: UpdatesPayload; sponsor_contact?: ProjectContact }) => {
+      handler: async ({
+        updates,
+        sponsor_contact
+      }: {
+        updates?: object
+        sponsor_contact?: ProjectContact
+      }) => {
         let updateCount = 0
         let contactUpdateCount = 0
         setFormData((previous) => {
           const next: ProjectFormData = { ...previous }
           if (updates && typeof updates === "object") {
-            for (const [rawKey, rawValue] of Object.entries(updates)) {
+            for (const [rawKey, rawValue] of Object.entries(updates as Record<string, unknown>)) {
               const key = rawKey as SimpleProjectField
               if (!projectFieldDetails.some((field) => field.key === key)) {
                 continue
@@ -1952,8 +1943,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       [
         "You are a permitting domain expert helping complete the CEQ Project entity form.",
         "Use the updateProjectForm action whenever you can fill in or revise structured fields.",
-        "Important fields include:",
-        ...projectFieldDetails.map((field) => `- ${field.title}: ${field.description}`),
+        "Prioritize title, project_identifier, sponsor_name, lead_agency, participating_agencies, location_text, and concise project narrative fields when the user provides enough information.",
         "Use addPermittingChecklistItems to maintain the permitting checklist. IMPORTANT: When adding permits, always use the permitId from the federal permit inventory (provided in context) instead of just the label. This ensures proper linking to permit information pages. For example, use permitId='section-404-clean-water-act' for CWA Section 404 permits.",
         "Use resetProjectForm when the user asks to start over."
       ].join("\n"),

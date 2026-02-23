@@ -269,6 +269,7 @@ async function proxyCopilotkitRuntimeRequest(req, res) {
 
   const method = req.method?.toUpperCase() ?? "GET";
   const hasBody = !["GET", "HEAD"].includes(method);
+  const requestStartedAt = Date.now();
 
   let body;
   if (hasBody) {
