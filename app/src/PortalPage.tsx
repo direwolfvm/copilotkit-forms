@@ -1364,7 +1364,8 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     {
       description: "Reference list of major federal permits and authorizations",
       value: MAJOR_PERMIT_SUMMARIES,
-      convert: (_, value) => value.join("\n")
+      convert: (_, value) =>
+        Array.isArray(value) && value.length > 0 ? value.join("\n") : "No major permit references available."
     },
     []
   )
@@ -1376,9 +1377,11 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       description: "Federal permit inventory with IDs. When adding checklist items, prefer using permitId from this list for accurate linking.",
       value: permitInventoryForCopilot,
       convert: (_, value) =>
-        value
-          .map((p: { id: string; name: string; agency: string }) => `- ${p.id}: ${p.name} (${p.agency})`)
-          .join("\n")
+        Array.isArray(value) && value.length > 0
+          ? value
+              .map((p: { id: string; name: string; agency: string }) => `- ${p.id}: ${p.name} (${p.agency})`)
+              .join("\n")
+          : "No permit inventory entries available."
     },
     [permitInventoryForCopilot]
   )
@@ -1388,14 +1391,14 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       description: "Current permitting checklist items with completion status",
       value: permittingChecklist,
       convert: (_, value) =>
-          value.length
+          Array.isArray(value) && value.length
             ? value
                 .map(
                   (item: PermittingChecklistItem) =>
                     `- [${item.completed ? "x" : " "}] ${item.label}${item.notes ? ` — ${item.notes}` : ""}`
                 )
-              .join("\n")
-          : "No permitting checklist items yet."
+                .join("\n")
+            : "No permitting checklist items yet."
     },
     [permittingChecklist]
   )
