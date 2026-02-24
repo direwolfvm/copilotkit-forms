@@ -7,7 +7,7 @@ import type {
   IpacSummary
 } from "../types/geospatial"
 import type { PermittingChecklistItem } from "../components/PermittingChecklistSection"
-import { getSupabaseAnonKey, getSupabaseUrl } from "../runtimeConfig"
+import { getSupabaseAnonKey, getSupabaseTenantId, getSupabaseUrl } from "../runtimeConfig"
 import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "../types/gis"
 import { summarizeNepassist, summarizeIpac } from "./geospatial"
 
@@ -23,12 +23,35 @@ const CASE_EVENT_TYPES = {
 } as const
 
 const SUPABASE_PROXY_PREFIX = "/api/supabase"
+const TENANT_ID_COLUMN = "tenant_id"
 
 type CaseEventType = (typeof CASE_EVENT_TYPES)[keyof typeof CASE_EVENT_TYPES]
 
 type SupabaseFetchRequest = {
   url: string
   init: RequestInit
+}
+
+function getPortalTenantId(): string | undefined {
+  return getSupabaseTenantId()
+}
+
+function applyPortalTenantFilter(endpoint: URL): void {
+  const tenantId = getPortalTenantId()
+  if (!tenantId) {
+    return
+  }
+  if (!endpoint.searchParams.has(TENANT_ID_COLUMN)) {
+    endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+  }
+}
+
+function withPortalTenantId<T extends Record<string, unknown>>(payload: T): T {
+  const tenantId = getPortalTenantId()
+  if (!tenantId) {
+    return payload
+  }
+  return { ...payload, [TENANT_ID_COLUMN]: tenantId }
 }
 
 function buildLoggableHeaders(init: RequestInit): Record<string, string> {
@@ -74,6 +97,9 @@ function buildSupabaseFetchRequest(
   supabaseAnonKey: string,
   init: RequestInit
 ): SupabaseFetchRequest {
+  if (endpoint.pathname.startsWith("/rest/v1/") && (init.method ?? "GET").toUpperCase() !== "POST") {
+    applyPortalTenantFilter(endpoint)
+  }
   const headers = new Headers(init.headers ?? undefined)
 
   let url: string
@@ -526,12 +552,14 @@ export async function saveProjectSnapshot({
     locationResult
   })
 
-  const sanitizedRecord = stripUndefined({
-    ...projectRecord,
-    data_source_system: DATA_SOURCE_SYSTEM,
-    last_updated: timestamp,
-    retrieved_timestamp: timestamp
-  })
+  const sanitizedRecord = withPortalTenantId(
+    stripUndefined({
+      ...projectRecord,
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: timestamp,
+      retrieved_timestamp: timestamp
+    })
+  )
 
   const endpoint = `/api/supabase/rest/v1/project?${new URLSearchParams({ on_conflict: "id" }).toString()}`
 
@@ -695,24 +723,26 @@ export async function uploadSupportingDocument({
 
   const documentEndpoint = new URL("/rest/v1/document", supabaseUrl)
 
-  const documentPayload = stripUndefined({
-    parent_process_id: parentProcessId,
-    title: sanitizedTitle,
-    document_type: SUPPORTING_DOCUMENT_TYPE,
-    data_source_system: DATA_SOURCE_SYSTEM,
-    last_updated: timestamp,
-    url: storageObjectPath,
-    other: stripUndefined({
-      storage_bucket: DOCUMENT_STORAGE_BUCKET,
-      storage_object_path: storageObjectPath,
-      file_name: file.name,
-      file_size: file.size,
-      mime_type: file.type || undefined,
-      project_id: projectId,
-      project_title: projectTitle ?? undefined,
-      uploaded_at: timestamp
+  const documentPayload = withPortalTenantId(
+    stripUndefined({
+      parent_process_id: parentProcessId,
+      title: sanitizedTitle,
+      document_type: SUPPORTING_DOCUMENT_TYPE,
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: timestamp,
+      url: storageObjectPath,
+      other: stripUndefined({
+        storage_bucket: DOCUMENT_STORAGE_BUCKET,
+        storage_object_path: storageObjectPath,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type || undefined,
+        project_id: projectId,
+        project_title: projectTitle ?? undefined,
+        uploaded_at: timestamp
+      })
     })
-  })
+  )
 
   const { url: documentUrl, init: documentInit } = buildSupabaseFetchRequest(
     documentEndpoint,
@@ -822,25 +852,27 @@ export async function saveProjectReportDocument({
 
   const documentEndpoint = new URL("/rest/v1/document", supabaseUrl)
 
-  const documentPayload = stripUndefined({
-    parent_process_id: parentProcessId,
-    title: documentTitle,
-    document_type: PROJECT_REPORT_DOCUMENT_TYPE,
-    data_source_system: DATA_SOURCE_SYSTEM,
-    last_updated: timestamp,
-    url: storageObjectPath,
-    other: stripUndefined({
-      storage_bucket: DOCUMENT_STORAGE_BUCKET,
-      storage_object_path: storageObjectPath,
-      file_name: safeFileName,
-      file_size: blob.size,
-      mime_type: "application/pdf",
-      project_id: projectId,
-      project_title: safeTitle,
-      report_generated_at: timestamp,
-      uploaded_at: timestamp
+  const documentPayload = withPortalTenantId(
+    stripUndefined({
+      parent_process_id: parentProcessId,
+      title: documentTitle,
+      document_type: PROJECT_REPORT_DOCUMENT_TYPE,
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: timestamp,
+      url: storageObjectPath,
+      other: stripUndefined({
+        storage_bucket: DOCUMENT_STORAGE_BUCKET,
+        storage_object_path: storageObjectPath,
+        file_name: safeFileName,
+        file_size: blob.size,
+        mime_type: "application/pdf",
+        project_id: projectId,
+        project_title: safeTitle,
+        report_generated_at: timestamp,
+        uploaded_at: timestamp
+      })
     })
-  })
+  )
 
   const { url: documentUrl, init: documentInit } = buildSupabaseFetchRequest(documentEndpoint, supabaseAnonKey, {
     method: "POST",
@@ -1688,14 +1720,16 @@ async function createCaseEvent({
   const endpoint = new URL("/rest/v1/case_event", supabaseUrl)
   const timestamp = new Date().toISOString()
 
-  const payload = stripUndefined({
-    parent_process_id: processInstanceId,
-    type: eventType,
-    data_source_system: DATA_SOURCE_SYSTEM,
-    last_updated: timestamp,
-    retrieved_timestamp: timestamp,
-    other: buildCaseEventData(processInstanceId, eventData)
-  })
+  const payload = withPortalTenantId(
+    stripUndefined({
+      parent_process_id: processInstanceId,
+      type: eventType,
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: timestamp,
+      retrieved_timestamp: timestamp,
+      other: buildCaseEventData(processInstanceId, eventData)
+    })
+  )
 
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "POST",
@@ -1784,19 +1818,21 @@ async function upsertProjectGisDataForProject({
     centroidLon
   })
 
-  const payload = stripUndefined({
-    parent_project_id: projectId,
-    description: metadata.description,
-    container_inventory: metadata.containerInventory,
-    data_container: container,
-    centroid_lat: metadata.centroidLat,
-    centroid_lon: metadata.centroidLon,
-    extent: metadata.extentText,
-    data_source_system: DATA_SOURCE_SYSTEM,
-    updated_last: timestamp,
-    last_updated: timestamp,
-    retrieved_timestamp: timestamp
-  })
+  const payload = withPortalTenantId(
+    stripUndefined({
+      parent_project_id: projectId,
+      description: metadata.description,
+      container_inventory: metadata.containerInventory,
+      data_container: container,
+      centroid_lat: metadata.centroidLat,
+      centroid_lon: metadata.centroidLon,
+      extent: metadata.extentText,
+      data_source_system: DATA_SOURCE_SYSTEM,
+      updated_last: timestamp,
+      last_updated: timestamp,
+      retrieved_timestamp: timestamp
+    })
+  )
 
   const updateEndpoint = new URL("/rest/v1/gis_data", supabaseUrl)
   updateEndpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
@@ -2485,14 +2521,16 @@ async function createPreScreeningProcessInstance({
 }: CreatePreScreeningProcessInstanceArgs): Promise<number> {
   const timestamp = new Date().toISOString()
 
-  const processInstancePayload = stripUndefined({
-    description: buildProcessInstanceDescription(projectTitle),
-    process_model: PRE_SCREENING_PROCESS_MODEL_ID,
-    parent_project_id: projectId,
-    data_source_system: DATA_SOURCE_SYSTEM,
-    last_updated: timestamp,
-    retrieved_timestamp: timestamp
-  })
+  const processInstancePayload = withPortalTenantId(
+    stripUndefined({
+      description: buildProcessInstanceDescription(projectTitle),
+      process_model: PRE_SCREENING_PROCESS_MODEL_ID,
+      parent_project_id: projectId,
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: timestamp,
+      retrieved_timestamp: timestamp
+    })
+  )
 
   if (typeof existingProcessInstanceId === "number") {
     const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
@@ -2941,15 +2979,17 @@ function buildDecisionPayloadRecords({
     })()
 
     records.push(
-      stripUndefined({
-        process: processInstanceId,
-        process_decision_element: element?.id ?? null,
-        project: projectId,
-        data_source_system: DATA_SOURCE_SYSTEM,
-        last_updated: timestamp,
-        retrieved_timestamp: timestamp,
-        evaluation_data: evaluationData
-      })
+      withPortalTenantId(
+        stripUndefined({
+          process: processInstanceId,
+          process_decision_element: element?.id ?? null,
+          project: projectId,
+          data_source_system: DATA_SOURCE_SYSTEM,
+          last_updated: timestamp,
+          retrieved_timestamp: timestamp,
+          evaluation_data: evaluationData
+        })
+      )
     )
   }
 
@@ -4274,6 +4314,7 @@ async function deleteSupabaseRecords({
   endpoint: URL
   resourceDescription: string
 }): Promise<void> {
+  applyPortalTenantFilter(endpoint)
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "DELETE",
     headers: { Prefer: "count=exact" }
@@ -4302,6 +4343,7 @@ async function fetchSupabaseList<T>(
   configure?: (endpoint: URL) => void
 ): Promise<T[]> {
   const endpoint = new URL(path, supabaseUrl)
+  applyPortalTenantFilter(endpoint)
   if (configure) {
     configure(endpoint)
   }

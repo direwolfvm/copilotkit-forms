@@ -1,5 +1,5 @@
 import type { ProjectContact, ProjectFormData } from "../schema/projectSchema"
-import { getPermitflowAnonKey, getPermitflowUrl } from "../runtimeConfig"
+import { getPermitflowAnonKey, getPermitflowTenantId, getPermitflowUrl } from "../runtimeConfig"
 import {
   ProjectPersistenceError,
   type CaseEventSummary,
@@ -12,6 +12,7 @@ import {
 type PermitflowFetchOptions = {
   supabaseUrl: string
   supabaseAnonKey: string
+  tenantId: string
   accessToken?: string
 }
 
@@ -26,6 +27,7 @@ type PermitflowProjectRow = {
   id?: number | string | null
   title?: string | null
   last_updated?: string | null
+  other?: unknown
 }
 
 type PermitflowProcessInstanceRow = {
@@ -50,6 +52,10 @@ type PermitflowCaseEventRow = {
 
 const BASIC_PERMIT_LABEL = "Basic Permit"
 export const BASIC_PERMIT_PROCESS_MODEL_ID = 1
+const BASIC_PERMIT_PROCESS_MODEL_TITLE = "Basic Permit"
+const TENANT_ID_COLUMN = "tenant_id"
+const permitflowProcessModelIdCache = new Map<string, number>()
+const permitflowDecisionElementIdCache = new Map<string, { auth: number; projectInfo: number; sf299: number }>()
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -168,13 +174,79 @@ function quotePostgrestValue(value: string): string {
   return `"${value.replace(/"/g, "\"\"")}"`
 }
 
-function isBasicPermitProcess(row: PermitflowProcessInstanceRow): boolean {
-  return row.process_model === BASIC_PERMIT_PROCESS_MODEL_ID
+function isBasicPermitProcess(row: PermitflowProcessInstanceRow, processModelId: number): boolean {
+  return row.process_model === processModelId
+}
+
+async function resolveBasicPermitProcessModelId(options: PermitflowFetchOptions): Promise<number> {
+  const cacheKey = `${options.supabaseUrl}::${options.tenantId}`
+  const cached = permitflowProcessModelIdCache.get(cacheKey)
+  if (typeof cached === "number") {
+    return cached
+  }
+
+  const rows = await fetchPermitflowList<{ id?: number | string | null }>(
+    options,
+    "/rest/v1/process_model",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,title")
+      endpoint.searchParams.set("title", `eq.${BASIC_PERMIT_PROCESS_MODEL_TITLE}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+
+  const resolvedId = parseNumericId(rows[0]?.id)
+  if (typeof resolvedId !== "number") {
+    throw new ProjectPersistenceError(
+      `PermitFlow process model \"${BASIC_PERMIT_PROCESS_MODEL_TITLE}\" was not found.`
+    )
+  }
+
+  permitflowProcessModelIdCache.set(cacheKey, resolvedId)
+  return resolvedId
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): T {
   const entries = Object.entries(value).filter((entry) => entry[1] !== undefined)
   return Object.fromEntries(entries) as T
+}
+
+async function resolveBasicPermitDecisionElementIds(
+  options: PermitflowFetchOptions,
+  processModelId: number
+): Promise<{ auth: number; projectInfo: number; sf299: number }> {
+  const cacheKey = `${options.supabaseUrl}::${options.tenantId}::${processModelId}`
+  const cached = permitflowDecisionElementIdCache.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+
+  const elements = await fetchDecisionElements(options, processModelId)
+  const byTitle = new Map<string, number>()
+  for (const element of elements) {
+    const title = normalizeTitle(element.title)?.toLowerCase()
+    if (title) {
+      byTitle.set(title, element.id)
+    }
+  }
+
+  const auth = byTitle.get("user id")
+  const projectInfo = byTitle.get("project information")
+  const sf299 = byTitle.get("sf-299 application") ?? byTitle.get("permit requirements")
+
+  if (
+    typeof auth !== "number" ||
+    typeof projectInfo !== "number" ||
+    typeof sf299 !== "number"
+  ) {
+    throw new ProjectPersistenceError(
+      "PermitFlow decision elements for the Basic Permit process could not be resolved."
+    )
+  }
+
+  const resolved = { auth, projectInfo, sf299 }
+  permitflowDecisionElementIdCache.set(cacheKey, resolved)
+  return resolved
 }
 
 function buildPermitflowProjectPayload(
@@ -189,7 +261,8 @@ function buildPermitflowProjectPayload(
     nepa_categorical_exclusion_code: normalizeString(formData.nepa_categorical_exclusion_code),
     nepa_conformance_conditions: normalizeString(formData.nepa_conformance_conditions),
     nepa_extraordinary_circumstances: normalizeString(formData.nepa_extraordinary_circumstances),
-    additional_notes: normalizeString(formData.other)
+    additional_notes: normalizeString(formData.other),
+    applicant_user_id: normalizeString(userId)
   })
 
   return stripUndefined({
@@ -207,7 +280,6 @@ function buildPermitflowProjectPayload(
     location_object: normalizeString(formData.location_object),
     sponsor_contact: normalizeContact(formData.sponsor_contact),
     other: Object.keys(other).length > 0 ? other : undefined,
-    user_id: normalizeString(userId),
     current_status: "draft",
     data_source_system: "project-portal",
     last_updated: timestamp,
@@ -216,7 +288,7 @@ function buildPermitflowProjectPayload(
 }
 
 async function fetchPermitflowList<T>(
-  { supabaseUrl, supabaseAnonKey, accessToken }: PermitflowFetchOptions,
+  { supabaseUrl, supabaseAnonKey, tenantId, accessToken }: PermitflowFetchOptions,
   path: string,
   configure?: (endpoint: URL) => void
 ): Promise<T[]> {
@@ -224,6 +296,7 @@ async function fetchPermitflowList<T>(
   if (configure) {
     configure(endpoint)
   }
+  applyTenantFilter(endpoint, tenantId)
 
   const response = await fetch(endpoint.toString(), {
     method: "GET",
@@ -255,6 +328,32 @@ async function fetchPermitflowList<T>(
   }
 
   return payload as T[]
+}
+
+function applyTenantFilter(endpoint: URL, tenantId: string) {
+  if (!endpoint.pathname.startsWith("/rest/v1/")) {
+    return
+  }
+  if (!endpoint.searchParams.has(TENANT_ID_COLUMN)) {
+    endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+  }
+}
+
+function withTenantId(
+  payload: Record<string, unknown>,
+  tenantId: string
+): Record<string, unknown> {
+  if (typeof payload[TENANT_ID_COLUMN] === "string" && String(payload[TENANT_ID_COLUMN]).trim()) {
+    return payload
+  }
+  return { ...payload, [TENANT_ID_COLUMN]: tenantId }
+}
+
+function withTenantIdBatch(
+  payloads: Record<string, unknown>[],
+  tenantId: string
+): Record<string, unknown>[] {
+  return payloads.map((payload) => withTenantId(payload, tenantId))
 }
 
 async function fetchProcessModelRecord(
@@ -493,17 +592,21 @@ export async function loadPermitflowProcessInformation(
 
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
 
-  const options = { supabaseUrl, supabaseAnonKey }
-  const processModel = await fetchProcessModelRecord(options, processModelId)
+  const options = { supabaseUrl, supabaseAnonKey, tenantId }
+  const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
+  const resolvedProcessModelId =
+    processModelId === BASIC_PERMIT_PROCESS_MODEL_ID ? basicPermitProcessModelId : processModelId
+  const processModel = await fetchProcessModelRecord(options, resolvedProcessModelId)
 
   if (!processModel) {
-    throw new ProjectPersistenceError(`Process model ${processModelId} was not found.`)
+    throw new ProjectPersistenceError(`Process model ${resolvedProcessModelId} was not found.`)
   }
 
   let legalStructure: ProcessInformation["legalStructure"] | undefined
@@ -511,7 +614,7 @@ export async function loadPermitflowProcessInformation(
     legalStructure = await fetchLegalStructureRecord(options, processModel.legalStructureId)
   }
 
-  const decisionElements = await fetchDecisionElements(options, processModelId)
+  const decisionElements = await fetchDecisionElements(options, resolvedProcessModelId)
   decisionElements.sort((a, b) => a.id - b.id)
 
   return {
@@ -603,6 +706,7 @@ async function createPermitflowRecord<T>(
   supabaseUrl: string,
   supabaseAnonKey: string,
   accessToken: string,
+  tenantId: string,
   table: string,
   payload: Record<string, unknown>,
   options?: { upsert?: boolean }
@@ -618,7 +722,7 @@ async function createPermitflowRecord<T>(
   const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
     method: "POST",
     headers,
-    body: JSON.stringify(payload)
+    body: JSON.stringify(withTenantId(payload, tenantId))
   })
 
   const responseText = await response.text()
@@ -646,6 +750,7 @@ async function createPermitflowRecordsBatch<T>(
   supabaseUrl: string,
   supabaseAnonKey: string,
   accessToken: string,
+  tenantId: string,
   table: string,
   payloads: Record<string, unknown>[]
 ): Promise<T[]> {
@@ -657,7 +762,7 @@ async function createPermitflowRecordsBatch<T>(
       "content-type": "application/json",
       Prefer: "return=representation"
     },
-    body: JSON.stringify(payloads)
+    body: JSON.stringify(withTenantIdBatch(payloads, tenantId))
   })
 
   const responseText = await response.text()
@@ -691,21 +796,28 @@ export async function submitPermitflowProject({
 }): Promise<PermitflowSubmitResult> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
 
   const timestamp = new Date().toISOString()
-  const options = { supabaseUrl, supabaseAnonKey, accessToken }
+  const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
+  const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
+  const decisionElementIds = await resolveBasicPermitDecisionElementIds(
+    options,
+    basicPermitProcessModelId
+  )
 
-  // Step 2: Create or update project record with user_id (upsert)
+  // Step 2: Create or update project record (applicant auth is stored in project.other)
   const projectPayload = buildPermitflowProjectPayload(formData, userId)
   const projectResult = await createPermitflowRecord<{ id: number }>(
     supabaseUrl,
     supabaseAnonKey,
     accessToken,
+    tenantId,
     "project",
     projectPayload,
     { upsert: true }
@@ -722,7 +834,7 @@ export async function submitPermitflowProject({
     (endpoint) => {
       endpoint.searchParams.set("select", "id")
       endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
-      endpoint.searchParams.set("process_model", `eq.${BASIC_PERMIT_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
       endpoint.searchParams.set("limit", "1")
     }
   )
@@ -738,7 +850,7 @@ export async function submitPermitflowProject({
   // Step 3: Create process_instance record
   const processInstancePayload = {
     parent_project_id: projectId,
-    process_model: BASIC_PERMIT_PROCESS_MODEL_ID,
+    process_model: basicPermitProcessModelId,
     status: "draft",
     start_date: timestamp.split("T")[0]
   }
@@ -746,6 +858,7 @@ export async function submitPermitflowProject({
     supabaseUrl,
     supabaseAnonKey,
     accessToken,
+    tenantId,
     "process_instance",
     processInstancePayload
   )
@@ -759,7 +872,7 @@ export async function submitPermitflowProject({
   // Step 4: Create 3 process_decision_payload records
   const decisionPayloads = [
     {
-      process_decision_element: 1,
+      process_decision_element: decisionElementIds.auth,
       process: processInstanceId,
       project: projectId,
       evaluation_data: {
@@ -771,7 +884,7 @@ export async function submitPermitflowProject({
       }
     },
     {
-      process_decision_element: 2,
+      process_decision_element: decisionElementIds.projectInfo,
       process: processInstanceId,
       project: projectId,
       evaluation_data: {
@@ -783,7 +896,7 @@ export async function submitPermitflowProject({
       }
     },
     {
-      process_decision_element: 3,
+      process_decision_element: decisionElementIds.sf299,
       process: processInstanceId,
       project: projectId,
       evaluation_data: {}
@@ -793,6 +906,7 @@ export async function submitPermitflowProject({
     supabaseUrl,
     supabaseAnonKey,
     accessToken,
+    tenantId,
     "process_decision_payload",
     decisionPayloads
   )
@@ -831,6 +945,7 @@ export async function submitPermitflowProject({
     supabaseUrl,
     supabaseAnonKey,
     accessToken,
+    tenantId,
     "case_event",
     caseEvents
   )
@@ -851,9 +966,10 @@ export async function loadPermitflowProjectStatus(
 ): Promise<PermitflowProjectStatus> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
 
@@ -861,7 +977,8 @@ export async function loadPermitflowProjectStatus(
     throw new ProjectPersistenceError("PermitFlow project identifiers must be numeric.")
   }
 
-  const options = { supabaseUrl, supabaseAnonKey }
+  const options = { supabaseUrl, supabaseAnonKey, tenantId }
+  const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
   const projectRows = await fetchPermitflowList<PermitflowProjectRow>(
     options,
     "/rest/v1/project",
@@ -871,11 +988,27 @@ export async function loadPermitflowProjectStatus(
     }
   )
 
-  if (projectRows.length === 0) {
+  let resolvedProjectRow = projectRows[0]
+  let resolvedPermitflowProjectId = parseNumericId(resolvedProjectRow?.id)
+
+  if (!resolvedProjectRow) {
+    const migratedRows = await fetchPermitflowList<PermitflowProjectRow>(
+      options,
+      "/rest/v1/project",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "id,title,last_updated,other")
+        endpoint.searchParams.set("other->_permitflow_migration->>source_id", `eq.${projectId}`)
+        endpoint.searchParams.set("limit", "1")
+      }
+    )
+    resolvedProjectRow = migratedRows[0]
+    resolvedPermitflowProjectId = parseNumericId(resolvedProjectRow?.id)
+  }
+
+  if (!resolvedProjectRow || typeof resolvedPermitflowProjectId !== "number") {
     return { exists: false, projectId }
   }
 
-  const projectRow = projectRows[0]
   const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
     options,
     "/rest/v1/process_instance",
@@ -884,12 +1017,14 @@ export async function loadPermitflowProjectStatus(
         "select",
         "id,parent_project_id,description,last_updated,created_at,process_model,status"
       )
-      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
-      endpoint.searchParams.set("process_model", `eq.${BASIC_PERMIT_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.set("parent_project_id", `eq.${resolvedPermitflowProjectId}`)
+      endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
     }
   )
 
-  const basicPermitProcesses = processRows.filter((row) => isBasicPermitProcess(row))
+  const basicPermitProcesses = processRows.filter((row) =>
+    isBasicPermitProcess(row, basicPermitProcessModelId)
+  )
   let basicPermitProcess: ProjectProcessSummary | undefined
 
   if (basicPermitProcesses.length > 0) {
@@ -911,9 +1046,12 @@ export async function loadPermitflowProjectStatus(
 
   return {
     exists: true,
-    projectId,
-    title: normalizeTitle(projectRow.title),
-    lastUpdated: typeof projectRow.last_updated === "string" ? projectRow.last_updated : undefined,
+    projectId: resolvedPermitflowProjectId,
+    title: normalizeTitle(resolvedProjectRow.title),
+    lastUpdated:
+      typeof resolvedProjectRow.last_updated === "string"
+        ? resolvedProjectRow.last_updated
+        : undefined,
     basicPermitProcess
   }
 }
@@ -929,9 +1067,10 @@ export async function updatePermitflowProject({
 }): Promise<void> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
 
@@ -944,7 +1083,11 @@ export async function updatePermitflowProject({
 
   const payload = buildPermitflowProjectPayload(formData, userId)
 
-  const response = await fetch(`${supabaseUrl}/rest/v1/project?id=eq.${numericId}`, {
+  const endpoint = new URL("/rest/v1/project", supabaseUrl)
+  endpoint.searchParams.set("id", `eq.${numericId}`)
+  endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+
+  const response = await fetch(endpoint.toString(), {
     method: "PATCH",
     headers: {
       apikey: supabaseAnonKey,
@@ -972,7 +1115,8 @@ export async function loadBasicPermitProcessesForProjects(
 ): Promise<Map<number, ProjectProcessSummary[]>> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     return new Map()
   }
 
@@ -997,7 +1141,8 @@ export async function loadBasicPermitProcessesForProjects(
   }
 
   try {
-    const options = { supabaseUrl, supabaseAnonKey }
+    const options = { supabaseUrl, supabaseAnonKey, tenantId }
+    const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
     const titleFilters = uniqueTitles.map((title) => `title.ilike.${quotePostgrestValue(title)}`)
 
     const permitflowProjects = await fetchPermitflowList<PermitflowProjectRow>(
@@ -1070,11 +1215,13 @@ export async function loadBasicPermitProcessesForProjects(
           "id,parent_project_id,description,last_updated,created_at,process_model,status"
         )
         endpoint.searchParams.set("parent_project_id", `in.(${permitflowProjectIds.join(",")})`)
-        endpoint.searchParams.set("process_model", `eq.${BASIC_PERMIT_PROCESS_MODEL_ID}`)
+        endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
       }
     )
 
-    const basicPermitProcesses = processRows.filter((row) => isBasicPermitProcess(row))
+    const basicPermitProcesses = processRows.filter((row) =>
+      isBasicPermitProcess(row, basicPermitProcessModelId)
+    )
     const processIds = basicPermitProcesses
       .map((row) => parseNumericId(row.id))
       .filter((id): id is number => typeof id === "number")
@@ -1186,15 +1333,19 @@ function dayKeyFromMillisLocal(millis: number): string {
 export async function loadBasicPermitAnalytics(): Promise<BasicPermitAnalyticsPoint[]> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
+  const tenantId = getPermitflowTenantId()
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn("[analytics] PermitFlow credentials not configured")
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
+    console.warn(
+      "[analytics] PermitFlow credentials not configured (requires URL, anon key, and tenant id)"
+    )
     return []
   }
 
-  const options = { supabaseUrl, supabaseAnonKey }
+  const options = { supabaseUrl, supabaseAnonKey, tenantId }
 
   try {
+    const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
     // Load all Basic Permit process instances
     const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
       options,
@@ -1204,7 +1355,7 @@ export async function loadBasicPermitAnalytics(): Promise<BasicPermitAnalyticsPo
           "select",
           "id,created_at,last_updated,process_model,status"
         )
-        endpoint.searchParams.set("process_model", `eq.${BASIC_PERMIT_PROCESS_MODEL_ID}`)
+        endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
       }
     )
 

@@ -1,5 +1,5 @@
 import type { ProjectFormData } from "../schema/projectSchema"
-import { getReviewworksAnonKey, getReviewworksUrl } from "../runtimeConfig"
+import { getReviewworksAnonKey, getReviewworksTenantId, getReviewworksUrl } from "../runtimeConfig"
 import {
   ProjectPersistenceError,
   type CaseEventSummary,
@@ -12,6 +12,7 @@ import {
 type ReviewworksFetchOptions = {
   supabaseUrl: string
   supabaseAnonKey: string
+  tenantId: string
   accessToken?: string
 }
 
@@ -51,7 +52,10 @@ type ReviewworksCaseEventRow = {
 }
 
 const COMPLEX_REVIEW_LABEL = "Complex Review"
+const COMPLEX_REVIEW_PROCESS_MODEL_TITLE = "Complex Environmental Review"
 export const COMPLEX_REVIEW_PROCESS_MODEL_ID = 1
+const TENANT_ID_COLUMN = "tenant_id"
+let reviewworksProcessModelIdCache: number | undefined
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -155,8 +159,39 @@ function quotePostgrestValue(value: string): string {
   return `"${value.replace(/"/g, "\"\"")}"`
 }
 
-function isComplexReviewProcess(row: ReviewworksProcessInstanceRow): boolean {
-  return row.process_model === COMPLEX_REVIEW_PROCESS_MODEL_ID
+function isComplexReviewProcess(
+  row: ReviewworksProcessInstanceRow,
+  processModelId: number
+): boolean {
+  return row.process_model === processModelId
+}
+
+async function resolveComplexReviewProcessModelId(
+  options: ReviewworksFetchOptions
+): Promise<number> {
+  if (typeof reviewworksProcessModelIdCache === "number") {
+    return reviewworksProcessModelIdCache
+  }
+
+  const rows = await fetchReviewworksList<Record<string, unknown>>(
+    options,
+    "/rest/v1/process_model",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,title")
+      endpoint.searchParams.set("title", `eq.${COMPLEX_REVIEW_PROCESS_MODEL_TITLE}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+
+  const processModelId = parseNumericId(rows[0]?.id)
+  if (typeof processModelId !== "number") {
+    throw new ProjectPersistenceError(
+      `ReviewWorks process model "${COMPLEX_REVIEW_PROCESS_MODEL_TITLE}" was not found.`
+    )
+  }
+
+  reviewworksProcessModelIdCache = processModelId
+  return processModelId
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -197,7 +232,7 @@ function buildReviewworksProjectPayload(
 }
 
 async function fetchReviewworksList<T>(
-  { supabaseUrl, supabaseAnonKey, accessToken }: ReviewworksFetchOptions,
+  { supabaseUrl, supabaseAnonKey, tenantId, accessToken }: ReviewworksFetchOptions,
   path: string,
   configure?: (endpoint: URL) => void
 ): Promise<T[]> {
@@ -205,6 +240,7 @@ async function fetchReviewworksList<T>(
   if (configure) {
     configure(endpoint)
   }
+  applyTenantFilter(endpoint, tenantId)
 
   const response = await fetch(endpoint.toString(), {
     method: "GET",
@@ -236,6 +272,32 @@ async function fetchReviewworksList<T>(
   }
 
   return payload as T[]
+}
+
+function applyTenantFilter(endpoint: URL, tenantId: string) {
+  if (!endpoint.pathname.startsWith("/rest/v1/")) {
+    return
+  }
+  if (!endpoint.searchParams.has(TENANT_ID_COLUMN)) {
+    endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+  }
+}
+
+function withTenantId(
+  payload: Record<string, unknown>,
+  tenantId: string
+): Record<string, unknown> {
+  if (typeof payload[TENANT_ID_COLUMN] === "string" && String(payload[TENANT_ID_COLUMN]).trim()) {
+    return payload
+  }
+  return { ...payload, [TENANT_ID_COLUMN]: tenantId }
+}
+
+function withTenantIdBatch(
+  payloads: Record<string, unknown>[],
+  tenantId: string
+): Record<string, unknown>[] {
+  return payloads.map((payload) => withTenantId(payload, tenantId))
 }
 
 async function fetchProcessModelRecord(
@@ -474,17 +536,22 @@ export async function loadReviewworksProcessInformation(
 
   const supabaseUrl = getReviewworksUrl()
   const supabaseAnonKey = getReviewworksAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getReviewworksTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "ReviewWorks credentials are not configured. Set REVIEWWORKS_SUPABASE_URL and REVIEWWORKS_SUPABASE_ANON_KEY."
+      "ReviewWorks credentials are not configured. Set REVIEWWORKS_SUPABASE_URL, REVIEWWORKS_SUPABASE_ANON_KEY, and REVIEWWORKS_TENANT_ID."
     )
   }
 
-  const options = { supabaseUrl, supabaseAnonKey }
-  const processModel = await fetchProcessModelRecord(options, processModelId)
+  const options = { supabaseUrl, supabaseAnonKey, tenantId }
+  const resolvedProcessModelId =
+    processModelId === COMPLEX_REVIEW_PROCESS_MODEL_ID
+      ? await resolveComplexReviewProcessModelId(options)
+      : processModelId
+  const processModel = await fetchProcessModelRecord(options, resolvedProcessModelId)
 
   if (!processModel) {
-    throw new ProjectPersistenceError(`Process model ${processModelId} was not found.`)
+    throw new ProjectPersistenceError(`Process model ${resolvedProcessModelId} was not found.`)
   }
 
   let legalStructure: ProcessInformation["legalStructure"] | undefined
@@ -492,7 +559,7 @@ export async function loadReviewworksProcessInformation(
     legalStructure = await fetchLegalStructureRecord(options, processModel.legalStructureId)
   }
 
-  const decisionElements = await fetchDecisionElements(options, processModelId)
+  const decisionElements = await fetchDecisionElements(options, resolvedProcessModelId)
   decisionElements.sort((a, b) => a.id - b.id)
 
   return {
@@ -584,6 +651,7 @@ async function createReviewworksRecord<T>(
   supabaseUrl: string,
   supabaseAnonKey: string,
   accessToken: string,
+  tenantId: string,
   table: string,
   payload: Record<string, unknown>,
   options?: { upsert?: boolean }
@@ -599,7 +667,7 @@ async function createReviewworksRecord<T>(
   const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
     method: "POST",
     headers,
-    body: JSON.stringify(payload)
+    body: JSON.stringify(withTenantId(payload, tenantId))
   })
 
   const responseText = await response.text()
@@ -627,6 +695,7 @@ async function createReviewworksRecordsBatch<T>(
   supabaseUrl: string,
   supabaseAnonKey: string,
   accessToken: string,
+  tenantId: string,
   table: string,
   payloads: Record<string, unknown>[]
 ): Promise<T[]> {
@@ -638,7 +707,7 @@ async function createReviewworksRecordsBatch<T>(
       "content-type": "application/json",
       Prefer: "return=representation"
     },
-    body: JSON.stringify(payloads)
+    body: JSON.stringify(withTenantIdBatch(payloads, tenantId))
   })
 
   const responseText = await response.text()
@@ -672,14 +741,16 @@ export async function submitReviewworksProject({
 }): Promise<ReviewworksSubmitResult> {
   const supabaseUrl = getReviewworksUrl()
   const supabaseAnonKey = getReviewworksAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getReviewworksTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "ReviewWorks credentials are not configured. Set REVIEWWORKS_SUPABASE_URL and REVIEWWORKS_SUPABASE_ANON_KEY."
+      "ReviewWorks credentials are not configured. Set REVIEWWORKS_SUPABASE_URL, REVIEWWORKS_SUPABASE_ANON_KEY, and REVIEWWORKS_TENANT_ID."
     )
   }
 
   const timestamp = new Date().toISOString()
-  const options = { supabaseUrl, supabaseAnonKey, accessToken }
+  const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
+  const complexReviewProcessModelId = await resolveComplexReviewProcessModelId(options)
 
   // Create or update project record
   const projectPayload = buildReviewworksProjectPayload(formData, userId)
@@ -687,6 +758,7 @@ export async function submitReviewworksProject({
     supabaseUrl,
     supabaseAnonKey,
     accessToken,
+    tenantId,
     "project",
     projectPayload,
     { upsert: true }
@@ -703,7 +775,7 @@ export async function submitReviewworksProject({
     (endpoint) => {
       endpoint.searchParams.set("select", "id")
       endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
-      endpoint.searchParams.set("process_model", `eq.${COMPLEX_REVIEW_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.set("process_model", `eq.${complexReviewProcessModelId}`)
       endpoint.searchParams.set("limit", "1")
     }
   )
@@ -719,7 +791,7 @@ export async function submitReviewworksProject({
   // Create process_instance record
   const processInstancePayload = {
     parent_project_id: projectId,
-    process_model: COMPLEX_REVIEW_PROCESS_MODEL_ID,
+    process_model: complexReviewProcessModelId,
     status: "underway",
     stage: "Step 2: Project Information",
     start_date: timestamp.split("T")[0],
@@ -732,6 +804,7 @@ export async function submitReviewworksProject({
     supabaseUrl,
     supabaseAnonKey,
     accessToken,
+    tenantId,
     "process_instance",
     processInstancePayload
   )
@@ -772,6 +845,7 @@ export async function submitReviewworksProject({
     supabaseUrl,
     supabaseAnonKey,
     accessToken,
+    tenantId,
     "process_decision_payload",
     decisionPayloads
   )
@@ -815,6 +889,7 @@ export async function submitReviewworksProject({
     supabaseUrl,
     supabaseAnonKey,
     accessToken,
+    tenantId,
     "case_event",
     caseEvents
   )
@@ -835,9 +910,10 @@ export async function loadReviewworksProjectStatus(
 ): Promise<ReviewworksProjectStatus> {
   const supabaseUrl = getReviewworksUrl()
   const supabaseAnonKey = getReviewworksAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getReviewworksTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "ReviewWorks credentials are not configured. Set REVIEWWORKS_SUPABASE_URL and REVIEWWORKS_SUPABASE_ANON_KEY."
+      "ReviewWorks credentials are not configured. Set REVIEWWORKS_SUPABASE_URL, REVIEWWORKS_SUPABASE_ANON_KEY, and REVIEWWORKS_TENANT_ID."
     )
   }
 
@@ -845,7 +921,8 @@ export async function loadReviewworksProjectStatus(
     throw new ProjectPersistenceError("ReviewWorks project identifiers must be numeric.")
   }
 
-  const options = { supabaseUrl, supabaseAnonKey }
+  const options = { supabaseUrl, supabaseAnonKey, tenantId }
+  const complexReviewProcessModelId = await resolveComplexReviewProcessModelId(options)
   const projectRows = await fetchReviewworksList<ReviewworksProjectRow>(
     options,
     "/rest/v1/project",
@@ -869,11 +946,13 @@ export async function loadReviewworksProjectStatus(
         "id,parent_project_id,description,last_updated,created_at,process_model,status,stage,other"
       )
       endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
-      endpoint.searchParams.set("process_model", `eq.${COMPLEX_REVIEW_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.set("process_model", `eq.${complexReviewProcessModelId}`)
     }
   )
 
-  const complexReviewProcesses = processRows.filter((row) => isComplexReviewProcess(row))
+  const complexReviewProcesses = processRows.filter((row) =>
+    isComplexReviewProcess(row, complexReviewProcessModelId)
+  )
   let complexReviewProcess: ProjectProcessSummary | undefined
 
   if (complexReviewProcesses.length > 0) {
@@ -913,9 +992,10 @@ export async function updateReviewworksProject({
 }): Promise<void> {
   const supabaseUrl = getReviewworksUrl()
   const supabaseAnonKey = getReviewworksAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getReviewworksTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "ReviewWorks credentials are not configured. Set REVIEWWORKS_SUPABASE_URL and REVIEWWORKS_SUPABASE_ANON_KEY."
+      "ReviewWorks credentials are not configured. Set REVIEWWORKS_SUPABASE_URL, REVIEWWORKS_SUPABASE_ANON_KEY, and REVIEWWORKS_TENANT_ID."
     )
   }
 
@@ -928,7 +1008,11 @@ export async function updateReviewworksProject({
 
   const payload = buildReviewworksProjectPayload(formData, userId)
 
-  const response = await fetch(`${supabaseUrl}/rest/v1/project?id=eq.${numericId}`, {
+  const endpoint = new URL("/rest/v1/project", supabaseUrl)
+  endpoint.searchParams.set("id", `eq.${numericId}`)
+  endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+
+  const response = await fetch(endpoint.toString(), {
     method: "PATCH",
     headers: {
       apikey: supabaseAnonKey,
@@ -980,13 +1064,17 @@ function dayKeyFromMillisLocal(millis: number): string {
 export async function loadComplexReviewAnalytics(): Promise<ComplexReviewAnalyticsPoint[]> {
   const supabaseUrl = getReviewworksUrl()
   const supabaseAnonKey = getReviewworksAnonKey()
+  const tenantId = getReviewworksTenantId()
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn("[analytics] ReviewWorks credentials not configured")
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
+    console.warn(
+      "[analytics] ReviewWorks credentials not configured (requires URL, anon key, and tenant id)"
+    )
     return []
   }
 
-  const options = { supabaseUrl, supabaseAnonKey }
+  const options = { supabaseUrl, supabaseAnonKey, tenantId }
+  const complexReviewProcessModelId = await resolveComplexReviewProcessModelId(options)
 
   try {
     // Load all Complex Review process instances
@@ -998,7 +1086,7 @@ export async function loadComplexReviewAnalytics(): Promise<ComplexReviewAnalyti
           "select",
           "id,created_at,last_updated,process_model,status"
         )
-        endpoint.searchParams.set("process_model", `eq.${COMPLEX_REVIEW_PROCESS_MODEL_ID}`)
+        endpoint.searchParams.set("process_model", `eq.${complexReviewProcessModelId}`)
       }
     )
 
@@ -1158,7 +1246,8 @@ export async function loadComplexReviewProcessesForProjects(
 ): Promise<Map<number, ProjectProcessSummary[]>> {
   const supabaseUrl = getReviewworksUrl()
   const supabaseAnonKey = getReviewworksAnonKey()
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const tenantId = getReviewworksTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     return new Map()
   }
 
@@ -1183,7 +1272,8 @@ export async function loadComplexReviewProcessesForProjects(
   }
 
   try {
-    const options = { supabaseUrl, supabaseAnonKey }
+    const options = { supabaseUrl, supabaseAnonKey, tenantId }
+    const complexReviewProcessModelId = await resolveComplexReviewProcessModelId(options)
     const titleFilters = uniqueTitles.map((title) => `title.ilike.${quotePostgrestValue(title)}`)
 
     const reviewworksProjects = await fetchReviewworksList<ReviewworksProjectRow>(
@@ -1241,11 +1331,13 @@ export async function loadComplexReviewProcessesForProjects(
           "id,parent_project_id,description,last_updated,created_at,process_model,status"
         )
         endpoint.searchParams.set("parent_project_id", `in.(${reviewworksProjectIds.join(",")})`)
-        endpoint.searchParams.set("process_model", `eq.${COMPLEX_REVIEW_PROCESS_MODEL_ID}`)
+        endpoint.searchParams.set("process_model", `eq.${complexReviewProcessModelId}`)
       }
     )
 
-    const complexReviewProcesses = processRows.filter((row) => isComplexReviewProcess(row))
+    const complexReviewProcesses = processRows.filter((row) =>
+      isComplexReviewProcess(row, complexReviewProcessModelId)
+    )
     const processIds = complexReviewProcesses
       .map((row) => parseNumericId(row.id))
       .filter((id): id is number => typeof id === "number")

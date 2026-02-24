@@ -2,10 +2,13 @@ interface CopilotRuntimeConfig {
   runtimeUrl?: string | null
   supabaseUrl?: string | null
   supabaseAnonKey?: string | null
+  supabaseTenantId?: string | null
   permitflowUrl?: string | null
   permitflowAnonKey?: string | null
+  permitflowTenantId?: string | null
   reviewworksUrl?: string | null
   reviewworksAnonKey?: string | null
+  reviewworksTenantId?: string | null
 }
 
 declare global {
@@ -56,6 +59,15 @@ export function getSupabaseAnonKey(): string | undefined {
   )
 }
 
+export function getSupabaseTenantId(): string | undefined {
+  return (
+    normalize(envVars.VITE_SUPABASE_TENANT_ID) ??
+    normalize(envVars.SUPABASE_TENANT_ID) ??
+    normalize(envVars.NEXT_PUBLIC_SUPABASE_TENANT_ID) ??
+    normalize(readRuntimeConfigFromWindow()?.supabaseTenantId ?? undefined)
+  )
+}
+
 export function getPermitflowUrl(): string | undefined {
   return (
     normalize(envVars.PERMITFLOW_SUPABASE_URL) ??
@@ -72,6 +84,14 @@ export function getPermitflowAnonKey(): string | undefined {
   )
 }
 
+export function getPermitflowTenantId(): string | undefined {
+  return (
+    normalize(envVars.PERMITFLOW_TENANT_ID) ??
+    normalize(envVars.NEXT_PUBLIC_PERMITFLOW_TENANT_ID) ??
+    normalize(readRuntimeConfigFromWindow()?.permitflowTenantId ?? undefined)
+  )
+}
+
 export function getReviewworksUrl(): string | undefined {
   return (
     normalize(envVars.REVIEWWORKS_SUPABASE_URL) ??
@@ -85,5 +105,13 @@ export function getReviewworksAnonKey(): string | undefined {
     normalize(envVars.REVIEWWORKS_SUPABASE_ANON_KEY) ??
     normalize(envVars.NEXT_PUBLIC_REVIEWWORKS_SUPABASE_ANON_KEY) ??
     normalize(readRuntimeConfigFromWindow()?.reviewworksAnonKey ?? undefined)
+  )
+}
+
+export function getReviewworksTenantId(): string | undefined {
+  return (
+    normalize(envVars.REVIEWWORKS_TENANT_ID) ??
+    normalize(envVars.NEXT_PUBLIC_REVIEWWORKS_TENANT_ID) ??
+    normalize(readRuntimeConfigFromWindow()?.reviewworksTenantId ?? undefined)
   )
 }

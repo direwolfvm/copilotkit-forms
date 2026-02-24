@@ -35,6 +35,14 @@ function resolveSupabaseAnonKey() {
   );
 }
 
+function resolveSupabaseTenantId() {
+  return (
+    normalizeEnvValue(process.env.VITE_SUPABASE_TENANT_ID) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_TENANT_ID) ??
+    normalizeEnvValue(process.env.SUPABASE_TENANT_ID)
+  );
+}
+
 function resolvePermitflowUrl() {
   return (
     normalizeEnvValue(process.env.VITE_PERMITFLOW_SUPABASE_URL) ??
@@ -51,6 +59,14 @@ function resolvePermitflowAnonKey() {
   );
 }
 
+function resolvePermitflowTenantId() {
+  return (
+    normalizeEnvValue(process.env.VITE_PERMITFLOW_TENANT_ID) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_PERMITFLOW_TENANT_ID) ??
+    normalizeEnvValue(process.env.PERMITFLOW_TENANT_ID)
+  );
+}
+
 function resolveReviewworksUrl() {
   return (
     normalizeEnvValue(process.env.VITE_REVIEWWORKS_SUPABASE_URL) ??
@@ -64,6 +80,14 @@ function resolveReviewworksAnonKey() {
     normalizeEnvValue(process.env.VITE_REVIEWWORKS_SUPABASE_ANON_KEY) ??
     normalizeEnvValue(process.env.NEXT_PUBLIC_REVIEWWORKS_SUPABASE_ANON_KEY) ??
     normalizeEnvValue(process.env.REVIEWWORKS_SUPABASE_ANON_KEY)
+  );
+}
+
+function resolveReviewworksTenantId() {
+  return (
+    normalizeEnvValue(process.env.VITE_REVIEWWORKS_TENANT_ID) ??
+    normalizeEnvValue(process.env.NEXT_PUBLIC_REVIEWWORKS_TENANT_ID) ??
+    normalizeEnvValue(process.env.REVIEWWORKS_TENANT_ID)
   );
 }
 
@@ -788,6 +812,10 @@ app.get("/env.js", (req, res) => {
   if (supabaseAnonKey) {
     config.supabaseAnonKey = supabaseAnonKey;
   }
+  const supabaseTenantId = resolveSupabaseTenantId();
+  if (supabaseTenantId) {
+    config.supabaseTenantId = supabaseTenantId;
+  }
 
   const permitflowUrl = resolvePermitflowUrl();
   if (permitflowUrl) {
@@ -798,6 +826,10 @@ app.get("/env.js", (req, res) => {
   if (permitflowAnonKey) {
     config.permitflowAnonKey = permitflowAnonKey;
   }
+  const permitflowTenantId = resolvePermitflowTenantId();
+  if (permitflowTenantId) {
+    config.permitflowTenantId = permitflowTenantId;
+  }
 
   const reviewworksUrl = resolveReviewworksUrl();
   if (reviewworksUrl) {
@@ -807,6 +839,10 @@ app.get("/env.js", (req, res) => {
   const reviewworksAnonKey = resolveReviewworksAnonKey();
   if (reviewworksAnonKey) {
     config.reviewworksAnonKey = reviewworksAnonKey;
+  }
+  const reviewworksTenantId = resolveReviewworksTenantId();
+  if (reviewworksTenantId) {
+    config.reviewworksTenantId = reviewworksTenantId;
   }
 
   res.setHeader("Cache-Control", "no-store");
