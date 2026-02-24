@@ -114,6 +114,75 @@ const SUPPORTED_DOCUMENT_EXTENSION_SET = new Set<SupportedDocumentExtension>(
 )
 
 const PORTAL_TOUR_STORAGE_KEY = "portalSiteTourComplete"
+type SponsorContactFieldKey = keyof ProjectContact
+type CopilotProjectFieldTarget = SimpleProjectField | `sponsor_contact.${SponsorContactFieldKey}`
+
+const COPILOT_PROJECT_FIELD_ALIASES: Record<string, CopilotProjectFieldTarget> = {
+  project_identifier: "id",
+  project_id: "id",
+  project_title: "title",
+  project_name: "title",
+  summary: "description",
+  project_summary: "description",
+  project_narrative: "description",
+  narrative: "description",
+  leadagency: "lead_agency",
+  lead_agency_name: "lead_agency",
+  leadAgency: "lead_agency",
+  participating_agency: "participating_agencies",
+  participating_agency_names: "participating_agencies",
+  cooperating_agencies: "participating_agencies",
+  sponsor_name: "sponsor",
+  sponsor_org: "sponsor",
+  applicant_name: "sponsor",
+  funding_summary: "funding",
+  location: "location_text",
+  project_location: "location_text",
+  location_description: "location_text",
+  latitude: "location_lat",
+  lat: "location_lat",
+  longitude: "location_lon",
+  lon: "location_lon",
+  lng: "location_lon",
+  geojson: "location_object",
+  geometry: "location_object",
+  categorical_exclusion: "nepa_categorical_exclusion_code",
+  categorical_exclusion_code: "nepa_categorical_exclusion_code",
+  conformance_conditions: "nepa_conformance_conditions",
+  extraordinary_circumstances: "nepa_extraordinary_circumstances",
+  environmental_narrative: "nepa_extraordinary_circumstances",
+  notes: "other",
+  sponsor_contact_name: "sponsor_contact.name",
+  contact_name: "sponsor_contact.name",
+  sponsor_contact_organization: "sponsor_contact.organization",
+  contact_organization: "sponsor_contact.organization",
+  sponsor_contact_email: "sponsor_contact.email",
+  contact_email: "sponsor_contact.email",
+  sponsor_contact_phone: "sponsor_contact.phone",
+  contact_phone: "sponsor_contact.phone"
+}
+
+function normalizeCopilotProjectFieldTarget(rawKey: string): CopilotProjectFieldTarget | undefined {
+  const trimmed = rawKey.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const normalized = trimmed
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_")
+    .replace(/\./g, "_")
+  const aliasTarget = COPILOT_PROJECT_FIELD_ALIASES[normalized]
+  if (aliasTarget) {
+    return aliasTarget
+  }
+  if (normalized.startsWith("sponsor_contact_")) {
+    const suffix = normalized.slice("sponsor_contact_".length) as SponsorContactFieldKey
+    if (suffix === "name" || suffix === "organization" || suffix === "email" || suffix === "phone") {
+      return `sponsor_contact.${suffix}`
+    }
+  }
+  return trimmed as CopilotProjectFieldTarget
+}
 
 type SupportedDocumentExtension = (typeof SUPPORTED_DOCUMENT_EXTENSIONS)[number]
 type DocumentUploadStatus = { type: "success" | "error"; message: string }
@@ -1342,6 +1411,28 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     }
   }
 
+  const copilotProjectUpdateAttributes = useMemo(
+    () => [
+      { name: "id", type: "string" as const, description: "Project identifier (8 digits). Usually auto-generated; only set if user explicitly provides one.", required: false },
+      { name: "title", type: "string" as const, description: "Project title (required).", required: false },
+      { name: "description", type: "string" as const, description: "Project description / narrative (required).", required: false },
+      { name: "sector", type: "string" as const, description: "Sector category.", required: false },
+      { name: "lead_agency", type: "string" as const, description: "Lead agency (required).", required: false },
+      { name: "participating_agencies", type: "string" as const, description: "Comma-separated participating agencies.", required: false },
+      { name: "sponsor", type: "string" as const, description: "Project sponsor / applicant organization.", required: false },
+      { name: "funding", type: "string" as const, description: "Funding summary.", required: false },
+      { name: "location_text", type: "string" as const, description: "Location description/address/region narrative.", required: false },
+      { name: "location_lat", type: "number" as const, description: "Project centroid latitude.", required: false },
+      { name: "location_lon", type: "number" as const, description: "Project centroid longitude.", required: false },
+      { name: "location_object", type: "string" as const, description: "GeoJSON geometry string.", required: false },
+      { name: "nepa_categorical_exclusion_code", type: "string" as const, description: "Categorical exclusion determination narrative.", required: false },
+      { name: "nepa_conformance_conditions", type: "string" as const, description: "Conditions for conformance.", required: false },
+      { name: "nepa_extraordinary_circumstances", type: "string" as const, description: "Environmental/extraordinary circumstances narrative.", required: false },
+      { name: "other", type: "string" as const, description: "Additional notes.", required: false }
+    ],
+    []
+  )
+
   useCopilotReadable(
     {
       description: "Human-readable project summary",
@@ -1760,7 +1851,8 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
           name: "updates",
           type: "object",
           description:
-            "Project field values to merge into the form. Keys should be CEQ project field IDs (for example: title, project_identifier, sponsor_name, lead_agency, location_text). Provide only changed fields."
+            "Project field values to merge into the form. Prefer CEQ field IDs (title, lead_agency, description, sponsor, location_text, etc.). Common aliases like project_identifier, sponsor_name, lat/lon, and sponsor_contact_email are also accepted. Provide only changed fields.",
+          attributes: copilotProjectUpdateAttributes
         },
         {
           name: "sponsor_contact",
@@ -1785,12 +1877,44 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       }) => {
         let updateCount = 0
         let contactUpdateCount = 0
+        let remainingRequiredAfterUpdate: string[] = []
+        const appliedKeys = new Set<string>()
+        const ignoredKeys = new Set<string>()
         setFormData((previous) => {
           const next: ProjectFormData = { ...previous }
+          const sponsorContactPatch: Partial<ProjectContact> = {}
           if (updates && typeof updates === "object") {
             for (const [rawKey, rawValue] of Object.entries(updates as Record<string, unknown>)) {
-              const key = rawKey as SimpleProjectField
-              if (!projectFieldDetails.some((field) => field.key === key)) {
+              const target = normalizeCopilotProjectFieldTarget(rawKey)
+              if (!target) {
+                ignoredKeys.add(rawKey)
+                continue
+              }
+
+              if (target.startsWith("sponsor_contact.")) {
+                const contactKey = target.split(".")[1] as keyof ProjectContact
+                if (
+                  contactKey !== "name" &&
+                  contactKey !== "organization" &&
+                  contactKey !== "email" &&
+                  contactKey !== "phone"
+                ) {
+                  ignoredKeys.add(rawKey)
+                  continue
+                }
+                if (rawValue === null || rawValue === "" || rawValue === undefined) {
+                  sponsorContactPatch[contactKey] = undefined
+                } else {
+                  sponsorContactPatch[contactKey] =
+                    typeof rawValue === "string" ? rawValue : String(rawValue)
+                }
+                appliedKeys.add(`${rawKey}->${target}`)
+                continue
+              }
+
+              const key = target as SimpleProjectField
+              if (key !== "id" && !projectFieldDetails.some((field) => field.key === key)) {
+                ignoredKeys.add(rawKey)
                 continue
               }
 
@@ -1799,9 +1923,11 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                 if (shouldDelete) {
                   assignProjectField(next, key, undefined)
                   updateCount += 1
+                  appliedKeys.add(`${rawKey}->${key}`)
                 } else if (typeof rawValue === "number") {
                   assignProjectField(next, key, rawValue as ProjectFormData[SimpleProjectField])
                   updateCount += 1
+                  appliedKeys.add(`${rawKey}->${key}`)
                 } else {
                   const parsed = Number(
                     typeof rawValue === "string" ? rawValue : String(rawValue)
@@ -1809,22 +1935,43 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                   if (!Number.isNaN(parsed)) {
                     assignProjectField(next, key, parsed as ProjectFormData[SimpleProjectField])
                     updateCount += 1
+                    appliedKeys.add(`${rawKey}->${key}`)
+                  } else {
+                    ignoredKeys.add(rawKey)
                   }
                 }
               } else {
                 if (shouldDelete) {
                   assignProjectField(next, key, undefined)
                   updateCount += 1
+                  appliedKeys.add(`${rawKey}->${key}`)
                 } else {
-                  const stringValue =
-                    typeof rawValue === "string"
-                      ? rawValue
-                      : rawValue !== undefined && rawValue !== null
-                        ? String(rawValue)
-                        : undefined
+                  let stringValue: string | undefined
+                  if (Array.isArray(rawValue)) {
+                    stringValue = rawValue
+                      .map((value) =>
+                        typeof value === "string"
+                          ? value.trim()
+                          : value !== undefined && value !== null
+                            ? String(value).trim()
+                            : ""
+                      )
+                      .filter((value) => value.length > 0)
+                      .join(", ")
+                  } else {
+                    stringValue =
+                      typeof rawValue === "string"
+                        ? rawValue
+                        : rawValue !== undefined && rawValue !== null
+                          ? String(rawValue)
+                          : undefined
+                  }
                   if (stringValue !== undefined) {
                     assignProjectField(next, key, stringValue as ProjectFormData[SimpleProjectField])
                     updateCount += 1
+                    appliedKeys.add(`${rawKey}->${key}`)
+                  } else {
+                    ignoredKeys.add(rawKey)
                   }
                 }
               }
@@ -1832,14 +1979,20 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
           }
 
           if (sponsor_contact && typeof sponsor_contact === "object") {
+            Object.assign(sponsorContactPatch, sponsor_contact)
+          }
+
+          if (Object.keys(sponsorContactPatch).length > 0) {
             const mergedContact: ProjectContact = { ...(previous.sponsor_contact ?? {}) }
-            for (const [contactKey, value] of Object.entries(sponsor_contact)) {
+            for (const [contactKey, value] of Object.entries(sponsorContactPatch)) {
               if (value === undefined || value === null || value === "") {
                 delete mergedContact[contactKey as keyof ProjectContact]
                 contactUpdateCount += 1
+                appliedKeys.add(`sponsor_contact.${contactKey}`)
               } else {
                 mergedContact[contactKey as keyof ProjectContact] = value as string
                 contactUpdateCount += 1
+                appliedKeys.add(`sponsor_contact.${contactKey}`)
               }
             }
             if (Object.keys(mergedContact).length > 0) {
@@ -1849,12 +2002,37 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             }
           }
 
-          return applyGeneratedProjectId(next, previous.id)
+          const finalized = applyGeneratedProjectId(next, previous.id)
+          remainingRequiredAfterUpdate = projectRequiredFields.filter((field) => {
+            const value = finalized[field]
+            return (
+              value === undefined ||
+              value === null ||
+              (typeof value === "string" && value.trim().length === 0)
+            )
+          })
+          return finalized
         })
-        return `Updated project form (${updateCount} field changes, ${contactUpdateCount} sponsor contact changes).`
+        const parts = [
+          `Updated project form (${updateCount} field changes, ${contactUpdateCount} sponsor contact changes).`
+        ]
+        if (appliedKeys.size > 0) {
+          parts.push(`Applied keys: ${Array.from(appliedKeys).slice(0, 12).join(", ")}.`)
+        }
+        if (ignoredKeys.size > 0) {
+          parts.push(
+            `Ignored keys: ${Array.from(ignoredKeys).slice(0, 10).join(", ")}. Use CEQ field IDs like title, lead_agency, description, sponsor, location_text.`
+          )
+        }
+        if (remainingRequiredAfterUpdate.length > 0) {
+          parts.push(`Required fields still missing: ${remainingRequiredAfterUpdate.join(", ")}.`)
+        } else {
+          parts.push("All required project fields are present.")
+        }
+        return parts.join(" ")
       }
     },
-    [setFormData]
+    [copilotProjectUpdateAttributes, projectRequiredFields, setFormData]
   )
 
   useCopilotAction(
@@ -1942,8 +2120,9 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     () =>
       [
         "You are a permitting domain expert helping complete the CEQ Project entity form.",
-        "Use the updateProjectForm action whenever you can fill in or revise structured fields.",
-        "Prioritize title, project_identifier, sponsor_name, lead_agency, participating_agencies, location_text, and concise project narrative fields when the user provides enough information.",
+        "Use the updateProjectForm action whenever you can fill in or revise structured fields. Prefer exact CEQ keys: title, lead_agency, description, sponsor, participating_agencies, funding, location_text, location_lat, location_lon, and the NEPA narrative fields.",
+        "If the user gives sponsor contact details, set sponsor_contact (or use aliases like sponsor_contact_email / sponsor_contact_phone).",
+        "Prioritize required fields first: title, lead_agency, description. Then fill location and NEPA sections when details are available.",
         "Use addPermittingChecklistItems to maintain the permitting checklist. IMPORTANT: When adding permits, always use the permitId from the federal permit inventory (provided in context) instead of just the label. This ensures proper linking to permit information pages. For example, use permitId='section-404-clean-water-act' for CWA Section 404 permits.",
         "Use resetProjectForm when the user asks to start over."
       ].join("\n"),
