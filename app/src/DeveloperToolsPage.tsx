@@ -199,7 +199,7 @@ function DeveloperToolsContent({ hasCopilotConfiguration }: DeveloperToolsConten
       value: knowledgeBase,
       available: hasCopilotConfiguration ? "enabled" : "disabled",
       convert: (_: unknown, sections: SectionDoc[]) =>
-        sections
+        (Array.isArray(sections) ? sections : [])
           .map((section: SectionDoc) => {
             const endpointLines = section.endpoints
               .map((endpoint: EndpointDoc) => {
