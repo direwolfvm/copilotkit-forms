@@ -56,6 +56,8 @@ const BASIC_PERMIT_PROCESS_MODEL_TITLE = "Basic Permit"
 const TENANT_ID_COLUMN = "tenant_id"
 const permitflowProcessModelIdCache = new Map<string, number>()
 const permitflowDecisionElementIdCache = new Map<string, { auth: number; projectInfo: number; sf299: number }>()
+const PORTAL_SOURCE_KEY = "_project_portal"
+const PORTAL_SOURCE_ID_KEY = "source_project_id"
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -211,6 +213,38 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(entries) as T
 }
 
+function normalizeObjectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined
+}
+
+function extractPortalSourceProjectId(other: unknown): number | undefined {
+  const otherRecord = normalizeObjectRecord(other)
+  if (!otherRecord) {
+    return undefined
+  }
+
+  const directSourceId = parseNumericId(otherRecord[PORTAL_SOURCE_ID_KEY])
+  if (typeof directSourceId === "number") {
+    return directSourceId
+  }
+
+  const nestedPortalSource = normalizeObjectRecord(otherRecord[PORTAL_SOURCE_KEY])
+  const nestedSourceId = parseNumericId(nestedPortalSource?.[PORTAL_SOURCE_ID_KEY])
+  if (typeof nestedSourceId === "number") {
+    return nestedSourceId
+  }
+
+  const migration = normalizeObjectRecord(otherRecord._permitflow_migration)
+  const migrationSourceId = parseNumericId(migration?.source_id)
+  if (typeof migrationSourceId === "number") {
+    return migrationSourceId
+  }
+
+  return undefined
+}
+
 async function resolveBasicPermitDecisionElementIds(
   options: PermitflowFetchOptions,
   processModelId: number
@@ -251,22 +285,30 @@ async function resolveBasicPermitDecisionElementIds(
 
 function buildPermitflowProjectPayload(
   formData: ProjectFormData,
-  userId?: string
+  userId?: string,
+  portalProjectId?: number,
+  existingOther?: unknown
 ): Record<string, unknown> {
-  const normalizedId = normalizeString(formData.id)
-  const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
   const timestamp = new Date().toISOString()
+  const existingOtherRecord = normalizeObjectRecord(existingOther) ?? {}
+  const existingPortalSource = normalizeObjectRecord(existingOtherRecord[PORTAL_SOURCE_KEY]) ?? {}
 
   const other = stripUndefined({
+    ...existingOtherRecord,
     nepa_categorical_exclusion_code: normalizeString(formData.nepa_categorical_exclusion_code),
     nepa_conformance_conditions: normalizeString(formData.nepa_conformance_conditions),
     nepa_extraordinary_circumstances: normalizeString(formData.nepa_extraordinary_circumstances),
     additional_notes: normalizeString(formData.other),
-    applicant_user_id: normalizeString(userId)
+    applicant_user_id: normalizeString(userId),
+    [PORTAL_SOURCE_KEY]:
+      typeof portalProjectId === "number"
+        ? { ...existingPortalSource, [PORTAL_SOURCE_ID_KEY]: portalProjectId }
+        : Object.keys(existingPortalSource).length > 0
+          ? existingPortalSource
+          : undefined
   })
 
   return stripUndefined({
-    id: Number.isFinite(numericId) ? numericId : undefined,
     title: normalizeString(formData.title),
     description: normalizeString(formData.description),
     sector: normalizeString(formData.sector),
@@ -328,6 +370,56 @@ async function fetchPermitflowList<T>(
   }
 
   return payload as T[]
+}
+
+async function resolvePermitflowProjectByPortalProjectId(
+  options: PermitflowFetchOptions,
+  portalProjectId: number
+): Promise<PermitflowProjectRow | undefined> {
+  if (!Number.isFinite(portalProjectId)) {
+    return undefined
+  }
+
+  const linkedRows = await fetchPermitflowList<PermitflowProjectRow>(
+    options,
+    "/rest/v1/project",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,title,last_updated,other")
+      endpoint.searchParams.set(
+        `other->${PORTAL_SOURCE_KEY}->>${PORTAL_SOURCE_ID_KEY}`,
+        `eq.${portalProjectId}`
+      )
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+  if (linkedRows.length > 0) {
+    return linkedRows[0]
+  }
+
+  const migrationRows = await fetchPermitflowList<PermitflowProjectRow>(
+    options,
+    "/rest/v1/project",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,title,last_updated,other")
+      endpoint.searchParams.set("other->_permitflow_migration->>source_id", `eq.${portalProjectId}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+  if (migrationRows.length > 0) {
+    return migrationRows[0]
+  }
+
+  // Legacy fallback where project IDs were reused across systems.
+  const legacyRows = await fetchPermitflowList<PermitflowProjectRow>(
+    options,
+    "/rest/v1/project",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,title,last_updated,other")
+      endpoint.searchParams.set("id", `eq.${portalProjectId}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+  return legacyRows[0]
 }
 
 function applyTenantFilter(endpoint: URL, tenantId: string) {
@@ -702,6 +794,48 @@ type PermitflowSubmitResult = {
   processInstanceId: number
 }
 
+async function patchPermitflowProjectById({
+  supabaseUrl,
+  supabaseAnonKey,
+  tenantId,
+  accessToken,
+  projectId,
+  payload
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  tenantId: string
+  accessToken: string
+  projectId: number
+  payload: Record<string, unknown>
+}): Promise<void> {
+  const endpoint = new URL("/rest/v1/project", supabaseUrl)
+  endpoint.searchParams.set("id", `eq.${projectId}`)
+  endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+
+  const response = await fetch(endpoint.toString(), {
+    method: "PATCH",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow update failed (${response.status}): ${errorDetail}`
+        : `PermitFlow update failed (${response.status}).`
+    )
+  }
+}
+
 async function createPermitflowRecord<T>(
   supabaseUrl: string,
   supabaseAnonKey: string,
@@ -810,21 +944,43 @@ export async function submitPermitflowProject({
     options,
     basicPermitProcessModelId
   )
+  const portalProjectId = parseNumericId(formData.id)
+  if (typeof portalProjectId !== "number") {
+    throw new ProjectPersistenceError("A numeric portal project identifier is required.")
+  }
 
-  // Step 2: Create or update project record (applicant auth is stored in project.other)
-  const projectPayload = buildPermitflowProjectPayload(formData, userId)
-  const projectResult = await createPermitflowRecord<{ id: number }>(
-    supabaseUrl,
-    supabaseAnonKey,
-    accessToken,
-    tenantId,
-    "project",
-    projectPayload,
-    { upsert: true }
-  )
-  const projectId = parseNumericId(projectResult.id)
-  if (typeof projectId !== "number") {
-    throw new ProjectPersistenceError("PermitFlow project creation did not return a valid ID.")
+  // Step 2: Create or update tenant-local project copy (never overwrite portal project PKs).
+  const existingProject = await resolvePermitflowProjectByPortalProjectId(options, portalProjectId)
+  let permitflowProjectId = parseNumericId(existingProject?.id)
+  if (typeof permitflowProjectId === "number") {
+    const projectPayload = buildPermitflowProjectPayload(
+      formData,
+      userId,
+      portalProjectId,
+      existingProject?.other
+    )
+    await patchPermitflowProjectById({
+      supabaseUrl,
+      supabaseAnonKey,
+      tenantId,
+      accessToken,
+      projectId: permitflowProjectId,
+      payload: projectPayload
+    })
+  } else {
+    const projectPayload = buildPermitflowProjectPayload(formData, userId, portalProjectId)
+    const projectResult = await createPermitflowRecord<{ id: number }>(
+      supabaseUrl,
+      supabaseAnonKey,
+      accessToken,
+      tenantId,
+      "project",
+      projectPayload
+    )
+    permitflowProjectId = parseNumericId(projectResult.id)
+    if (typeof permitflowProjectId !== "number") {
+      throw new ProjectPersistenceError("PermitFlow project creation did not return a valid ID.")
+    }
   }
 
   // Check if a Basic Permit process_instance already exists for this project
@@ -833,7 +989,7 @@ export async function submitPermitflowProject({
     "/rest/v1/process_instance",
     (endpoint) => {
       endpoint.searchParams.set("select", "id")
-      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+      endpoint.searchParams.set("parent_project_id", `eq.${permitflowProjectId}`)
       endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
       endpoint.searchParams.set("limit", "1")
     }
@@ -843,13 +999,13 @@ export async function submitPermitflowProject({
     // Process instance already exists, return early
     const existingId = parseNumericId(existingProcesses[0].id)
     if (typeof existingId === "number") {
-      return { projectId, processInstanceId: existingId }
+      return { projectId: permitflowProjectId, processInstanceId: existingId }
     }
   }
 
   // Step 3: Create process_instance record
   const processInstancePayload = {
-    parent_project_id: projectId,
+    parent_project_id: permitflowProjectId,
     process_model: basicPermitProcessModelId,
     status: "draft",
     start_date: timestamp.split("T")[0]
@@ -874,7 +1030,7 @@ export async function submitPermitflowProject({
     {
       process_decision_element: decisionElementIds.auth,
       process: processInstanceId,
-      project: projectId,
+      project: permitflowProjectId,
       evaluation_data: {
         provider: "project-portal",
         user_id: userId,
@@ -886,7 +1042,7 @@ export async function submitPermitflowProject({
     {
       process_decision_element: decisionElementIds.projectInfo,
       process: processInstanceId,
-      project: projectId,
+      project: permitflowProjectId,
       evaluation_data: {
         title: normalizeString(formData.title),
         description: normalizeString(formData.description),
@@ -898,7 +1054,7 @@ export async function submitPermitflowProject({
     {
       process_decision_element: decisionElementIds.sf299,
       process: processInstanceId,
-      project: projectId,
+      project: permitflowProjectId,
       evaluation_data: {}
     }
   ]
@@ -950,7 +1106,7 @@ export async function submitPermitflowProject({
     caseEvents
   )
 
-  return { projectId, processInstanceId }
+  return { projectId: permitflowProjectId, processInstanceId }
 }
 
 export type PermitflowProjectStatus = {
@@ -979,31 +1135,8 @@ export async function loadPermitflowProjectStatus(
 
   const options = { supabaseUrl, supabaseAnonKey, tenantId }
   const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
-  const projectRows = await fetchPermitflowList<PermitflowProjectRow>(
-    options,
-    "/rest/v1/project",
-    (endpoint) => {
-      endpoint.searchParams.set("select", "id,title,last_updated")
-      endpoint.searchParams.set("id", `eq.${projectId}`)
-    }
-  )
-
-  let resolvedProjectRow = projectRows[0]
-  let resolvedPermitflowProjectId = parseNumericId(resolvedProjectRow?.id)
-
-  if (!resolvedProjectRow) {
-    const migratedRows = await fetchPermitflowList<PermitflowProjectRow>(
-      options,
-      "/rest/v1/project",
-      (endpoint) => {
-        endpoint.searchParams.set("select", "id,title,last_updated,other")
-        endpoint.searchParams.set("other->_permitflow_migration->>source_id", `eq.${projectId}`)
-        endpoint.searchParams.set("limit", "1")
-      }
-    )
-    resolvedProjectRow = migratedRows[0]
-    resolvedPermitflowProjectId = parseNumericId(resolvedProjectRow?.id)
-  }
+  const resolvedProjectRow = await resolvePermitflowProjectByPortalProjectId(options, projectId)
+  const resolvedPermitflowProjectId = parseNumericId(resolvedProjectRow?.id)
 
   if (!resolvedProjectRow || typeof resolvedPermitflowProjectId !== "number") {
     return { exists: false, projectId }
@@ -1075,39 +1208,35 @@ export async function updatePermitflowProject({
   }
 
   const normalizedId = normalizeString(formData.id)
-  const numericId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
+  const portalProjectId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
 
-  if (!numericId || Number.isNaN(numericId) || !Number.isFinite(numericId)) {
+  if (!portalProjectId || Number.isNaN(portalProjectId) || !Number.isFinite(portalProjectId)) {
     throw new ProjectPersistenceError("A numeric project identifier is required to update PermitFlow.")
   }
 
-  const payload = buildPermitflowProjectPayload(formData, userId)
-
-  const endpoint = new URL("/rest/v1/project", supabaseUrl)
-  endpoint.searchParams.set("id", `eq.${numericId}`)
-  endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
-
-  const response = await fetch(endpoint.toString(), {
-    method: "PATCH",
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-      "content-type": "application/json",
-      Prefer: "return=minimal"
-    },
-    body: JSON.stringify(payload)
-  })
-
-  const responseText = await response.text()
-
-  if (!response.ok) {
-    const errorDetail = extractErrorDetail(responseText)
+  const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
+  const existingProject = await resolvePermitflowProjectByPortalProjectId(options, portalProjectId)
+  const permitflowProjectId = parseNumericId(existingProject?.id)
+  if (typeof permitflowProjectId !== "number") {
     throw new ProjectPersistenceError(
-      errorDetail
-        ? `PermitFlow update failed (${response.status}): ${errorDetail}`
-        : `PermitFlow update failed (${response.status}).`
+      `PermitFlow project for portal project ${portalProjectId} was not found. Submit it first.`
     )
   }
+
+  const payload = buildPermitflowProjectPayload(
+    formData,
+    userId,
+    portalProjectId,
+    existingProject?.other
+  )
+  await patchPermitflowProjectById({
+    supabaseUrl,
+    supabaseAnonKey,
+    tenantId,
+    accessToken,
+    projectId: permitflowProjectId,
+    payload
+  })
 }
 
 export async function loadBasicPermitProcessesForProjects(
@@ -1149,10 +1278,18 @@ export async function loadBasicPermitProcessesForProjects(
       options,
       "/rest/v1/project",
       (endpoint) => {
-        endpoint.searchParams.set("select", "id,title")
+        endpoint.searchParams.set("select", "id,title,other")
         endpoint.searchParams.set("or", `(${titleFilters.join(",")})`)
       }
     )
+
+    const permitflowProjectsBySourceId = new Map<number, PermitflowProjectRow>()
+    for (const row of permitflowProjects) {
+      const sourceProjectId = extractPortalSourceProjectId(row.other)
+      if (typeof sourceProjectId === "number") {
+        permitflowProjectsBySourceId.set(sourceProjectId, row)
+      }
+    }
 
     const permitflowProjectsByTitle = new Map<string, PermitflowProjectRow[]>()
     for (const row of permitflowProjects) {
@@ -1168,10 +1305,13 @@ export async function loadBasicPermitProcessesForProjects(
     const portalToPermitflowProjectId = new Map<number, number>()
     for (const entry of projectTitleEntries) {
       const normalizedTitle = entry.title?.toLowerCase()
-      if (!normalizedTitle) {
-        continue
-      }
-      const matchedProjects = permitflowProjectsByTitle.get(normalizedTitle)
+      const directlyLinkedProject = permitflowProjectsBySourceId.get(entry.id)
+      const matchedProjects =
+        directlyLinkedProject || !normalizedTitle
+          ? directlyLinkedProject
+            ? [directlyLinkedProject]
+            : undefined
+          : permitflowProjectsByTitle.get(normalizedTitle)
       if (!matchedProjects || matchedProjects.length === 0) {
         continue
       }
