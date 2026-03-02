@@ -273,6 +273,7 @@ export default function PermitStartPage() {
 
   const hasExistingPermitflowProject =
     permitflowStatus.status === "success" && permitflowStatus.info.exists
+  const isProjectInformationSubmitted = hasExistingPermitflowProject
 
   const formattedPermitflowTimestamp = useMemo(() => {
     if (permitflowStatus.status !== "success") {
@@ -659,7 +660,7 @@ export default function PermitStartPage() {
                     Project information is complete. Ready to authenticate.
                   </p>
                 )}
-                {customFormIndicator ? (
+                {customFormIndicator && isProjectInformationSubmitted ? (
                   <div className="permit-start-page__custom-form-status" role="status" aria-live="polite">
                     <p>
                       This process includes a custom form ({customFormIndicator.title}, decision element{" "}
@@ -737,21 +738,15 @@ export default function PermitStartPage() {
                 </span>
               ) : null}
             </div>
-            {customFormIndicator ? (
+            {customFormIndicator && isProjectInformationSubmitted ? (
               <div className="permit-start-page__custom-form-actions">
                 <button
                   type="button"
                   className="usa-button usa-button--outline"
                   onClick={() => setCustomFormModalOpen(true)}
-                  disabled={!hasExistingPermitflowProject}
                 >
-                  Open custom form
+                  Complete Additional Steps
                 </button>
-                {!hasExistingPermitflowProject ? (
-                  <span className="permit-start-page__status">
-                    Submit this project first to open the custom form.
-                  </span>
-                ) : null}
               </div>
             ) : null}
           </section>
@@ -843,7 +838,7 @@ function PermitflowCustomFormModal({
   return (
     <div className="process-info-modal__backdrop" role="presentation" onClick={onDismiss}>
       <div
-        className="process-info-modal"
+        className="process-info-modal permit-start-page__custom-form-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="permitflow-custom-form-modal-title"
@@ -886,15 +881,17 @@ function PermitflowCustomFormModal({
                   Authenticate with PermitFlow on the start page to save or submit this form.
                 </div>
               ) : null}
-              <Form
-                schema={schemaForRjsf}
-                uiSchema={uiSchema}
-                formData={formData}
-                validator={validator}
-                onChange={onChange}
-              >
-                <div />
-              </Form>
+              <div className="permit-start-page__custom-form-shell">
+                <Form
+                  schema={schemaForRjsf}
+                  uiSchema={uiSchema}
+                  formData={formData}
+                  validator={validator}
+                  onChange={onChange}
+                >
+                  <div />
+                </Form>
+              </div>
               <div className="permit-start-page__custom-form-footer">
                 <button
                   type="button"
