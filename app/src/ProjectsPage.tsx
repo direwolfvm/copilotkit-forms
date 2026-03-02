@@ -377,12 +377,31 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
 function CaseEventTree({ event }: { event: CaseEventSummary }) {
   const formattedUpdated = useMemo(() => formatTimestamp(event.lastUpdated), [event.lastUpdated])
   const eventLabel = event.name || event.eventType || `Event ${event.id}`
+  const eventData = useMemo(
+    () =>
+      event.data && typeof event.data === "object" && !Array.isArray(event.data)
+        ? (event.data as Record<string, unknown>)
+        : undefined,
+    [event.data]
+  )
+  const eventDescription =
+    event.description ??
+    (typeof eventData?.description === "string" ? eventData.description : undefined)
+  const eventSource = typeof eventData?.source === "string" ? eventData.source : undefined
+  const eventOutcome = typeof eventData?.outcome === "string" ? eventData.outcome : undefined
 
   return (
     <li className="projects-tree__event">
       <div className="projects-tree__event-row">
         <span className="projects-tree__event-title">{eventLabel}</span>
         {formattedUpdated ? <span className="projects-tree__event-date">{formattedUpdated}</span> : null}
+      </div>
+      {eventDescription ? <p className="projects-tree__event-description">{eventDescription}</p> : null}
+      <div className="projects-tree__event-meta">
+        {event.eventType ? <span className="projects-tree__event-chip">Type: {event.eventType}</span> : null}
+        {event.status ? <span className="projects-tree__event-chip">Status: {event.status}</span> : null}
+        {eventSource ? <span className="projects-tree__event-chip">Source: {eventSource}</span> : null}
+        {eventOutcome ? <span className="projects-tree__event-chip">Outcome: {eventOutcome}</span> : null}
       </div>
     </li>
   )

@@ -2981,6 +2981,37 @@
   font-weight: 600;
 }
 
+.permit-start-page__custom-form-status {
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border) 75%);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface) 92%);
+}
+
+.permit-start-page__custom-form-status p {
+  margin: 0;
+}
+
+.permit-start-page__custom-form-status p + p {
+  margin-top: 0.4rem;
+}
+
+.permit-start-page__custom-form-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.permit-start-page__custom-form-footer {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .projects-tree {
   list-style: none;
   margin: 0;
@@ -3237,6 +3268,28 @@
   font-size: 0.9rem;
   color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
   white-space: nowrap;
+}
+
+.projects-tree__event-description {
+  margin: 0.5rem 0 0;
+  color: color-mix(in srgb, var(--color-text-muted) 70%, var(--color-text) 30%);
+}
+
+.projects-tree__event-meta {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.projects-tree__event-chip {
+  font-size: 0.8rem;
+  line-height: 1.2;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent 25%);
+  background: color-mix(in srgb, var(--surface) 88%, white 12%);
+  color: color-mix(in srgb, var(--color-text-muted) 75%, var(--color-text) 25%);
 }
 
 .projects-tree__latest-event {

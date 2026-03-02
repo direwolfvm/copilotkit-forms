@@ -241,6 +241,7 @@ export type ProcessInformation = {
 export type CaseEventSummary = {
   id: number
   name?: string | null
+  description?: string | null
   eventType?: string | null
   status?: string | null
   lastUpdated?: string | null

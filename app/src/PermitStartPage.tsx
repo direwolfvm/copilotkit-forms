@@ -1,15 +1,22 @@
 import { useEffect, useMemo, useState } from "react"
 import type { FormEvent, ReactNode } from "react"
 import { useSearchParams } from "react-router-dom"
+import Form from "@rjsf/core"
+import type { IChangeEvent } from "@rjsf/core"
+import validator from "@rjsf/validator-ajv8"
 
 import "./App.css"
 import { ProcessInformationDetails } from "./components/ProcessInformationDetails"
 import {
   authenticatePermitflowUser,
+  loadPermitflowCustomFormState,
   loadPermitflowProjectStatus,
   loadPermitflowProcessInformation,
+  savePermitflowCustomForm,
+  submitPermitflowCustomFormForApproval,
   submitPermitflowProject,
   updatePermitflowProject,
+  type PermitflowCustomFormState,
   type PermitflowProjectStatus
 } from "./utils/permitflow"
 import {
@@ -50,6 +57,36 @@ type PermitflowStatusState =
   | { status: "success"; info: PermitflowProjectStatus }
   | { status: "error"; message: string }
 
+type CustomFormModalState =
+  | { status: "idle" | "loading" }
+  | { status: "success"; info: PermitflowCustomFormState }
+  | { status: "error"; message: string }
+
+type CustomFormActionState =
+  | { status: "idle" }
+  | { status: "saving" | "submitting" }
+  | { status: "success"; message: string }
+  | { status: "error"; message: string }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function isSf299DecisionElement(candidate: { title: string | null; other: unknown }): boolean {
+  const title = candidate.title?.toLowerCase()
+  const otherRecord = isRecord(candidate.other) ? candidate.other : undefined
+  const formType = typeof otherRecord?.form_type === "string" ? otherRecord.form_type.toLowerCase() : undefined
+  return Boolean(title?.includes("sf-299")) || formType === "sf299"
+}
+
+function hasSchema(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false
+  }
+  const properties = value.properties
+  return isRecord(properties) && Object.keys(properties).length > 0
+}
+
 function normalizeRequiredFieldValue(value: ProjectFormData[keyof ProjectFormData]): boolean {
   if (typeof value === "string") {
     return value.trim().length > 0
@@ -71,6 +108,15 @@ export default function PermitStartPage() {
   const [authEmail, setAuthEmail] = useState("")
   const [authPassword, setAuthPassword] = useState("")
   const [searchParams] = useSearchParams()
+  const [isCustomFormModalOpen, setCustomFormModalOpen] = useState(false)
+  const [customFormState, setCustomFormState] = useState<CustomFormModalState>({ status: "idle" })
+  const [customFormDraft, setCustomFormDraft] = useState<Record<string, unknown>>({})
+  const [customFormSaveState, setCustomFormSaveState] = useState<CustomFormActionState>({
+    status: "idle"
+  })
+  const [customFormSubmitState, setCustomFormSubmitState] = useState<CustomFormActionState>({
+    status: "idle"
+  })
 
   useEffect(() => {
     let isCancelled = false
@@ -249,6 +295,68 @@ export default function PermitStartPage() {
     authState.status === "authenticated" &&
     submitState.status !== "submitting"
 
+  const customFormIndicator = useMemo(() => {
+    if (processState.status !== "success") {
+      return undefined
+    }
+    const withSchema = processState.info.decisionElements.filter((entry) => hasSchema(entry.formData))
+    if (withSchema.length === 0) {
+      return undefined
+    }
+    const selected = withSchema.find((entry) => isSf299DecisionElement(entry)) ?? withSchema[2] ?? withSchema[0]
+    return {
+      title: selected.title ?? "Custom form",
+      decisionElementId: selected.id
+    }
+  }, [processState])
+
+  useEffect(() => {
+    if (projectState.status !== "success") {
+      setCustomFormState({ status: "idle" })
+      setCustomFormDraft({})
+      return
+    }
+
+    if (permitflowStatus.status !== "success" || !permitflowStatus.info.exists) {
+      setCustomFormState({ status: "idle" })
+      setCustomFormDraft({})
+      return
+    }
+
+    const projectIdValue = projectState.formData.id
+    const projectId = projectIdValue ? Number.parseInt(projectIdValue, 10) : Number.NaN
+    if (!Number.isFinite(projectId)) {
+      setCustomFormState({ status: "error", message: "A numeric project ID is required." })
+      return
+    }
+
+    let isCancelled = false
+    setCustomFormState({ status: "loading" })
+    loadPermitflowCustomFormState(projectId)
+      .then((info) => {
+        if (isCancelled) {
+          return
+        }
+        setCustomFormState({ status: "success", info })
+        setCustomFormDraft(info.evaluationData ?? {})
+      })
+      .catch((error) => {
+        if (isCancelled) {
+          return
+        }
+        const message =
+          error instanceof ProjectPersistenceError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : "Unable to load PermitFlow custom form."
+        setCustomFormState({ status: "error", message })
+      })
+    return () => {
+      isCancelled = true
+    }
+  }, [projectState, permitflowStatus])
+
   const handleAuthenticate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const email = authEmail.trim()
@@ -340,6 +448,94 @@ export default function PermitStartPage() {
             ? error.message
             : "Unable to submit the project to PermitFlow."
       setSubmitState({ status: "error", message })
+    }
+  }
+
+  const handleSaveCustomForm = async () => {
+    if (projectState.status !== "success") {
+      setCustomFormSaveState({ status: "error", message: "Project details are not available yet." })
+      return
+    }
+    if (authState.status !== "authenticated") {
+      setCustomFormSaveState({
+        status: "error",
+        message: "Authenticate with PermitFlow before saving the custom form."
+      })
+      return
+    }
+    const projectId = Number.parseInt(projectState.formData.id ?? "", 10)
+    if (!Number.isFinite(projectId)) {
+      setCustomFormSaveState({ status: "error", message: "A numeric project ID is required." })
+      return
+    }
+
+    setCustomFormSaveState({ status: "saving" })
+    setCustomFormSubmitState({ status: "idle" })
+    try {
+      await savePermitflowCustomForm({
+        portalProjectId: projectId,
+        accessToken: authState.accessToken,
+        evaluationData: customFormDraft
+      })
+      setCustomFormSaveState({ status: "success", message: "Custom form saved." })
+    } catch (error) {
+      const message =
+        error instanceof ProjectPersistenceError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Unable to save the custom form."
+      setCustomFormSaveState({ status: "error", message })
+    }
+  }
+
+  const handleSubmitCustomForm = async () => {
+    if (projectState.status !== "success") {
+      setCustomFormSubmitState({
+        status: "error",
+        message: "Project details are not available yet."
+      })
+      return
+    }
+    if (authState.status !== "authenticated") {
+      setCustomFormSubmitState({
+        status: "error",
+        message: "Authenticate with PermitFlow before submitting for approval."
+      })
+      return
+    }
+    const projectId = Number.parseInt(projectState.formData.id ?? "", 10)
+    if (!Number.isFinite(projectId)) {
+      setCustomFormSubmitState({ status: "error", message: "A numeric project ID is required." })
+      return
+    }
+
+    setCustomFormSubmitState({ status: "submitting" })
+    setCustomFormSaveState({ status: "idle" })
+    try {
+      await submitPermitflowCustomFormForApproval({
+        portalProjectId: projectId,
+        accessToken: authState.accessToken,
+        evaluationData: customFormDraft
+      })
+      setCustomFormSubmitState({
+        status: "success",
+        message: "Custom form submitted for approval."
+      })
+      try {
+        const info = await loadPermitflowProjectStatus(projectId)
+        setPermitflowStatus({ status: "success", info })
+      } catch (statusError) {
+        console.warn("Failed to refresh PermitFlow status after custom form submission.", statusError)
+      }
+    } catch (error) {
+      const message =
+        error instanceof ProjectPersistenceError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Unable to submit custom form for approval."
+      setCustomFormSubmitState({ status: "error", message })
     }
   }
 
@@ -463,6 +659,15 @@ export default function PermitStartPage() {
                     Project information is complete. Ready to authenticate.
                   </p>
                 )}
+                {customFormIndicator ? (
+                  <div className="permit-start-page__custom-form-status" role="status" aria-live="polite">
+                    <p>
+                      This process includes a custom form ({customFormIndicator.title}, decision element{" "}
+                      {customFormIndicator.decisionElementId}).
+                    </p>
+                    <p>Complete it after you initiate the PermitFlow project.</p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <form className="permit-start-page__auth" onSubmit={handleAuthenticate}>
@@ -532,10 +737,211 @@ export default function PermitStartPage() {
                 </span>
               ) : null}
             </div>
+            {customFormIndicator ? (
+              <div className="permit-start-page__custom-form-actions">
+                <button
+                  type="button"
+                  className="usa-button usa-button--outline"
+                  onClick={() => setCustomFormModalOpen(true)}
+                  disabled={!hasExistingPermitflowProject}
+                >
+                  Open custom form
+                </button>
+                {!hasExistingPermitflowProject ? (
+                  <span className="permit-start-page__status">
+                    Submit this project first to open the custom form.
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </section>
           <section className="permit-start-page__panel">{content}</section>
         </section>
       </div>
+      {isCustomFormModalOpen ? (
+        <PermitflowCustomFormModal
+          state={customFormState}
+          formData={customFormDraft}
+          isAuthenticated={authState.status === "authenticated"}
+          saveState={customFormSaveState}
+          submitState={customFormSubmitState}
+          onDismiss={() => {
+            setCustomFormModalOpen(false)
+            setCustomFormSaveState({ status: "idle" })
+            setCustomFormSubmitState({ status: "idle" })
+          }}
+          onChange={(event) => {
+            setCustomFormDraft((event.formData as Record<string, unknown>) ?? {})
+          }}
+          onSave={handleSaveCustomForm}
+          onSubmit={handleSubmitCustomForm}
+        />
+      ) : null}
     </article>
+  )
+}
+
+type PermitflowCustomFormModalProps = {
+  state: CustomFormModalState
+  formData: Record<string, unknown>
+  isAuthenticated: boolean
+  saveState: CustomFormActionState
+  submitState: CustomFormActionState
+  onDismiss: () => void
+  onChange: (event: IChangeEvent) => void
+  onSave: () => void
+  onSubmit: () => void
+}
+
+function PermitflowCustomFormModal({
+  state,
+  formData,
+  isAuthenticated,
+  saveState,
+  submitState,
+  onDismiss,
+  onChange,
+  onSave,
+  onSubmit
+}: PermitflowCustomFormModalProps) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        onDismiss()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [onDismiss])
+
+  useEffect(() => {
+    const { body } = document
+    const previousOverflow = body.style.overflow
+    body.style.overflow = "hidden"
+    return () => {
+      body.style.overflow = previousOverflow
+    }
+  }, [])
+
+  const customFormSchema =
+    state.status === "success" && hasSchema(state.info.formSchema)
+      ? state.info.formSchema
+      : undefined
+  const uiSchema =
+    customFormSchema && isRecord(customFormSchema.uiSchema)
+      ? (customFormSchema.uiSchema as Record<string, unknown>)
+      : undefined
+  const schemaForRjsf = customFormSchema
+    ? Object.fromEntries(
+        Object.entries(customFormSchema).filter(([key]) => key !== "uiSchema")
+      )
+    : undefined
+
+  return (
+    <div className="process-info-modal__backdrop" role="presentation" onClick={onDismiss}>
+      <div
+        className="process-info-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="permitflow-custom-form-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="process-info-modal__header">
+          <div>
+            <p className="process-info-modal__eyebrow">Basic permit</p>
+            <h2 id="permitflow-custom-form-modal-title">Custom form</h2>
+          </div>
+          <button
+            type="button"
+            className="process-info-modal__close"
+            onClick={onDismiss}
+            aria-label="Close custom form dialog"
+          >
+            ×
+          </button>
+        </header>
+        <div className="process-info-modal__body">
+          {state.status === "loading" || state.status === "idle" ? (
+            <p className="permit-start-page__status" role="status" aria-live="polite">
+              Loading custom form…
+            </p>
+          ) : null}
+          {state.status === "error" ? (
+            <div className="permit-start-page__error" role="alert">
+              <p>{state.message}</p>
+            </div>
+          ) : null}
+          {state.status === "success" && state.info.exists && schemaForRjsf ? (
+            <>
+              {state.info.decisionElementTitle ? (
+                <p className="permit-start-page__status">
+                  Decision element: {state.info.decisionElementTitle}
+                </p>
+              ) : null}
+              {!isAuthenticated ? (
+                <div className="permit-start-page__warning" role="status">
+                  Authenticate with PermitFlow on the start page to save or submit this form.
+                </div>
+              ) : null}
+              <Form
+                schema={schemaForRjsf}
+                uiSchema={uiSchema}
+                formData={formData}
+                validator={validator}
+                onChange={onChange}
+              >
+                <div />
+              </Form>
+              <div className="permit-start-page__custom-form-footer">
+                <button
+                  type="button"
+                  className="usa-button usa-button--outline"
+                  disabled={!isAuthenticated || saveState.status === "saving" || submitState.status === "submitting"}
+                  onClick={onSave}
+                >
+                  {saveState.status === "saving" ? "Saving…" : "Save form"}
+                </button>
+                <button
+                  type="button"
+                  className="usa-button"
+                  disabled={!isAuthenticated || submitState.status === "submitting" || saveState.status === "saving"}
+                  onClick={onSubmit}
+                >
+                  {submitState.status === "submitting" ? "Submitting…" : "Submit for approval"}
+                </button>
+                {saveState.status === "error" ? (
+                  <span className="permit-start-page__submit-error" role="alert">
+                    {saveState.message}
+                  </span>
+                ) : null}
+                {saveState.status === "success" ? (
+                  <span className="permit-start-page__submit-success" role="status">
+                    {saveState.message}
+                  </span>
+                ) : null}
+                {submitState.status === "error" ? (
+                  <span className="permit-start-page__submit-error" role="alert">
+                    {submitState.message}
+                  </span>
+                ) : null}
+                {submitState.status === "success" ? (
+                  <span className="permit-start-page__submit-success" role="status">
+                    {submitState.message}
+                  </span>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+          {state.status === "success" && (!state.info.exists || !schemaForRjsf) ? (
+            <p className="permit-start-page__status">
+              No custom form schema is currently available for this process.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
   )
 }

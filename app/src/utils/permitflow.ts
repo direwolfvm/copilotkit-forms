@@ -44,10 +44,23 @@ type PermitflowCaseEventRow = {
   id?: number | null
   parent_process_id?: number | null
   name?: string | null
+  description?: string | null
   type?: string | null
+  source?: string | null
+  outcome?: string | null
+  datetime?: string | null
+  occurred_at?: string | null
   status?: string | null
   last_updated?: string | null
   other?: unknown
+}
+
+type PermitflowDecisionPayloadRow = {
+  id?: number | null
+  process_decision_element?: number | null
+  process?: number | null
+  project?: number | null
+  evaluation_data?: unknown
 }
 
 const BASIC_PERMIT_LABEL = "Basic Permit"
@@ -1117,6 +1130,416 @@ export type PermitflowProjectStatus = {
   basicPermitProcess?: ProjectProcessSummary
 }
 
+export type PermitflowCustomFormState = {
+  exists: boolean
+  projectId?: number
+  processInstanceId?: number
+  decisionElementId?: number
+  decisionElementTitle?: string
+  formSchema?: unknown
+  payloadId?: number
+  evaluationData?: Record<string, unknown>
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function hasRenderableFormData(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false
+  }
+  const properties = value.properties
+  return isRecord(properties) && Object.keys(properties).length > 0
+}
+
+function isSf299DecisionElement(element: DecisionElementRecord): boolean {
+  const title = normalizeTitle(element.title)?.toLowerCase()
+  const other = normalizeObjectRecord(element.other)
+  const formType = normalizeString(
+    typeof other?.form_type === "string" ? other.form_type : undefined
+  )?.toLowerCase()
+  return Boolean(title?.includes("sf-299")) || formType === "sf299"
+}
+
+function resolveCustomFormDecisionElement(
+  decisionElements: DecisionElementRecord[]
+): DecisionElementRecord | undefined {
+  const withForms = decisionElements.filter((element) => hasRenderableFormData(element.formData))
+  if (withForms.length === 0) {
+    return undefined
+  }
+
+  const sf299 = withForms.find((element) => isSf299DecisionElement(element))
+  if (sf299) {
+    return sf299
+  }
+
+  if (withForms.length >= 3) {
+    return withForms[2]
+  }
+
+  return withForms[0]
+}
+
+async function resolvePermitflowCustomFormContext(
+  options: PermitflowFetchOptions,
+  portalProjectId: number
+): Promise<{
+  permitflowProjectId: number
+  processInstanceId: number
+  decisionElement: DecisionElementRecord
+  payload?: PermitflowDecisionPayloadRow
+}> {
+  const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
+  const permitflowProject = await resolvePermitflowProjectByPortalProjectId(options, portalProjectId)
+  const permitflowProjectId = parseNumericId(permitflowProject?.id)
+  if (typeof permitflowProjectId !== "number") {
+    throw new ProjectPersistenceError(
+      `PermitFlow project for portal project ${portalProjectId} was not found. Submit it first.`
+    )
+  }
+
+  const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
+    options,
+    "/rest/v1/process_instance",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,last_updated,created_at")
+      endpoint.searchParams.set("parent_project_id", `eq.${permitflowProjectId}`)
+      endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
+    }
+  )
+  processRows.sort((a, b) => compareByTimestampDesc(a.last_updated, b.last_updated))
+  const processInstanceId = parseNumericId(processRows[0]?.id)
+  if (typeof processInstanceId !== "number") {
+    throw new ProjectPersistenceError(
+      `No Basic Permit process instance was found for portal project ${portalProjectId}.`
+    )
+  }
+
+  const decisionElements = await fetchDecisionElements(options, basicPermitProcessModelId)
+  decisionElements.sort((a, b) => a.id - b.id)
+  const decisionElement = resolveCustomFormDecisionElement(decisionElements)
+  if (!decisionElement) {
+    throw new ProjectPersistenceError("No custom form decision element is configured in PermitFlow.")
+  }
+
+  const payloadRows = await fetchPermitflowList<PermitflowDecisionPayloadRow>(
+    options,
+    "/rest/v1/process_decision_payload",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,process_decision_element,process,project,evaluation_data")
+      endpoint.searchParams.set("process", `eq.${processInstanceId}`)
+      endpoint.searchParams.set("process_decision_element", `eq.${decisionElement.id}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+  const payload = payloadRows[0]
+
+  return {
+    permitflowProjectId,
+    processInstanceId,
+    decisionElement,
+    payload
+  }
+}
+
+async function patchPermitflowProcessInstanceById({
+  supabaseUrl,
+  supabaseAnonKey,
+  tenantId,
+  accessToken,
+  processInstanceId,
+  payload
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  tenantId: string
+  accessToken: string
+  processInstanceId: number
+  payload: Record<string, unknown>
+}): Promise<void> {
+  const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
+  endpoint.searchParams.set("id", `eq.${processInstanceId}`)
+  endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+
+  const response = await fetch(endpoint.toString(), {
+    method: "PATCH",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+  const responseText = await response.text()
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow process update failed (${response.status}): ${errorDetail}`
+        : `PermitFlow process update failed (${response.status}).`
+    )
+  }
+}
+
+async function patchPermitflowDecisionPayloadById({
+  supabaseUrl,
+  supabaseAnonKey,
+  tenantId,
+  accessToken,
+  payloadId,
+  payload
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  tenantId: string
+  accessToken: string
+  payloadId: number
+  payload: Record<string, unknown>
+}): Promise<void> {
+  const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
+  endpoint.searchParams.set("id", `eq.${payloadId}`)
+  endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+  const response = await fetch(endpoint.toString(), {
+    method: "PATCH",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+  const responseText = await response.text()
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFlow decision payload update failed (${response.status}): ${errorDetail}`
+        : `PermitFlow decision payload update failed (${response.status}).`
+    )
+  }
+}
+
+async function createPermitflowCaseEvent({
+  supabaseUrl,
+  supabaseAnonKey,
+  tenantId,
+  accessToken,
+  processInstanceId,
+  name,
+  description,
+  type,
+  status = "completed",
+  source = "project-portal"
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  tenantId: string
+  accessToken: string
+  processInstanceId: number
+  name: string
+  description: string
+  type: string
+  status?: string
+  source?: string
+}): Promise<void> {
+  await createPermitflowRecord(
+    supabaseUrl,
+    supabaseAnonKey,
+    accessToken,
+    tenantId,
+    "case_event",
+    {
+      parent_process_id: processInstanceId,
+      name,
+      description,
+      type,
+      status,
+      source,
+      datetime: new Date().toISOString()
+    }
+  )
+}
+
+export async function loadPermitflowCustomFormState(
+  portalProjectId: number
+): Promise<PermitflowCustomFormState> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+    )
+  }
+  if (!Number.isFinite(portalProjectId)) {
+    throw new ProjectPersistenceError("Project identifiers must be numeric.")
+  }
+
+  const options = { supabaseUrl, supabaseAnonKey, tenantId }
+  const permitflowProject = await resolvePermitflowProjectByPortalProjectId(options, portalProjectId)
+  const permitflowProjectId = parseNumericId(permitflowProject?.id)
+  if (typeof permitflowProjectId !== "number") {
+    return { exists: false }
+  }
+
+  const context = await resolvePermitflowCustomFormContext(options, portalProjectId)
+  const payloadId = parseNumericId(context.payload?.id)
+  const evaluationData = isRecord(context.payload?.evaluation_data)
+    ? context.payload?.evaluation_data
+    : undefined
+
+  return {
+    exists: true,
+    projectId: context.permitflowProjectId,
+    processInstanceId: context.processInstanceId,
+    decisionElementId: context.decisionElement.id,
+    decisionElementTitle: context.decisionElement.title ?? undefined,
+    formSchema: context.decisionElement.formData,
+    payloadId,
+    evaluationData
+  }
+}
+
+export async function savePermitflowCustomForm({
+  portalProjectId,
+  accessToken,
+  evaluationData
+}: {
+  portalProjectId: number
+  accessToken: string
+  evaluationData: Record<string, unknown>
+}): Promise<void> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+    )
+  }
+  const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
+  const context = await resolvePermitflowCustomFormContext(options, portalProjectId)
+  const payloadId = parseNumericId(context.payload?.id)
+  if (typeof payloadId === "number") {
+    await patchPermitflowDecisionPayloadById({
+      supabaseUrl,
+      supabaseAnonKey,
+      tenantId,
+      accessToken,
+      payloadId,
+      payload: { evaluation_data: evaluationData }
+    })
+  } else {
+    await createPermitflowRecord(
+      supabaseUrl,
+      supabaseAnonKey,
+      accessToken,
+      tenantId,
+      "process_decision_payload",
+      {
+        process_decision_element: context.decisionElement.id,
+        process: context.processInstanceId,
+        project: context.permitflowProjectId,
+        evaluation_data: evaluationData
+      }
+    )
+  }
+
+  const formName = normalizeTitle(context.decisionElement.title) ?? "Custom"
+  await createPermitflowCaseEvent({
+    supabaseUrl,
+    supabaseAnonKey,
+    tenantId,
+    accessToken,
+    processInstanceId: context.processInstanceId,
+    name: "Form Saved",
+    description: `${formName} form data saved`,
+    type: "form_saved"
+  })
+}
+
+export async function submitPermitflowCustomFormForApproval({
+  portalProjectId,
+  accessToken,
+  evaluationData
+}: {
+  portalProjectId: number
+  accessToken: string
+  evaluationData?: Record<string, unknown>
+}): Promise<void> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
+    throw new ProjectPersistenceError(
+      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+    )
+  }
+  const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
+  const context = await resolvePermitflowCustomFormContext(options, portalProjectId)
+  if (evaluationData) {
+    const payloadId = parseNumericId(context.payload?.id)
+    if (typeof payloadId === "number") {
+      await patchPermitflowDecisionPayloadById({
+        supabaseUrl,
+        supabaseAnonKey,
+        tenantId,
+        accessToken,
+        payloadId,
+        payload: { evaluation_data: evaluationData }
+      })
+    } else {
+      await createPermitflowRecord(
+        supabaseUrl,
+        supabaseAnonKey,
+        accessToken,
+        tenantId,
+        "process_decision_payload",
+        {
+          process_decision_element: context.decisionElement.id,
+          process: context.processInstanceId,
+          project: context.permitflowProjectId,
+          evaluation_data: evaluationData
+        }
+      )
+    }
+  }
+
+  await patchPermitflowProcessInstanceById({
+    supabaseUrl,
+    supabaseAnonKey,
+    tenantId,
+    accessToken,
+    processInstanceId: context.processInstanceId,
+    payload: { status: "submitted" }
+  })
+  await patchPermitflowProjectById({
+    supabaseUrl,
+    supabaseAnonKey,
+    tenantId,
+    accessToken,
+    projectId: context.permitflowProjectId,
+    payload: { current_status: "submitted" }
+  })
+  const projectTitle = normalizeTitle(
+    (await resolvePermitflowProjectByPortalProjectId(options, portalProjectId))?.title
+  ) ?? `Project ${portalProjectId}`
+  await createPermitflowCaseEvent({
+    supabaseUrl,
+    supabaseAnonKey,
+    tenantId,
+    accessToken,
+    processInstanceId: context.processInstanceId,
+    name: "Submitted for Approval",
+    description: `Project "${projectTitle}" submitted for approval`,
+    type: "submitted_for_approval"
+  })
+}
+
 export async function loadPermitflowProjectStatus(
   projectId: number
 ): Promise<PermitflowProjectStatus> {
@@ -1371,7 +1794,10 @@ export async function loadBasicPermitProcessesForProjects(
           options,
           "/rest/v1/case_event",
           (endpoint) => {
-            endpoint.searchParams.set("select", "id,parent_process_id,name,type,status,last_updated,other")
+            endpoint.searchParams.set(
+              "select",
+              "id,parent_process_id,name,description,type,status,last_updated,other"
+            )
             endpoint.searchParams.set("parent_process_id", `in.(${processIds.join(",")})`)
           }
         )
@@ -1388,6 +1814,7 @@ export async function loadBasicPermitProcessesForProjects(
       events.push({
         id,
         name: typeof row.name === "string" ? row.name : null,
+        description: typeof row.description === "string" ? row.description : null,
         eventType: typeof row.type === "string" ? row.type : null,
         status: typeof row.status === "string" ? row.status : null,
         lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
