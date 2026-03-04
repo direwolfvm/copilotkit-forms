@@ -23,7 +23,9 @@ function Layout() {
   const bannerRef = useRef<HTMLElement | null>(null)
   const headerRef = useRef<HTMLElement | null>(null)
   const bannerVisibleHeightRef = useRef<number | undefined>(undefined)
+  const dropdownCloseTimeoutRef = useRef<number | null>(null)
   const [isNavOpen, setIsNavOpen] = useState(false)
+  const [openDropdown, setOpenDropdown] = useState<"resources" | "portal" | null>(null)
   const location = useLocation()
   const { isChristmasThemeEnabled } = useHolidayTheme()
   const isResourcesSection =
@@ -32,6 +34,30 @@ function Layout() {
     location.pathname.startsWith("/portal") ||
     location.pathname === "/projects" ||
     location.pathname === "/analytics"
+
+  const clearDropdownCloseTimeout = () => {
+    if (dropdownCloseTimeoutRef.current !== null) {
+      window.clearTimeout(dropdownCloseTimeoutRef.current)
+      dropdownCloseTimeoutRef.current = null
+    }
+  }
+
+  const openNavDropdown = (dropdown: "resources" | "portal") => {
+    clearDropdownCloseTimeout()
+    setOpenDropdown(dropdown)
+  }
+
+  const scheduleCloseNavDropdown = () => {
+    clearDropdownCloseTimeout()
+    dropdownCloseTimeoutRef.current = window.setTimeout(() => {
+      setOpenDropdown(null)
+    }, 220)
+  }
+
+  const closeNavDropdown = () => {
+    clearDropdownCloseTimeout()
+    setOpenDropdown(null)
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -133,7 +159,14 @@ function Layout() {
 
   useEffect(() => {
     setIsNavOpen(false)
+    closeNavDropdown()
   }, [location.pathname])
+
+  useEffect(() => {
+    return () => {
+      clearDropdownCloseTimeout()
+    }
+  }, [])
 
   useEffect(() => {
     if (!isNavOpen || typeof window === "undefined") {
@@ -143,6 +176,7 @@ function Layout() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsNavOpen(false)
+        closeNavDropdown()
       }
     }
 
@@ -245,13 +279,29 @@ function Layout() {
             >
               About
             </NavLink>
-            <div className="site-nav__dropdown">
+            <div
+              className={`site-nav__dropdown${openDropdown === "resources" ? " site-nav__dropdown--open" : ""}`}
+              onMouseEnter={() => {
+                openNavDropdown("resources")
+              }}
+              onMouseLeave={scheduleCloseNavDropdown}
+              onFocusCapture={() => {
+                openNavDropdown("resources")
+              }}
+              onBlurCapture={(event) => {
+                const nextFocused = event.relatedTarget
+                if (!(nextFocused instanceof Node) || !event.currentTarget.contains(nextFocused)) {
+                  scheduleCloseNavDropdown()
+                }
+              }}
+            >
               <NavLink
                 to="/resources"
                 data-tour="nav-link"
                 data-tour-title="Resources"
                 data-tour-intro="Explore geospatial screening and the permit and authorization inventory."
                 className={`site-nav__link${isResourcesSection ? " site-nav__link--active" : ""}`}
+                onClick={closeNavDropdown}
               >
                 Resources
               </NavLink>
@@ -263,6 +313,7 @@ function Layout() {
                       ? "site-nav__submenu-link site-nav__submenu-link--active"
                       : "site-nav__submenu-link"
                   }
+                  onClick={closeNavDropdown}
                 >
                   Geospatial Screening
                 </NavLink>
@@ -273,18 +324,35 @@ function Layout() {
                       ? "site-nav__submenu-link site-nav__submenu-link--active"
                       : "site-nav__submenu-link"
                   }
+                  onClick={closeNavDropdown}
                 >
                   Permit and Authorization Inventory
                 </NavLink>
               </div>
             </div>
-            <div className="site-nav__dropdown">
+            <div
+              className={`site-nav__dropdown${openDropdown === "portal" ? " site-nav__dropdown--open" : ""}`}
+              onMouseEnter={() => {
+                openNavDropdown("portal")
+              }}
+              onMouseLeave={scheduleCloseNavDropdown}
+              onFocusCapture={() => {
+                openNavDropdown("portal")
+              }}
+              onBlurCapture={(event) => {
+                const nextFocused = event.relatedTarget
+                if (!(nextFocused instanceof Node) || !event.currentTarget.contains(nextFocused)) {
+                  scheduleCloseNavDropdown()
+                }
+              }}
+            >
               <NavLink
                 to="/portal"
                 data-tour="nav-link"
                 data-tour-title="Portal"
                 data-tour-intro="Launch project workflows, track projects, and review analytics."
                 className={`site-nav__link${isPortalSection ? " site-nav__link--active" : ""}`}
+                onClick={closeNavDropdown}
               >
                 Portal
               </NavLink>
@@ -296,6 +364,7 @@ function Layout() {
                       ? "site-nav__submenu-link site-nav__submenu-link--active"
                       : "site-nav__submenu-link"
                   }
+                  onClick={closeNavDropdown}
                 >
                   New project
                 </NavLink>
@@ -306,6 +375,7 @@ function Layout() {
                       ? "site-nav__submenu-link site-nav__submenu-link--active"
                       : "site-nav__submenu-link"
                   }
+                  onClick={closeNavDropdown}
                 >
                   Projects
                 </NavLink>
@@ -316,6 +386,7 @@ function Layout() {
                       ? "site-nav__submenu-link site-nav__submenu-link--active"
                       : "site-nav__submenu-link"
                   }
+                  onClick={closeNavDropdown}
                 >
                   Analytics
                 </NavLink>
