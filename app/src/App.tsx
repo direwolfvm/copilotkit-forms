@@ -14,6 +14,8 @@ import ResourcesPage from "./ResourcesPage"
 import PermitStartPage from "./PermitStartPage"
 import ComplexReviewStartPage from "./ComplexReviewStartPage"
 import { PermitInfoPage } from "./PermitInfoPage"
+import ResourcesHubPage from "./ResourcesHubPage"
+import PortalHubPage from "./PortalHubPage"
 import { useHolidayTheme } from "./holidayThemeContext"
 import Snowfall from "./components/Snowfall"
 
@@ -23,8 +25,13 @@ function Layout() {
   const bannerVisibleHeightRef = useRef<number | undefined>(undefined)
   const [isNavOpen, setIsNavOpen] = useState(false)
   const location = useLocation()
-  const currentYear = new Date().getFullYear()
   const { isChristmasThemeEnabled } = useHolidayTheme()
+  const isResourcesSection =
+    location.pathname.startsWith("/resources") || location.pathname.startsWith("/resource-check")
+  const isPortalSection =
+    location.pathname.startsWith("/portal") ||
+    location.pathname === "/projects" ||
+    location.pathname === "/analytics"
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -218,19 +225,19 @@ function Layout() {
             <span className="site-nav-toggle__label">{isNavOpen ? "Close" : "Menu"}</span>
           </button>
           <nav
-          id="site-nav-primary"
-          className={`site-nav${isNavOpen ? " site-nav--open" : ""}`}
-          aria-label="Primary"
-        >
-          {isChristmasThemeEnabled ? (
-            <span className="site-nav__holiday" aria-hidden="true" role="img">
-              ❄️ 🎄 🎅 🎁 ❄️
-            </span>
-          ) : null}
-          <NavLink
-            to="/about"
-            data-tour="nav-link"
-            data-tour-title="About HelpPermitMe"
+            id="site-nav-primary"
+            className={`site-nav${isNavOpen ? " site-nav--open" : ""}`}
+            aria-label="Primary"
+          >
+            {isChristmasThemeEnabled ? (
+              <span className="site-nav__holiday" aria-hidden="true" role="img">
+                ❄️ 🎄 🎅 🎁 ❄️
+              </span>
+            ) : null}
+            <NavLink
+              to="/about"
+              data-tour="nav-link"
+              data-tour-title="About HelpPermitMe"
               data-tour-intro="Learn about the purpose of this demo experience."
               className={({ isActive }) =>
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
@@ -238,61 +245,82 @@ function Layout() {
             >
               About
             </NavLink>
-            <NavLink
-              to="/portal"
-              data-tour="nav-link"
-              data-tour-title="Start a new project"
-              data-tour-intro="Work with the copilot to kick off a simulated pre-screening."
-              className={({ isActive }) =>
-                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
-              }
-            >
-              Project Portal
-            </NavLink>
-            <NavLink
-              to="/projects"
-              data-tour="nav-link"
-              data-tour-title="Projects overview"
-              data-tour-intro="See active permit applications and track their milestones."
-              className={({ isActive }) =>
-                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
-              }
-            >
-              Projects
-            </NavLink>
-            <NavLink
-              to="/analytics"
-              data-tour="nav-link"
-              data-tour-title="Analytics"
-              data-tour-intro="Review pre-screening activity and turnaround times."
-              className={({ isActive }) =>
-                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
-              }
-            >
-              Analytics
-            </NavLink>
-            <NavLink
-              to="/resource-check"
-              data-tour="nav-link"
-              data-tour-title="Resource check"
-              data-tour-intro="Check how a footprint may interact with natural resources."
-              className={({ isActive }) =>
-                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
-              }
-            >
-              Resource Check
-            </NavLink>
-            <NavLink
-              to="/resources"
-              data-tour="nav-link"
-              data-tour-title="Resources"
-              data-tour-intro="Browse the inventory of federal permits and authorizations."
-              className={({ isActive }) =>
-                isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
-              }
-            >
-              Resources
-            </NavLink>
+            <div className="site-nav__dropdown">
+              <NavLink
+                to="/resources"
+                data-tour="nav-link"
+                data-tour-title="Resources"
+                data-tour-intro="Explore geospatial screening and the permit and authorization inventory."
+                className={`site-nav__link${isResourcesSection ? " site-nav__link--active" : ""}`}
+              >
+                Resources
+              </NavLink>
+              <div className="site-nav__submenu" role="menu" aria-label="Resources pages">
+                <NavLink
+                  to="/resources/geospatial-screening"
+                  className={({ isActive }) =>
+                    isActive
+                      ? "site-nav__submenu-link site-nav__submenu-link--active"
+                      : "site-nav__submenu-link"
+                  }
+                >
+                  Geospatial Screening
+                </NavLink>
+                <NavLink
+                  to="/resources/permit-authorization-inventory"
+                  className={({ isActive }) =>
+                    isActive
+                      ? "site-nav__submenu-link site-nav__submenu-link--active"
+                      : "site-nav__submenu-link"
+                  }
+                >
+                  Permit and Authorization Inventory
+                </NavLink>
+              </div>
+            </div>
+            <div className="site-nav__dropdown">
+              <NavLink
+                to="/portal"
+                data-tour="nav-link"
+                data-tour-title="Portal"
+                data-tour-intro="Launch project workflows, track projects, and review analytics."
+                className={`site-nav__link${isPortalSection ? " site-nav__link--active" : ""}`}
+              >
+                Portal
+              </NavLink>
+              <div className="site-nav__submenu" role="menu" aria-label="Portal pages">
+                <NavLink
+                  to="/portal/new"
+                  className={({ isActive }) =>
+                    isActive
+                      ? "site-nav__submenu-link site-nav__submenu-link--active"
+                      : "site-nav__submenu-link"
+                  }
+                >
+                  New project
+                </NavLink>
+                <NavLink
+                  to="/projects"
+                  className={({ isActive }) =>
+                    isActive
+                      ? "site-nav__submenu-link site-nav__submenu-link--active"
+                      : "site-nav__submenu-link"
+                  }
+                >
+                  Projects
+                </NavLink>
+                <NavLink
+                  to="/analytics"
+                  className={({ isActive }) =>
+                    isActive
+                      ? "site-nav__submenu-link site-nav__submenu-link--active"
+                      : "site-nav__submenu-link"
+                  }
+                >
+                  Analytics
+                </NavLink>
+              </div>
+            </div>
             <NavLink
               to="/developer-tools"
               data-tour="nav-link"
@@ -302,7 +330,7 @@ function Layout() {
                 isActive ? "site-nav__link site-nav__link--active" : "site-nav__link"
               }
             >
-              Developer Tools
+              Developer tools
             </NavLink>
             <NavLink
               to="/settings"
@@ -327,30 +355,6 @@ function Layout() {
       <main className="site-main">
         <Outlet />
       </main>
-      <footer className="site-footer" aria-label="Site footer">
-        <p className="site-footer__message">
-          Mostly built by a robot!{' '}
-          <a
-            className="site-footer__link"
-            href="https://chatgpt.com/codex"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            Codex
-          </a>{' '}
-          (and other AI tools) made this, with help and guidance from its human{' '}
-          <a
-            className="site-footer__link"
-            href="https://github.com/direwolfvm"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            expert
-          </a>
-          ...
-        </p>
-        <p className="site-footer__copyright">© {currentYear} HelpPermitMe. All rights reserved.</p>
-      </footer>
     </div>
   )
 }
@@ -362,12 +366,17 @@ function App() {
         <Route index element={<HomePage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="resource-check" element={<Navigate to="/resources/geospatial-screening" replace />} />
         <Route path="portal">
-          <Route index element={<PortalPage />} />
+          <Route index element={<PortalHubPage />} />
+          <Route path="new" element={<PortalPage />} />
           <Route path=":projectId" element={<PortalPage />} />
         </Route>
-        <Route path="resource-check" element={<ResourceCheckPage />} />
-        <Route path="resources" element={<ResourcesPage />} />
+        <Route path="resources">
+          <Route index element={<ResourcesHubPage />} />
+          <Route path="geospatial-screening" element={<ResourceCheckPage />} />
+          <Route path="permit-authorization-inventory" element={<ResourcesPage />} />
+        </Route>
         <Route path="permits/basic" element={<PermitStartPage />} />
         <Route path="reviews/complex" element={<ComplexReviewStartPage />} />
         <Route path="permit-info/:permitId" element={<PermitInfoPage />} />

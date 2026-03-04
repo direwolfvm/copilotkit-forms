@@ -35,15 +35,15 @@ const cards = [
     title: "Start a new project",
     description:
       "Work with the copilot to start your project and initiate a pre-screening process to kick off permitting (simulated, of course).",
-    to: "/portal",
+    to: "/portal/new",
     linkLabel: "Open the portal"
   },
   {
-    title: "Resource check",
+    title: "Resources",
     description:
-      "Quickly assess how a project footprint might impact natural resources and evaluate the impact on environmental review and permitting before you submit an application.",
-    to: "/resource-check",
-    linkLabel: "Run a check"
+      "Explore geospatial screening and the permit and authorization inventory to understand constraints and likely permitting requirements before submission.",
+    to: "/resources",
+    linkLabel: "Explore resources"
   }
 ]
 
