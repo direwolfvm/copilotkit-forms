@@ -32,6 +32,16 @@ export default function ResourcesHubPage() {
             Open Permit Inventory
           </Link>
         </article>
+        <article className="hub-page__card">
+          <h2>Shared Services</h2>
+          <p>
+            Explore federal shared services and tools that support environmental review and
+            permitting across agencies.
+          </p>
+          <Link to="/resources/shared-services" className="hub-page__link">
+            View Shared Services
+          </Link>
+        </article>
       </div>
     </section>
   )

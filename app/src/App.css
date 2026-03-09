@@ -4165,6 +4165,180 @@
   font-size: 0.9rem;
 }
 
+/* Permit Info - Tool Cards */
+.permit-info__tools-intro {
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.permit-info__tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.permit-info__tool-card {
+  background: color-mix(in srgb, var(--card-background) 96%, var(--accent) 4%);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, var(--accent) 10%);
+  border-radius: 0.625rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.permit-info__tool-name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--accent);
+}
+
+.permit-info__tool-agency {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.permit-info__tool-desc {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--color-text) 80%, transparent);
+  margin: 0.25rem 0 0;
+}
+
+/* Shared Services Page */
+.shared-services-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 2rem 3rem;
+}
+
+.shared-services-page__header {
+  margin-bottom: 2rem;
+}
+
+.shared-services-page__back {
+  display: inline-block;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.shared-services-page__back:hover {
+  text-decoration: underline;
+}
+
+.shared-services-page__header h1 {
+  font-size: 1.75rem;
+  margin: 0 0 0.5rem;
+}
+
+.shared-services-page__header p {
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  line-height: 1.5;
+  max-width: 680px;
+}
+
+.shared-services-page__filters {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.shared-services-page__search {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  font-size: 0.9rem;
+  background: var(--card-background);
+  color: var(--color-text);
+}
+
+.shared-services-page__category-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  font-size: 0.9rem;
+  background: var(--card-background);
+  color: var(--color-text);
+}
+
+.shared-services-page__count {
+  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  margin-bottom: 1.5rem;
+}
+
+.shared-services-page__group {
+  margin-bottom: 2rem;
+}
+
+.shared-services-page__group-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.shared-services-page__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1rem;
+}
+
+.shared-services-card {
+  background: var(--card-background);
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  box-shadow: var(--shadow-subtle);
+}
+
+.shared-services-card__name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0;
+}
+
+.shared-services-card__agency {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.shared-services-card__users {
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.shared-services-card__description {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--color-text) 80%, transparent);
+  margin: 0.25rem 0 0;
+}
+
+.shared-services-page__empty {
+  text-align: center;
+  padding: 2rem;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
 /* Resources Page */
 .resources-page {
   background: color-mix(in srgb, var(--surface) 95%, var(--surface-muted) 5%);

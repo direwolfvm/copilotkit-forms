@@ -15,6 +15,7 @@ import PermitStartPage from "./PermitStartPage"
 import ComplexReviewStartPage from "./ComplexReviewStartPage"
 import { PermitInfoPage } from "./PermitInfoPage"
 import ResourcesHubPage from "./ResourcesHubPage"
+import SharedServicesPage from "./SharedServicesPage"
 import PortalHubPage from "./PortalHubPage"
 import DashboardHubPage from "./DashboardHubPage"
 import ProjectExplorerPage from "./ProjectExplorerPage"
@@ -332,6 +333,17 @@ function Layout() {
                 >
                   Permit and Authorization Inventory
                 </NavLink>
+                <NavLink
+                  to="/resources/shared-services"
+                  className={({ isActive }) =>
+                    isActive
+                      ? "site-nav__submenu-link site-nav__submenu-link--active"
+                      : "site-nav__submenu-link"
+                  }
+                  onClick={closeNavDropdown}
+                >
+                  Shared Services
+                </NavLink>
               </div>
             </div>
             <div
@@ -497,6 +509,7 @@ function App() {
           <Route index element={<ResourcesHubPage />} />
           <Route path="geospatial-screening" element={<ResourceCheckPage />} />
           <Route path="permit-authorization-inventory" element={<ResourcesPage />} />
+          <Route path="shared-services" element={<SharedServicesPage />} />
         </Route>
         <Route path="permits/basic" element={<PermitStartPage />} />
         <Route path="reviews/complex" element={<ComplexReviewStartPage />} />
