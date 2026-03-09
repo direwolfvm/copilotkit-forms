@@ -4449,8 +4449,8 @@
 }
 
 .explorer-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
 }
 
@@ -4679,10 +4679,6 @@
 }
 
 @media (max-width: 900px) {
-  .explorer-layout {
-    grid-template-columns: 1fr;
-  }
-
   .explorer-layout__map {
     min-height: 300px;
   }

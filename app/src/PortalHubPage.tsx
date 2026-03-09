@@ -20,10 +20,10 @@ export default function PortalHubPage() {
           </Link>
         </article>
         <article className="hub-page__card">
-          <h2>Projects</h2>
+          <h2>My Projects</h2>
           <p>Review project status, process instances, and case events across active submissions.</p>
           <Link to="/projects" className="hub-page__link">
-            View Projects
+            View My Projects
           </Link>
         </article>
         <article className="hub-page__card">

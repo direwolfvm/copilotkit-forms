@@ -381,7 +381,7 @@ function Layout() {
                   }
                   onClick={closeNavDropdown}
                 >
-                  Projects
+                  My Projects
                 </NavLink>
               </div>
             </div>
