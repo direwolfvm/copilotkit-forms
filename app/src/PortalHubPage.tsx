@@ -29,7 +29,7 @@ export default function PortalHubPage() {
         <article className="hub-page__card">
           <h2>Analytics</h2>
           <p>Track completion trends and turnaround metrics for portal and permitting workflows.</p>
-          <Link to="/analytics" className="hub-page__link">
+          <Link to="/dashboard/analytics" className="hub-page__link">
             Open Analytics
           </Link>
         </article>

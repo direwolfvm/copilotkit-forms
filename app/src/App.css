@@ -4415,3 +4415,557 @@
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   Project Explorer Page
+   ========================================================================== */
+
+.explorer-page {
+  position: relative;
+  margin: 3rem auto;
+  max-width: 1400px;
+  width: min(1400px, calc(100% - 4rem));
+  padding: 2.75rem 3rem 3.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  background: color-mix(in srgb, var(--surface) 95%, var(--surface-muted) 5%);
+  border-radius: 28px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--color-text);
+}
+
+.explorer-page__header h1 {
+  margin: 0;
+  font-size: clamp(2.1rem, 2vw + 1.4rem, 2.8rem);
+  color: var(--color-heading);
+}
+
+.explorer-page__header p {
+  margin: 0.5rem 0 0;
+  color: color-mix(in srgb, var(--color-text-muted) 85%, var(--color-text) 15%);
+  max-width: 48rem;
+}
+
+.explorer-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.explorer-layout__map {
+  min-height: 420px;
+}
+
+.explorer-map {
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-muted) 90%, white 10%);
+}
+
+.explorer-map arcgis-map {
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+}
+
+.explorer-map__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 420px;
+  color: var(--color-text-muted);
+}
+
+.explorer-layout__catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.explorer-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.explorer-filter-group--wide {
+  grid-column: span 2;
+}
+
+.explorer-filter-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.explorer-filter-input,
+.explorer-filter-select {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--color-text);
+  font-size: 0.88rem;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.explorer-filter-input:focus,
+.explorer-filter-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.explorer-table-wrapper {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-muted) 88%, white 12%);
+}
+
+.explorer-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.88rem;
+}
+
+.explorer-table thead {
+  background: color-mix(in srgb, var(--surface-muted) 70%, var(--surface) 30%);
+}
+
+.explorer-table th {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.explorer-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-table tbody tr:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.explorer-table__col--project { width: 28%; }
+.explorer-table__col--year { width: 10%; }
+.explorer-table__col--status { width: 16%; }
+.explorer-table__col--sector { width: 16%; }
+.explorer-table__col--type { width: 14%; }
+.explorer-table__col--location { width: 16%; }
+
+.explorer-table__project-link {
+  color: var(--accent-dark);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.explorer-table__project-link:hover,
+.explorer-table__project-link:focus-visible {
+  text-decoration: underline;
+}
+
+.explorer-table__empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  padding: 2rem 1rem;
+}
+
+.explorer-status-pill {
+  display: inline-block;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.explorer-status-pill--complete {
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  color: var(--color-success);
+}
+
+.explorer-status-pill--pending {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-dark, var(--accent));
+}
+
+.explorer-status-pill--caution {
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 80%, #000 20%);
+}
+
+.explorer-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.explorer-pagination__size {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.explorer-pagination__size select {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--color-text);
+  font-size: 0.82rem;
+}
+
+.explorer-pagination__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.explorer-pagination__controls button {
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--color-text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.explorer-pagination__controls button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-color: var(--accent);
+}
+
+.explorer-pagination__controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.explorer-pagination__status {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .explorer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .explorer-layout__map {
+    min-height: 300px;
+  }
+
+  .explorer-map {
+    min-height: 300px;
+  }
+
+  .explorer-map arcgis-map {
+    min-height: 300px;
+  }
+
+  .explorer-filter-group--wide {
+    grid-column: span 1;
+  }
+
+  .explorer-page {
+    padding: 1.5rem;
+    width: calc(100% - 2rem);
+  }
+}
+
+/* ==========================================================================
+   Project Detail Page
+   ========================================================================== */
+
+.project-detail {
+  position: relative;
+  margin: 3rem auto;
+  max-width: 1200px;
+  width: min(1200px, calc(100% - 4rem));
+  padding: 2.75rem 3rem 3.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  background: color-mix(in srgb, var(--surface) 95%, var(--surface-muted) 5%);
+  border-radius: 28px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--color-text);
+}
+
+.project-detail__back-link {
+  color: var(--accent-dark);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.project-detail__back-link:hover,
+.project-detail__back-link:focus-visible {
+  text-decoration: underline;
+}
+
+.project-detail__header-row {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: 2rem;
+}
+
+.project-detail__header h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 2vw + 1.2rem, 2.4rem);
+  color: var(--color-heading);
+}
+
+.project-detail__description {
+  margin: 0.5rem 0 0;
+  color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
+  line-height: 1.5;
+}
+
+.project-detail__meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.project-detail__meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem 0.75rem;
+  background: color-mix(in srgb, var(--surface-muted) 85%, white 15%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.project-detail__meta-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.project-detail__meta-value {
+  font-size: 0.92rem;
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.project-detail__location-card {
+  background: color-mix(in srgb, var(--surface-muted) 88%, white 12%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-detail__location-card .projects-map {
+  min-height: 260px;
+  border-radius: 0;
+}
+
+.project-detail__location-card arcgis-map {
+  min-height: 260px;
+}
+
+.project-detail__location-text {
+  padding: 0.75rem 1rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--border);
+}
+
+.project-detail__map-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+}
+
+.project-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.project-detail__section h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--color-heading);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.project-detail__empty {
+  color: var(--color-text-muted);
+  margin: 0;
+  padding: 1rem 0;
+}
+
+.project-detail__gantt-wrapper {
+  background: color-mix(in srgb, var(--surface-muted) 88%, white 12%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.project-detail__process-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.project-detail__process-table thead {
+  background: color-mix(in srgb, var(--surface-muted) 70%, var(--surface) 30%);
+}
+
+.project-detail__process-table th {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.project-detail__process-table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  vertical-align: middle;
+}
+
+.project-detail__process-row:hover {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.project-detail__process-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.project-detail__process-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.88rem;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.project-detail__process-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--color-text);
+}
+
+.project-detail__process-toggle-icon {
+  line-height: 1;
+}
+
+.project-detail__process-toggle-spacer {
+  display: inline-block;
+  width: 1.5rem;
+  flex-shrink: 0;
+}
+
+.project-detail__milestone-tag {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent-dark, var(--accent));
+  white-space: nowrap;
+}
+
+.project-detail__events-row td {
+  padding: 0;
+  background: color-mix(in srgb, var(--surface-muted) 60%, var(--surface) 40%);
+}
+
+.project-detail__milestones-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.project-detail__milestones-table th {
+  text-align: left;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.project-detail__milestones-table td {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
+  color: var(--color-text);
+}
+
+@media (max-width: 900px) {
+  .project-detail {
+    padding: 1.5rem;
+    width: calc(100% - 2rem);
+  }
+
+  .project-detail__header-row {
+    grid-template-columns: 1fr;
+  }
+}

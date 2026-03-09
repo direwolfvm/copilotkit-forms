@@ -16,6 +16,9 @@ import ComplexReviewStartPage from "./ComplexReviewStartPage"
 import { PermitInfoPage } from "./PermitInfoPage"
 import ResourcesHubPage from "./ResourcesHubPage"
 import PortalHubPage from "./PortalHubPage"
+import DashboardHubPage from "./DashboardHubPage"
+import ProjectExplorerPage from "./ProjectExplorerPage"
+import ProjectDetailPage from "./ProjectDetailPage"
 import { useHolidayTheme } from "./holidayThemeContext"
 import Snowfall from "./components/Snowfall"
 
@@ -25,15 +28,16 @@ function Layout() {
   const bannerVisibleHeightRef = useRef<number | undefined>(undefined)
   const dropdownCloseTimeoutRef = useRef<number | null>(null)
   const [isNavOpen, setIsNavOpen] = useState(false)
-  const [openDropdown, setOpenDropdown] = useState<"resources" | "portal" | null>(null)
+  const [openDropdown, setOpenDropdown] = useState<"resources" | "portal" | "dashboard" | null>(null)
   const location = useLocation()
   const { isChristmasThemeEnabled } = useHolidayTheme()
   const isResourcesSection =
     location.pathname.startsWith("/resources") || location.pathname.startsWith("/resource-check")
   const isPortalSection =
     location.pathname.startsWith("/portal") ||
-    location.pathname === "/projects" ||
-    location.pathname === "/analytics"
+    location.pathname === "/projects"
+  const isDashboardSection =
+    location.pathname.startsWith("/dashboard")
 
   const clearDropdownCloseTimeout = () => {
     if (dropdownCloseTimeoutRef.current !== null) {
@@ -42,7 +46,7 @@ function Layout() {
     }
   }
 
-  const openNavDropdown = (dropdown: "resources" | "portal") => {
+  const openNavDropdown = (dropdown: "resources" | "portal" | "dashboard") => {
     clearDropdownCloseTimeout()
     setOpenDropdown(dropdown)
   }
@@ -379,8 +383,48 @@ function Layout() {
                 >
                   Projects
                 </NavLink>
+              </div>
+            </div>
+            <div
+              className={`site-nav__dropdown${openDropdown === "dashboard" ? " site-nav__dropdown--open" : ""}`}
+              onMouseEnter={() => {
+                openNavDropdown("dashboard")
+              }}
+              onMouseLeave={scheduleCloseNavDropdown}
+              onFocusCapture={() => {
+                openNavDropdown("dashboard")
+              }}
+              onBlurCapture={(event) => {
+                const nextFocused = event.relatedTarget
+                if (!(nextFocused instanceof Node) || !event.currentTarget.contains(nextFocused)) {
+                  scheduleCloseNavDropdown()
+                }
+              }}
+            >
+              <NavLink
+                to="/dashboard"
+                data-tour="nav-link"
+                data-tour-title="Dashboard"
+                data-tour-intro="Explore the project portfolio and review analytics."
+                className={`site-nav__link${isDashboardSection ? " site-nav__link--active" : ""}`}
+                onClick={closeNavDropdown}
+              >
+                Dashboard
+              </NavLink>
+              <div className="site-nav__submenu" role="menu" aria-label="Dashboard pages">
                 <NavLink
-                  to="/analytics"
+                  to="/dashboard/project-explorer"
+                  className={({ isActive }) =>
+                    isActive
+                      ? "site-nav__submenu-link site-nav__submenu-link--active"
+                      : "site-nav__submenu-link"
+                  }
+                  onClick={closeNavDropdown}
+                >
+                  Project Explorer
+                </NavLink>
+                <NavLink
+                  to="/dashboard/analytics"
                   className={({ isActive }) =>
                     isActive
                       ? "site-nav__submenu-link site-nav__submenu-link--active"
@@ -436,8 +480,14 @@ function App() {
       <Route element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="projects" element={<ProjectsPage />} />
-        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="analytics" element={<Navigate to="/dashboard/analytics" replace />} />
         <Route path="resource-check" element={<Navigate to="/resources/geospatial-screening" replace />} />
+        <Route path="dashboard">
+          <Route index element={<DashboardHubPage />} />
+          <Route path="project-explorer" element={<ProjectExplorerPage />} />
+          <Route path="project-explorer/:projectId" element={<ProjectDetailPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+        </Route>
         <Route path="portal">
           <Route index element={<PortalHubPage />} />
           <Route path="new" element={<PortalPage />} />

@@ -263,6 +263,17 @@ export type ProjectSummary = {
   description?: string | null
   lastUpdated?: string | null
   geometry?: string | null
+  sector?: string | null
+  type?: string | null
+  currentStatus?: string | null
+  leadAgency?: string | null
+  sponsor?: string | null
+  funding?: string | null
+  locationText?: string | null
+  locationLat?: number | null
+  locationLon?: number | null
+  startDate?: string | null
+  createdAt?: string | null
 }
 
 export type PreScreeningAnalyticsPoint = {
@@ -4874,7 +4885,7 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
     "/rest/v1/project",
     "projects",
     (endpoint) => {
-      endpoint.searchParams.set("select", "id,title,description,last_updated,location_object")
+      endpoint.searchParams.set("select", "id,title,description,last_updated,location_object,sector,type,current_status,lead_agency,sponsor,funding,location_text,location_lat,location_lon,start_date,created_at")
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
       endpoint.searchParams.append("order", "last_updated.desc.nullslast")
     }
@@ -5021,7 +5032,18 @@ export async function fetchProjectHierarchy(): Promise<ProjectHierarchy[]> {
       title: typeof row.title === "string" ? row.title : null,
       description: typeof row.description === "string" ? row.description : null,
       lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
-      geometry
+      geometry,
+      sector: typeof row.sector === "string" ? row.sector : null,
+      type: typeof row.type === "string" ? row.type : null,
+      currentStatus: typeof row.current_status === "string" ? row.current_status : null,
+      leadAgency: typeof row.lead_agency === "string" ? row.lead_agency : null,
+      sponsor: typeof row.sponsor === "string" ? row.sponsor : null,
+      funding: typeof row.funding === "string" ? row.funding : null,
+      locationText: typeof row.location_text === "string" ? row.location_text : null,
+      locationLat: typeof row.location_lat === "number" ? row.location_lat : null,
+      locationLon: typeof row.location_lon === "number" ? row.location_lon : null,
+      startDate: typeof row.start_date === "string" ? row.start_date : null,
+      createdAt: typeof row.created_at === "string" ? row.created_at : null
     }
     const projectProcesses = processesByProject.get(projectId) ?? []
     projectProcesses.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
