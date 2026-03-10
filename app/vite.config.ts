@@ -85,12 +85,10 @@ function attachGeospatialProxy(server: { middlewares: { use: (path: string, hand
 const defaultBenchmarkExclude = (configDefaults as { benchmark?: { exclude?: string[] } }).benchmark?.exclude ?? []
 
 // https://vite.dev/config/
-export default defineConfig(({ command }) => ({
-  // Use absolute paths during development for the Vite dev server, but
-  // switch to relative paths in the production build so the app can be
-  // hosted from a subdirectory (e.g. behind a Google Cloud Run service
-  // that mounts the site on a non-root path).
-  base: command === 'serve' ? '/' : './',
+export default defineConfig(() => ({
+  // Use absolute paths so that client-side routing on deep paths (e.g.
+  // /dashboard/project-explorer) resolves assets from the root correctly.
+  base: '/',
   plugins: [
     react(),
     {
