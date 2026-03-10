@@ -4634,8 +4634,7 @@
 
 .explorer-map {
   width: 100%;
-  height: 100%;
-  min-height: 420px;
+  height: 420px;
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -4643,9 +4642,9 @@
 }
 
 .explorer-map arcgis-map {
+  display: block;
   width: 100%;
-  height: 100%;
-  min-height: 420px;
+  height: 420px;
 }
 
 .explorer-map__loading {
@@ -4854,15 +4853,15 @@
 
 @media (max-width: 900px) {
   .explorer-layout__map {
-    min-height: 300px;
+    height: 300px;
   }
 
   .explorer-map {
-    min-height: 300px;
+    height: 300px;
   }
 
   .explorer-map arcgis-map {
-    min-height: 300px;
+    height: 300px;
   }
 
   .explorer-filter-group--wide {
