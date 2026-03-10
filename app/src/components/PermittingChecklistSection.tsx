@@ -2,6 +2,7 @@ import { type FormEvent, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 
 import { CollapsibleCard, type CollapsibleCardStatus } from "./CollapsibleCard"
+import { isAutoPopulatedChecklistItem } from "../utils/projectStatus"
 
 export type PermittingChecklistItem = {
   id: string
@@ -36,19 +37,20 @@ export function PermittingChecklistSection({
 }: PermittingChecklistSectionProps) {
   const [draftLabel, setDraftLabel] = useState("")
 
-  const pendingCount = useMemo(() => items.filter((item) => !item.completed).length, [items])
+  const manualItems = useMemo(() => items.filter((item) => !isAutoPopulatedChecklistItem(item)), [items])
+  const pendingCount = useMemo(() => manualItems.filter((item) => !item.completed).length, [manualItems])
 
   const status: CollapsibleCardStatus = useMemo(() => {
-    if (!items.length) {
+    if (!manualItems.length) {
       return { tone: "danger", text: "No checklist items yet" }
     }
 
     if (pendingCount > 0) {
-      return { tone: "success", text: `${pendingCount} of ${items.length} pending` }
+      return { tone: "success", text: `${pendingCount} of ${manualItems.length} pending` }
     }
 
     return { tone: "success", text: "Checklist complete" }
-  }, [items.length, pendingCount])
+  }, [manualItems.length, pendingCount])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
