@@ -19,7 +19,8 @@ import {
   determineBasicPermitStatus,
   determineComplexReviewStatus,
   determineProjectStatus,
-  getLatestCaseEvent
+  getLatestCaseEvent,
+  isAutoPopulatedChecklistItem
 } from "./utils/projectStatus"
 
 function ProcessTree({ process }: { process: ProjectProcessSummary }) {
@@ -136,11 +137,12 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
   const latestEvent = getLatestCaseEvent(entry)
   const projectStatus = useMemo(() => determineProjectStatus(entry), [entry])
   const permitChecklistStatus = useMemo(() => {
-    const total = entry.permittingChecklist.length
+    const manualItems = entry.permittingChecklist.filter((item) => !isAutoPopulatedChecklistItem(item))
+    const total = manualItems.length
     if (total === 0) {
       return { tone: "empty", label: "No checklist items" }
     }
-    const completed = entry.permittingChecklist.filter((item) => item.completed).length
+    const completed = manualItems.filter((item) => item.completed).length
     if (completed === total) {
       return { tone: "complete", label: "Checklist complete" }
     }

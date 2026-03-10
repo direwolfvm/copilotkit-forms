@@ -217,8 +217,18 @@ export function isProcessDelayed(process: ProjectProcessSummary): boolean {
   })
 }
 
+const AUTO_POPULATED_CHECKLIST_LABELS = new Set([
+  BASIC_PERMIT_LABEL.toLowerCase(),
+  COMPLEX_REVIEW_LABEL.toLowerCase(),
+])
+
+export function isAutoPopulatedChecklistItem(item: { label: string }): boolean {
+  return AUTO_POPULATED_CHECKLIST_LABELS.has(item.label.toLowerCase())
+}
+
 export function isPermitChecklistComplete(entry: ProjectHierarchy): boolean {
-  return entry.permittingChecklist.length > 0 && entry.permittingChecklist.every((item) => item.completed)
+  const manualItems = entry.permittingChecklist.filter((item) => !isAutoPopulatedChecklistItem(item))
+  return manualItems.length > 0 && manualItems.every((item) => item.completed)
 }
 
 export function determineProjectStatus(entry: ProjectHierarchy): { variant: PreScreeningStatus; label: string } {

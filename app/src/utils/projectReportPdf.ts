@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 import type { ProjectFormData } from "../schema/projectSchema"
 import type { PermittingChecklistItem } from "../components/PermittingChecklistSection"
 import type { PortalProgressState } from "./projectPersistence"
+import { isAutoPopulatedChecklistItem } from "./projectStatus"
 
 export type ProjectReportPdfInput = {
   project: ProjectFormData
@@ -221,12 +222,13 @@ export async function createProjectReportPdf({
   }
 
   drawSubheading("Permitting checklist")
-  if (permittingChecklist.length === 0) {
+  const manualChecklistItems = permittingChecklist.filter((item) => !isAutoPopulatedChecklistItem(item))
+  if (manualChecklistItems.length === 0) {
     drawParagraph("No checklist items recorded.")
   } else {
-    const completed = permittingChecklist.filter((item) => item.completed).length
-    drawParagraph(`${completed} of ${permittingChecklist.length} items completed.`)
-    for (const item of permittingChecklist) {
+    const completed = manualChecklistItems.filter((item) => item.completed).length
+    drawParagraph(`${completed} of ${manualChecklistItems.length} items completed.`)
+    for (const item of manualChecklistItems) {
       const prefix = item.completed ? "[x]" : "[ ]"
       drawBulletedText(`${prefix} ${item.label}`)
       if (item.notes) {
