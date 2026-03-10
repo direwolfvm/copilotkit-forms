@@ -48,9 +48,9 @@ export function ExplorerMap({ projects, onProjectClick }: ExplorerMapProps) {
       return undefined
     }
 
-    const handleViewReady = (event: CustomEvent) => {
-      if (event.detail?.view) {
-        setMapView(event.detail.view)
+    const handleViewReadyChange = () => {
+      if (mapElement.view) {
+        setMapView(mapElement.view)
       }
     }
 
@@ -58,10 +58,10 @@ export function ExplorerMap({ projects, onProjectClick }: ExplorerMapProps) {
       setMapView(mapElement.view)
     }
 
-    mapElement.addEventListener("arcgisViewReady", handleViewReady as EventListener)
+    mapElement.addEventListener("arcgisViewReadyChange", handleViewReadyChange)
 
     return () => {
-      mapElement.removeEventListener("arcgisViewReady", handleViewReady as EventListener)
+      mapElement.removeEventListener("arcgisViewReadyChange", handleViewReadyChange)
     }
   }, [isReady])
 
