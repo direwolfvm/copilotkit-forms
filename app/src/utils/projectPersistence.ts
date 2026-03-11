@@ -2879,6 +2879,10 @@ const DECISION_ELEMENT_TITLE_BY_ID = new Map<number, string>(
   DECISION_ELEMENT_BUILDERS.map(({ decisionElementId, title }) => [decisionElementId, title])
 )
 
+const DECISION_ELEMENT_ID_BY_TITLE = new Map<string, number>(
+  DECISION_ELEMENT_BUILDERS.map(({ decisionElementId, title }) => [title, decisionElementId])
+)
+
 function addDecisionPayloadMetadata({
   builder,
   evaluationData
@@ -4190,10 +4194,12 @@ function applyDecisionPayloadToState({
   geospatialResults: GeospatialResultsState
   permittingChecklist: LoadedPermittingChecklistItem[]
 }): void {
-  console.log('[portal] applyDecisionPayloadToState - ID:', decisionElementId, 'title:', title, 'evaluation keys:', Object.keys(evaluation))
-  
-  // Match based on decision element ID instead of title
-  switch (decisionElementId) {
+  // When the decision element is not configured in the DB, process_decision_element
+  // is stored as null. Fall back to resolving the ID from the payload title.
+  const resolvedId = decisionElementId ?? DECISION_ELEMENT_ID_BY_TITLE.get(title)
+  console.log('[portal] applyDecisionPayloadToState - ID:', decisionElementId, 'resolvedId:', resolvedId, 'title:', title, 'evaluation keys:', Object.keys(evaluation))
+
+  switch (resolvedId) {
     case 1: { // PROJECT_DETAILS
       console.log('[portal] Matched PROJECT_DETAILS case (ID 1)')
       const project = evaluation.project
