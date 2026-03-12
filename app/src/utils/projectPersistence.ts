@@ -95,9 +95,10 @@ function logSupabaseResponse(
 function buildSupabaseFetchRequest(
   endpoint: URL,
   supabaseAnonKey: string,
-  init: RequestInit
+  init: RequestInit,
+  options?: { skipTenantFilter?: boolean }
 ): SupabaseFetchRequest {
-  if (endpoint.pathname.startsWith("/rest/v1/") && (init.method ?? "GET").toUpperCase() !== "POST") {
+  if (!options?.skipTenantFilter && endpoint.pathname.startsWith("/rest/v1/") && (init.method ?? "GET").toUpperCase() !== "POST") {
     applyPortalTenantFilter(endpoint)
   }
   const headers = new Headers(init.headers ?? undefined)
@@ -4370,7 +4371,7 @@ async function fetchSupabaseList<T>(
   }
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
     method: "GET"
-  })
+  }, options?.skipTenantFilter ? { skipTenantFilter: true } : undefined)
   logSupabaseRequest(resourceDescription, url, init)
   const response = await fetch(url, init)
   const responseText = await response.text()
