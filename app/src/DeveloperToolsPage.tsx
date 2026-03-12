@@ -28,7 +28,7 @@ interface SectionDoc {
   endpoints: EndpointDoc[]
 }
 
-const API_BASE_PLACEHOLDER = "https://yiggjfcwpagbupsmueax.supabase.co/rest/v1"
+const API_BASE_PLACEHOLDER = "{SUPABASE_URL}/rest/v1"
 
 const sectionDocs: SectionDoc[] = [
   {
@@ -229,7 +229,7 @@ function DeveloperToolsContent({ hasCopilotConfiguration }: DeveloperToolsConten
         <p className="developer-tools__eyebrow">Developer tools</p>
         <h1 id="developer-tools-heading">Supabase integration guide</h1>
         <p>
-          Supabase exposes a REST interface for every table in our database. This page explains how you can interact with this data and build your own applications on top of the data structure.  We're using a commercial instance of supabase for the project below and there's no authentication besides the key (not provided below), but a real version would include that, or wrap the supabase implementation in a public API layer.
+          Supabase exposes a REST interface for every table in our database. This page explains how you can interact with this data and build your own applications on top of the data structure.  Replace <code>{"{SUPABASE_URL}"}</code> with your Supabase project URL. A production deployment would include proper authentication or wrap the Supabase implementation in a public API layer.
         </p>
       </header>
 
