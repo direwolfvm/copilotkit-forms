@@ -4358,10 +4358,13 @@ async function fetchSupabaseList<T>(
   supabaseAnonKey: string,
   path: string,
   resourceDescription: string,
-  configure?: (endpoint: URL) => void
+  configure?: (endpoint: URL) => void,
+  options?: { skipTenantFilter?: boolean }
 ): Promise<T[]> {
   const endpoint = new URL(path, supabaseUrl)
-  applyPortalTenantFilter(endpoint)
+  if (!options?.skipTenantFilter) {
+    applyPortalTenantFilter(endpoint)
+  }
   if (configure) {
     configure(endpoint)
   }
@@ -4663,7 +4666,8 @@ async function fetchProcessModelRecord({
       )
       endpoint.searchParams.set("id", `eq.${processModelId}`)
       endpoint.searchParams.set("limit", "1")
-    }
+    },
+    { skipTenantFilter: true }
   )
 
   const raw = rows[0]
@@ -4728,7 +4732,8 @@ async function fetchLegalStructureRecord({
       )
       endpoint.searchParams.set("id", `eq.${legalStructureId}`)
       endpoint.searchParams.set("limit", "1")
-    }
+    },
+    { skipTenantFilter: true }
   )
 
   const raw = rows[0]
