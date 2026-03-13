@@ -42,6 +42,16 @@ export default function ResourcesHubPage() {
             View Shared Services
           </Link>
         </article>
+        <article className="hub-page__card">
+          <h2>NEPA Compliance</h2>
+          <p>
+            Browse federal agencies with NEPA implementing procedures, organized by department,
+            with links to source regulations and agency case management tools.
+          </p>
+          <Link to="/resources/nepa-compliance" className="hub-page__link">
+            View NEPA Compliance
+          </Link>
+        </article>
       </div>
     </section>
   )

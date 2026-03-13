@@ -16,6 +16,8 @@ import ComplexReviewStartPage from "./ComplexReviewStartPage"
 import { PermitInfoPage } from "./PermitInfoPage"
 import ResourcesHubPage from "./ResourcesHubPage"
 import SharedServicesPage from "./SharedServicesPage"
+import NepaCompliancePage from "./NepaCompliancePage"
+import { NepaAgencyInfoPage } from "./NepaAgencyInfoPage"
 import PortalHubPage from "./PortalHubPage"
 import DashboardHubPage from "./DashboardHubPage"
 import ProjectExplorerPage from "./ProjectExplorerPage"
@@ -33,7 +35,7 @@ function Layout() {
   const location = useLocation()
   const { isChristmasThemeEnabled } = useHolidayTheme()
   const isResourcesSection =
-    location.pathname.startsWith("/resources") || location.pathname.startsWith("/resource-check")
+    location.pathname.startsWith("/resources") || location.pathname.startsWith("/resource-check") || location.pathname.startsWith("/nepa-info")
   const isPortalSection =
     location.pathname.startsWith("/portal") ||
     location.pathname === "/projects"
@@ -344,6 +346,17 @@ function Layout() {
                 >
                   Shared Services
                 </NavLink>
+                <NavLink
+                  to="/resources/nepa-compliance"
+                  className={({ isActive }) =>
+                    isActive
+                      ? "site-nav__submenu-link site-nav__submenu-link--active"
+                      : "site-nav__submenu-link"
+                  }
+                  onClick={closeNavDropdown}
+                >
+                  NEPA Compliance
+                </NavLink>
               </div>
             </div>
             <div
@@ -510,10 +523,12 @@ function App() {
           <Route path="geospatial-screening" element={<ResourceCheckPage />} />
           <Route path="permit-authorization-inventory" element={<ResourcesPage />} />
           <Route path="shared-services" element={<SharedServicesPage />} />
+          <Route path="nepa-compliance" element={<NepaCompliancePage />} />
         </Route>
         <Route path="permits/basic" element={<PermitStartPage />} />
         <Route path="reviews/complex" element={<ComplexReviewStartPage />} />
         <Route path="permit-info/:permitId" element={<PermitInfoPage />} />
+        <Route path="nepa-info/:agencyId" element={<NepaAgencyInfoPage />} />
         <Route path="developer-tools" element={<DeveloperToolsPage />} />
         <Route path="about" element={<AboutPage />} />
         <Route path="settings" element={<SettingsPage />} />
