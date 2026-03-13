@@ -19,6 +19,18 @@ function ToolCard({ tool }: { tool: AgencyCaseMgmtTool }) {
       <h3 className="permit-info__tool-name">{tool.systemName}</h3>
       <span className="permit-info__tool-agency">{tool.agencySystemOwner}</span>
       <p className="permit-info__tool-desc">{tool.functionalityDescription}</p>
+      {tool.publicUrl ? (
+        <p>
+          <a
+            href={tool.publicUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="permit-info__tool-url"
+          >
+            Visit site &rarr;
+          </a>
+        </p>
+      ) : null}
     </article>
   )
 }

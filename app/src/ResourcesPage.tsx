@@ -4,7 +4,7 @@ import "./App.css"
 import { permitInventory, getPermitInfoUrl, INTEGRATION_STATUS_LABELS } from "./utils/permitInventory"
 import type { PermitInfo, IntegrationStatus } from "./utils/permitInventory"
 
-const INTEGRATION_STATUS_OPTIONS: IntegrationStatus[] = ["integrated", "modern-app", "manual"]
+const INTEGRATION_STATUS_OPTIONS: IntegrationStatus[] = ["integrated", "integration-ready", "app-exists", "manual"]
 
 function IntegrationStatusBadge({ status }: { status: IntegrationStatus }) {
   return (
@@ -32,6 +32,7 @@ export default function ResourcesPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedAgency, setSelectedAgency] = useState<string>("all")
   const [selectedStatus, setSelectedStatus] = useState<string>("all")
+  const [selectedSource, setSelectedSource] = useState<string>("primary")
 
   // Get unique agencies for filter dropdown
   const agencies = useMemo(() => {
@@ -51,9 +52,11 @@ export default function ResourcesPage() {
 
       const matchesStatus = selectedStatus === "all" || permit.integrationStatus === selectedStatus
 
-      return matchesSearch && matchesAgency && matchesStatus
+      const matchesSource = selectedSource === "all" || permit.source === selectedSource
+
+      return matchesSearch && matchesAgency && matchesStatus && matchesSource
     })
-  }, [searchQuery, selectedAgency, selectedStatus])
+  }, [searchQuery, selectedAgency, selectedStatus, selectedSource])
 
   // Group filtered permits by agency
   const groupedPermits = useMemo(() => groupByAgency(filteredPermits), [filteredPermits])
@@ -118,6 +121,19 @@ export default function ResourcesPage() {
                   </option>
                 )
               })}
+            </select>
+          </div>
+          <div className="resources-page__source-filter">
+            <label htmlFor="source-filter" className="visually-hidden">Filter by source</label>
+            <select
+              id="source-filter"
+              value={selectedSource}
+              onChange={(e) => setSelectedSource(e.target.value)}
+              className="resources-page__select"
+            >
+              <option value="all">All Permits</option>
+              <option value="primary">Major Permits Only</option>
+              <option value="supplemental">Supplemental Only</option>
             </select>
           </div>
         </div>

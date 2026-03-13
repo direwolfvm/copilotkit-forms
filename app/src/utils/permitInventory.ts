@@ -1,7 +1,7 @@
 // Auto-generated from Environmental Review and Authorization Inventory (3.27.23).xlsx
 // Do not edit manually
 
-export type IntegrationStatus = "integrated" | "modern-app" | "manual"
+export type IntegrationStatus = "integrated" | "integration-ready" | "app-exists" | "manual"
 
 export interface PermitInfo {
   id: string
@@ -13,27 +13,43 @@ export interface PermitInfo {
   description: string
   statuteRegulation: string
   integrationStatus: IntegrationStatus
-}
-
-const MODERN_APP_PERMIT_IDS = new Set([
-  "section-404-clean-water-act",
-  "endangered-species-act-consultation-doi-fws"
-])
-
-export function getIntegrationStatus(permitId: string): IntegrationStatus {
-  if (MODERN_APP_PERMIT_IDS.has(permitId)) {
-    return "modern-app"
-  }
-  return "manual"
+  source: "primary" | "supplemental"
 }
 
 export const INTEGRATION_STATUS_LABELS: Record<IntegrationStatus, string> = {
   "integrated": "Integration with HelpPermitMe",
-  "modern-app": "Modern Web Application",
+  "integration-ready": "Integration Ready",
+  "app-exists": "Application Exists",
   "manual": "No Integration / Manual Process"
 }
 
-type RawPermitInfo = Omit<PermitInfo, "integrationStatus">
+// Permits whose associated agency tools have portal or case management capabilities
+const APP_EXISTS_PERMIT_IDS = new Set([
+  "endangered-species-act-consultation-noaa-nmfs",
+  "magnuson-stevens-fishery-conservation-and-management-act-sec",
+  "marine-mammal-protection-act-mmpa-incidental-take-authorizat",
+  "endangered-species-act-consultation-doi-fws",
+  "fish-and-wildlife-coordination-act-review-doi-fws",
+  "bald-and-golden-eagle-protection-permit",
+  "migratory-bird-treaty-act-permits",
+  "section-404-clean-water-act",
+  "section-10-of-the-rivers-and-harbors-act-of-1899",
+  "section-103-of-the-marine-protection-research-and-sanctuarie",
+  "section-408-permit",
+  "clean-water-act-section-402-permit-national-pollutant-discha",
+  "clean-water-act-section-401-water-quality-certification",
+  "authorization-for-liquefied-natural-gas-terminal-facilities-",
+  "certificate-of-public-convenience-and-necessity-for-intersta",
+  "natural-gas-export-authorization",
+  "non-federal-hydropower-licenses",
+  "right-of-way-authorization-doi-blm",
+  "special-use-permit-blm",
+  "site-license-doi-blm",
+  "nuclear-power-plant-combined-construction-and-operating-lice",
+  "nuclear-power-plant-construction-permit",
+])
+
+type RawPermitInfo = Omit<PermitInfo, "integrationStatus" | "source">
 
 const rawPermitInventory: RawPermitInfo[] = [
   {
@@ -698,10 +714,75 @@ const rawPermitInventory: RawPermitInfo[] = [
   }
 ]
 
-export const permitInventory: PermitInfo[] = rawPermitInventory.map((permit) => ({
-  ...permit,
-  integrationStatus: getIntegrationStatus(permit.id)
-}))
+const supplementalPermits: Array<Omit<PermitInfo, "source">> = [
+  {
+    id: "deep-seabed-hard-mineral-resources-act",
+    name: "Deep Seabed Hard Mineral Resources Act Licenses and Permits",
+    responsibleAgency: "DOC",
+    responsibleOffice: "NOAA",
+    projectType: "Deep Seabed Mining",
+    activityTrigger: "Exploration or commercial recovery of hard mineral resources from the deep seabed beyond national jurisdiction",
+    description: "Licenses and permits issued under the Deep Seabed Hard Mineral Resources Act for the exploration and commercial recovery of hard mineral resources of the deep seabed.",
+    statuteRegulation: "Deep Seabed Hard Mineral Resources Act (30 U.S.C. 1401 et seq.)",
+    integrationStatus: "manual",
+  },
+  {
+    id: "clean-air-act-permit",
+    name: "Clean Air Act Permits",
+    responsibleAgency: "EPA",
+    responsibleOffice: "OAR",
+    projectType: "All",
+    activityTrigger: "Construction or modification of major stationary sources of air pollutants; operation of sources subject to Title V permitting requirements",
+    description: "Permits issued under the Clean Air Act for new source review (prevention of significant deterioration and nonattainment area permits) and Title V operating permits for major sources of air pollutants.",
+    statuteRegulation: "Clean Air Act (42 U.S.C. 7401 et seq.); 40 CFR Parts 51, 52, 70, 71",
+    integrationStatus: "app-exists",
+  },
+  {
+    id: "underground-injection-control-class-vi",
+    name: "Underground Injection Control Class VI Permit",
+    responsibleAgency: "EPA",
+    responsibleOffice: "OW",
+    projectType: "Carbon Sequestration",
+    activityTrigger: "Injection of carbon dioxide into underground formations for geologic sequestration",
+    description: "Class VI permits under the Underground Injection Control program authorize the injection of carbon dioxide into deep subsurface rock formations for long-term storage (geologic sequestration).",
+    statuteRegulation: "Safe Drinking Water Act Section 1421; 40 CFR Parts 144, 146",
+    integrationStatus: "manual",
+  },
+  {
+    id: "jurisdictional-determination-usace",
+    name: "Jurisdictional Determination",
+    responsibleAgency: "DOD",
+    responsibleOffice: "USACE",
+    projectType: "All",
+    activityTrigger: "Request for a determination of whether waters or wetlands on a project site are jurisdictional under the Clean Water Act or Rivers and Harbors Act",
+    description: "A jurisdictional determination is a written determination by the U.S. Army Corps of Engineers on whether waters or wetlands on a project site are subject to regulatory jurisdiction under Section 404 of the Clean Water Act or Section 10 of the Rivers and Harbors Act.",
+    statuteRegulation: "Clean Water Act Section 404; Rivers and Harbors Act Section 10; 33 CFR Part 331",
+    integrationStatus: "app-exists",
+  },
+  {
+    id: "special-recreation-permit-blm",
+    name: "Special Recreation Permit",
+    responsibleAgency: "DOI",
+    responsibleOffice: "BLM",
+    projectType: "Recreation",
+    activityTrigger: "Commercial, competitive, or organized group recreational use of BLM-administered public lands",
+    description: "Special recreation permits authorize commercial, competitive, vending, or organized group/event use of BLM-administered public lands and related waters.",
+    statuteRegulation: "Federal Land Policy and Management Act (43 U.S.C. 1701 et seq.); 43 CFR Part 2930",
+    integrationStatus: "app-exists",
+  },
+]
+
+export const permitInventory: PermitInfo[] = [
+  ...rawPermitInventory.map((permit) => ({
+    ...permit,
+    integrationStatus: (APP_EXISTS_PERMIT_IDS.has(permit.id) ? "app-exists" : "manual") as IntegrationStatus,
+    source: "primary" as const,
+  })),
+  ...supplementalPermits.map((permit) => ({
+    ...permit,
+    source: "supplemental" as const,
+  })),
+]
 
 // Common keywords for fuzzy matching
 function extractKeywords(text: string): string[] {

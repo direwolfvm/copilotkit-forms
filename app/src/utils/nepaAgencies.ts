@@ -64,7 +64,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "USDA",
     procedureCitation: "Federal Register (2020-11-19)",
     procedureUrl: "https://www.federalregister.gov/documents/2020/11/19/2020-25465/national-environmental-policy-act-nepa-compliance",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   {
     id: "usda-nrcs",
@@ -125,7 +125,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "DOC",
     procedureCitation: "DAO 216-6 (DOC dept-wide)",
     procedureUrl: "http://www.osec.doc.gov/opog/dmp/daos/dao216_6.html",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   {
     id: "doc-noaa",
@@ -135,7 +135,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "DOC",
     procedureCitation: "NOAA NEPA Procedures",
     procedureUrl: "http://www.nepa.noaa.gov/",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   // ── Department of Defense (DOD) ──
   {
@@ -206,7 +206,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "DOD",
     procedureCitation: "33 CFR Part 230",
     procedureUrl: "https://www.ecfr.gov/cgi-bin/text-idx?SID=78a7fc47dd583aa0637153c238efba43&mc=true&tpl=/ecfrbrowse/Title33/33cfr230_main_02.tpl",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   // ── Department of Energy (DOE) ──
   {
@@ -217,7 +217,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "DOE",
     procedureCitation: "10 CFR Part 1021",
     procedureUrl: "https://www.ecfr.gov/cgi-bin/text-idx?SID=a4e055019b59e975ce6b588a419d7b2d&mc=true&node=pt10.4.1021&rgn=div5",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   // ── Department of Health and Human Services (HHS) ──
   {
@@ -330,7 +330,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "HUD",
     procedureCitation: "Federal Register (2003-09-29) / 24 CFR Part 58",
     procedureUrl: "https://www.federalregister.gov/documents/2003/09/29/03-24265/environmental-review-procedures-for-entities-assuming-huds-environmental-responsibilities",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   // ── Department of the Interior (DOI) ──
   {
@@ -351,7 +351,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "DOI",
     procedureCitation: "516 DM Chapter 8",
     procedureUrl: "https://www.doi.gov/sites/doi.gov/files/elips/documents/chapter_8_managing_the_nepa_process-u.s._fish_and_wildlife_service.doc",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   {
     id: "doi-usgs",
@@ -381,7 +381,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "DOI",
     procedureCitation: "516 DM Chapter 14",
     procedureUrl: "https://www.doi.gov/sites/doi.gov/files/elips/documents/chapte1_14.doc",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   {
     id: "doi-nps",
@@ -678,7 +678,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "EPA",
     procedureCitation: "40 CFR Part 6",
     procedureUrl: "https://www.ecfr.gov/current/title-40/part-6",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   {
     id: "fcc",
@@ -708,7 +708,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "FERC",
     procedureCitation: "18 CFR Part 380",
     procedureUrl: "https://www.ecfr.gov/current/title-18/chapter-I/subchapter-W/part-380",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   {
     id: "fmc",
@@ -768,7 +768,7 @@ export const nepaAgencies: NepaAgency[] = [
     departmentAbbreviation: "NRC",
     procedureCitation: "10 CFR Part 51, Subpart A",
     procedureUrl: "https://www.ecfr.gov/cgi-bin/text-idx?SID=e9eb3057f44ec8da14baeafb8f47ce2a&mc=true&node=sp10.2.51.a&rgn=div6",
-    integrationStatus: "manual",
+    integrationStatus: "app-exists",
   },
   {
     id: "nsf",

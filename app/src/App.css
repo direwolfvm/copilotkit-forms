@@ -4553,13 +4553,22 @@
   background: var(--color-success);
 }
 
-.integration-badge--modern-app {
+.integration-badge--app-exists {
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
   color: var(--color-warning);
 }
 
-.integration-badge--modern-app .integration-badge__dot {
+.integration-badge--app-exists .integration-badge__dot {
   background: var(--color-warning);
+}
+
+.integration-badge--integration-ready {
+  background: color-mix(in srgb, #d4a017 12%, transparent);
+  color: #b8960f;
+}
+
+.integration-badge--integration-ready .integration-badge__dot {
+  background: #d4a017;
 }
 
 .integration-badge--manual {

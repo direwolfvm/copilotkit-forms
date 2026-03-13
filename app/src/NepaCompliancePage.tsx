@@ -6,7 +6,7 @@ import { INTEGRATION_STATUS_LABELS } from "./utils/permitInventory"
 import type { IntegrationStatus } from "./utils/permitInventory"
 import type { NepaAgency } from "./utils/nepaAgencies"
 
-const INTEGRATION_STATUS_OPTIONS: IntegrationStatus[] = ["integrated", "modern-app", "manual"]
+const INTEGRATION_STATUS_OPTIONS: IntegrationStatus[] = ["integrated", "integration-ready", "app-exists", "manual"]
 
 function IntegrationStatusBadge({ status }: { status: IntegrationStatus }) {
   return (
