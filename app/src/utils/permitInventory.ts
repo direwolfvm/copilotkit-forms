@@ -16,6 +16,8 @@ export interface PermitInfo {
   source: "primary" | "supplemental"
 }
 
+export const FWS_ESA_CONSULTATION_PERMIT_ID = "endangered-species-act-consultation-doi-fws"
+
 export const INTEGRATION_STATUS_LABELS: Record<IntegrationStatus, string> = {
   "integrated": "Integration with HelpPermitMe",
   "integration-ready": "Integration Ready",
@@ -28,7 +30,6 @@ const APP_EXISTS_PERMIT_IDS = new Set([
   "endangered-species-act-consultation-noaa-nmfs",
   "magnuson-stevens-fishery-conservation-and-management-act-sec",
   "marine-mammal-protection-act-mmpa-incidental-take-authorizat",
-  "endangered-species-act-consultation-doi-fws",
   "fish-and-wildlife-coordination-act-review-doi-fws",
   "bald-and-golden-eagle-protection-permit",
   "migratory-bird-treaty-act-permits",
@@ -775,7 +776,10 @@ const supplementalPermits: Array<Omit<PermitInfo, "source">> = [
 export const permitInventory: PermitInfo[] = [
   ...rawPermitInventory.map((permit) => ({
     ...permit,
-    integrationStatus: (APP_EXISTS_PERMIT_IDS.has(permit.id) ? "app-exists" : "manual") as IntegrationStatus,
+    integrationStatus:
+      permit.id === FWS_ESA_CONSULTATION_PERMIT_ID
+        ? "manual"
+        : ((APP_EXISTS_PERMIT_IDS.has(permit.id) ? "app-exists" : "manual") as IntegrationStatus),
     source: "primary" as const,
   })),
   ...supplementalPermits.map((permit) => ({
@@ -783,6 +787,22 @@ export const permitInventory: PermitInfo[] = [
     source: "supplemental" as const,
   })),
 ]
+
+export function getIntegrationStatusLabel(permit: Pick<PermitInfo, "id" | "integrationStatus">): string {
+  if (permit.id === FWS_ESA_CONSULTATION_PERMIT_ID) {
+    return "Manual Integration (not data standards compliant)"
+  }
+  return INTEGRATION_STATUS_LABELS[permit.integrationStatus]
+}
+
+export function getIntegrationStatusTone(
+  permit: Pick<PermitInfo, "id" | "integrationStatus">
+): IntegrationStatus | "manual-info" {
+  if (permit.id === FWS_ESA_CONSULTATION_PERMIT_ID) {
+    return "manual-info"
+  }
+  return permit.integrationStatus
+}
 
 // Common keywords for fuzzy matching
 function extractKeywords(text: string): string[] {

@@ -1,16 +1,22 @@
 import { useState, useMemo } from "react"
 import { Link } from "react-router-dom"
 import "./App.css"
-import { permitInventory, getPermitInfoUrl, INTEGRATION_STATUS_LABELS } from "./utils/permitInventory"
+import {
+  permitInventory,
+  getPermitInfoUrl,
+  INTEGRATION_STATUS_LABELS,
+  getIntegrationStatusLabel,
+  getIntegrationStatusTone
+} from "./utils/permitInventory"
 import type { PermitInfo, IntegrationStatus } from "./utils/permitInventory"
 
 const INTEGRATION_STATUS_OPTIONS: IntegrationStatus[] = ["integrated", "integration-ready", "app-exists", "manual"]
 
-function IntegrationStatusBadge({ status }: { status: IntegrationStatus }) {
+function IntegrationStatusBadge({ permit }: { permit: PermitInfo }) {
   return (
-    <span className={`integration-badge integration-badge--${status}`}>
+    <span className={`integration-badge integration-badge--${getIntegrationStatusTone(permit)}`}>
       <span className="integration-badge__dot" aria-hidden="true" />
-      <span className="integration-badge__label">{INTEGRATION_STATUS_LABELS[status]}</span>
+      <span className="integration-badge__label">{getIntegrationStatusLabel(permit)}</span>
     </span>
   )
 }
@@ -159,7 +165,7 @@ export default function ResourcesPage() {
                         >
                           <span className="resources-page__permit-top">
                             <span className="resources-page__permit-name">{permit.name}</span>
-                            <IntegrationStatusBadge status={permit.integrationStatus} />
+                            <IntegrationStatusBadge permit={permit} />
                           </span>
                           <span className="resources-page__permit-office">{permit.responsibleOffice}</span>
                         </Link>

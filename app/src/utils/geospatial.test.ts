@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { prepareGeospatialPayload, formatGeospatialResultsSummary } from './geospatial'
+import {
+  prepareGeospatialPayload,
+  formatGeospatialResultsSummary,
+  extractIpacStartProjectUrl
+} from './geospatial'
 import type { GeospatialResultsState } from '../types/geospatial'
 
 describe('prepareGeospatialPayload', () => {
@@ -98,5 +102,22 @@ describe('formatGeospatialResultsSummary', () => {
     expect(summary).toContain('  - Listed species: Bald eagle (Threatened)')
     expect(summary).toContain('  - Critical habitats: Habitat A')
     expect(summary).toContain('  - Wetlands: Wetland 12 (2 acres)')
+  })
+})
+
+describe('extractIpacStartProjectUrl', () => {
+  it('finds the returned IPaC project link in nested response data', () => {
+    const result = extractIpacStartProjectUrl({
+      resources: {
+        location: {
+          description: 'Example'
+        }
+      },
+      ReturnURL: {
+        startProjectURL: 'https://ipacb.ecosphere.fws.gov/project/create/example'
+      }
+    })
+
+    expect(result).toBe('https://ipacb.ecosphere.fws.gov/project/create/example')
   })
 })

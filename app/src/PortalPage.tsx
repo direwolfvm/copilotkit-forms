@@ -91,10 +91,41 @@ const BASIC_PERMIT_LINK = { href: "/permits/basic", label: "Start this permit." 
 const BASIC_PERMIT_PROJECT_PARAM = "projectId"
 const BASIC_PERMIT_CHECKLIST_KEY = toChecklistKey(BASIC_PERMIT_LABEL)
 
+const IPAC_CONSULTATION_LINK = { href: "/permits/ipac-consultation", label: "Start this permit." }
+const IPAC_CONSULTATION_PROJECT_PARAM = "projectId"
+
 const COMPLEX_REVIEW_LABEL = "Complex Review"
 const COMPLEX_REVIEW_LINK = { href: "/reviews/complex", label: "Start this review." }
 const COMPLEX_REVIEW_PROJECT_PARAM = "projectId"
 const COMPLEX_REVIEW_CHECKLIST_KEY = toChecklistKey(COMPLEX_REVIEW_LABEL)
+
+function isIpacConsultationChecklistKey(key: string) {
+  if (key.includes("noaa") || key.includes("nmfs")) {
+    return false
+  }
+
+  return (
+    key.includes("endangered species act consultation") ||
+    key.includes("endangered species act section 7 consultation") ||
+    key.includes("endangered species consultation") ||
+    key.includes("esa section 7 consultation") ||
+    key.includes("fws esa consultation")
+  )
+}
+
+function getChecklistIntegrationLink(label: string): PermittingChecklistItem["link"] | undefined {
+  const key = toChecklistKey(label)
+  if (key === BASIC_PERMIT_CHECKLIST_KEY) {
+    return BASIC_PERMIT_LINK
+  }
+  if (key === COMPLEX_REVIEW_CHECKLIST_KEY) {
+    return COMPLEX_REVIEW_LINK
+  }
+  if (isIpacConsultationChecklistKey(key)) {
+    return IPAC_CONSULTATION_LINK
+  }
+  return undefined
+}
 
 const SUPPORTED_DOCUMENT_EXTENSIONS = ["pdf", "docx", "jpg", "jpeg", "png"] as const
 const SUPPORTED_DOCUMENT_ACCEPT = [
@@ -250,30 +281,23 @@ function appendProjectIdToPermitLink(link: PermittingChecklistItem["link"], proj
   if (!link || !projectId) {
     return link
   }
-  // Handle Basic Permit links
-  if (link.href.startsWith(BASIC_PERMIT_LINK.href)) {
-    if (link.href.includes(`${BASIC_PERMIT_PROJECT_PARAM}=`)) {
+  const routeParams: Array<{ href: string; param: string }> = [
+    { href: BASIC_PERMIT_LINK.href, param: BASIC_PERMIT_PROJECT_PARAM },
+    { href: COMPLEX_REVIEW_LINK.href, param: COMPLEX_REVIEW_PROJECT_PARAM },
+    { href: IPAC_CONSULTATION_LINK.href, param: IPAC_CONSULTATION_PROJECT_PARAM }
+  ]
+
+  for (const routeParam of routeParams) {
+    if (!link.href.startsWith(routeParam.href)) {
+      continue
+    }
+    if (link.href.includes(`${routeParam.param}=`)) {
       return link
     }
     const separator = link.href.includes("?") ? "&" : "?"
     return {
       ...link,
-      href: `${link.href}${separator}${BASIC_PERMIT_PROJECT_PARAM}=${encodeURIComponent(
-        projectId
-      )}`
-    }
-  }
-  // Handle Complex Review links
-  if (link.href.startsWith(COMPLEX_REVIEW_LINK.href)) {
-    if (link.href.includes(`${COMPLEX_REVIEW_PROJECT_PARAM}=`)) {
-      return link
-    }
-    const separator = link.href.includes("?") ? "&" : "?"
-    return {
-      ...link,
-      href: `${link.href}${separator}${COMPLEX_REVIEW_PROJECT_PARAM}=${encodeURIComponent(
-        projectId
-      )}`
+      href: `${link.href}${separator}${routeParam.param}=${encodeURIComponent(projectId)}`
     }
   }
   return link
@@ -307,6 +331,10 @@ function ensureDefaultChecklistItems(items: PermittingChecklistItem[]): Permitti
         updated = true
         return { ...item, link: COMPLEX_REVIEW_LINK }
       }
+    }
+    if (isIpacConsultationChecklistKey(key) && !item.link) {
+      updated = true
+      return { ...item, link: IPAC_CONSULTATION_LINK }
     }
     return item
   })
@@ -1535,8 +1563,6 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       for (const entry of normalized) {
         const key = toChecklistKey(entry.label)
         const existingIndex = indexByKey.get(key)
-        const isBasicPermit = key === BASIC_PERMIT_CHECKLIST_KEY
-        const isComplexReview = key === COMPLEX_REVIEW_CHECKLIST_KEY
         if (existingIndex !== undefined) {
           const existing = next[existingIndex]
           let updated = false
@@ -1553,12 +1579,9 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             updated = true
           }
           let nextLink = existing.link
-          if (isBasicPermit && !existing.link) {
-            nextLink = BASIC_PERMIT_LINK
-            updated = true
-          }
-          if (isComplexReview && !existing.link) {
-            nextLink = COMPLEX_REVIEW_LINK
+          const integrationLink = getChecklistIntegrationLink(entry.label)
+          if (integrationLink && !existing.link) {
+            nextLink = integrationLink
             updated = true
           }
           if (updated) {
@@ -1574,18 +1597,14 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
           }
         } else {
           // Look up permit info link for special items first
-          let itemLink: PermittingChecklistItem["link"] = undefined
-          if (isBasicPermit) {
-            itemLink = BASIC_PERMIT_LINK
-          } else if (isComplexReview) {
-            itemLink = COMPLEX_REVIEW_LINK
-          } else if (entry.permitId) {
+          let itemLink: PermittingChecklistItem["link"] = getChecklistIntegrationLink(entry.label)
+          if (!itemLink && entry.permitId) {
             // Use permitId directly if provided (from CopilotKit action)
             itemLink = {
               href: getPermitInfoUrl(entry.permitId),
               label: "Info"
             }
-          } else {
+          } else if (!itemLink) {
             // Fall back to fuzzy matching by label
             const matchedPermit = findPermitByLabel(entry.label)
             if (matchedPermit) {

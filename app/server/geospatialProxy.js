@@ -2,6 +2,7 @@ const DEFAULT_BUFFER_MILES = 0.1;
 const NEPA_ARCGIS_URL = "https://nepassisttool.epa.gov/nepassist/api/arcgis/geometry/buffer";
 const NEPA_BROKER_URL = "https://nepassisttool.epa.gov/nepassist/nepaRESTbroker.aspx";
 const IPAC_URL = "https://ipac.ecosphere.fws.gov/location/api/resources";
+const IPAC_BETA_URL = "https://ipacb.ecosphere.fws.gov/location/api/resources";
 const USER_AGENT = "copilotkit-forms-geospatial-proxy/1.0";
 
 class ProxyError extends Error {
@@ -158,9 +159,12 @@ export async function callIpacProxy(payload = {}) {
     throw new ProxyError("Invalid IPaC payload.", 400);
   }
 
-  const bodyText = JSON.stringify(payload);
+  const environment = payload.environment === "beta" ? "beta" : "production";
+  const upstreamUrl = environment === "beta" ? IPAC_BETA_URL : IPAC_URL;
+  const { environment: _environment, ...upstreamPayload } = payload;
+  const bodyText = JSON.stringify(upstreamPayload);
 
-  const { response, data, rawText } = await tryFetchJson(IPAC_URL, {
+  const { response, data, rawText } = await tryFetchJson(upstreamUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: bodyText
@@ -177,7 +181,8 @@ export async function callIpacProxy(payload = {}) {
   return {
     data,
     meta: {
-      upstreamUrl: IPAC_URL,
+      upstreamUrl,
+      environment,
       payloadSize: bodyText.length
     }
   };

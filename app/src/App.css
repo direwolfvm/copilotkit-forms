@@ -3027,6 +3027,26 @@
   font-weight: 600;
 }
 
+.ipac-start-page__continue {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--info) 28%, var(--border) 72%);
+  background: color-mix(in srgb, var(--surface-muted) 78%, var(--info) 22%);
+}
+
+.ipac-start-page__continue h3 {
+  margin: 0 0 0.45rem;
+}
+
+.ipac-start-page__continue p {
+  margin: 0;
+}
+
+.ipac-start-page__continue-link {
+  font-weight: 700;
+}
+
 .permit-start-page__custom-form-status {
   border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border) 75%);
   border-radius: 12px;
@@ -4578,6 +4598,15 @@
 
 .integration-badge--manual .integration-badge__dot {
   background: var(--color-danger);
+}
+
+.integration-badge--manual-info {
+  background: color-mix(in srgb, var(--info) 14%, transparent);
+  color: var(--info);
+}
+
+.integration-badge--manual-info .integration-badge__dot {
+  background: var(--info);
 }
 
 @media (max-width: 720px) {

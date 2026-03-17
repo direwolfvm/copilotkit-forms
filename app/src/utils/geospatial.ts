@@ -270,6 +270,58 @@ function pushUnique(target: string[], value: unknown) {
   }
 }
 
+function findStartProjectUrl(value: unknown): string | undefined {
+  if (!value) {
+    return undefined
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed
+    }
+    return undefined
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const match = findStartProjectUrl(item)
+      if (match) {
+        return match
+      }
+    }
+    return undefined
+  }
+  if (typeof value !== 'object') {
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  const direct =
+    record.startProjectURL ??
+    record.startProjectUrl ??
+    record.StartProjectURL ??
+    record.returnURL ??
+    record.ReturnURL
+  if (direct !== undefined) {
+    const directMatch = findStartProjectUrl(direct)
+    if (directMatch) {
+      return directMatch
+    }
+  }
+
+  for (const nestedValue of Object.values(record)) {
+    const match = findStartProjectUrl(nestedValue)
+    if (match) {
+      return match
+    }
+  }
+
+  return undefined
+}
+
+export function extractIpacStartProjectUrl(data: unknown): string | undefined {
+  return findStartProjectUrl(data)
+}
+
 function formatAcres(value: unknown): string | undefined {
   if (isNumber(value)) {
     return value.toFixed(1)
