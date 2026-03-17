@@ -1285,6 +1285,57 @@
   color: var(--color-text);
 }
 
+.checklist-panel__match {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--info) 28%, var(--border) 72%);
+  background: color-mix(in srgb, var(--surface) 94%, var(--info) 6%);
+}
+
+.checklist-panel__match p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.checklist-panel__suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checklist-panel__suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.8rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-muted) 6%);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.checklist-panel__suggestion:hover,
+.checklist-panel__suggestion:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border) 62%);
+  background: color-mix(in srgb, var(--surface) 88%, var(--alpha-accent-08) 12%);
+  box-shadow: 0 18px 28px -26px var(--alpha-heading-60);
+}
+
+.checklist-panel__suggestion span:last-child {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
 .checklist-panel__basic-permit {
   display: flex;
   flex-wrap: wrap;

@@ -31,6 +31,7 @@ import {
 import { ProjectSummary } from "./components/ProjectSummary"
 import {
   PermittingChecklistSection,
+  type ManualChecklistItemInput,
   type PermittingChecklistItem
 } from "./components/PermittingChecklistSection"
 import { ProcessInformationDetails } from "./components/ProcessInformationDetails"
@@ -38,7 +39,13 @@ import { CollapsibleCard, type CollapsibleCardStatus } from "./components/Collap
 import "./App.css"
 import { getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
-import { findPermitByLabel, getPermitInfoUrl, getPermitById, getPermitOptions } from "./utils/permitInventory"
+import {
+  FWS_ESA_CONSULTATION_PERMIT_ID,
+  findPermitByLabel,
+  getPermitInfoUrl,
+  getPermitById,
+  getPermitOptions
+} from "./utils/permitInventory"
 import {
   ProjectPersistenceError,
   saveProjectSnapshot,
@@ -99,7 +106,10 @@ const COMPLEX_REVIEW_LINK = { href: "/reviews/complex", label: "Start this revie
 const COMPLEX_REVIEW_PROJECT_PARAM = "projectId"
 const COMPLEX_REVIEW_CHECKLIST_KEY = toChecklistKey(COMPLEX_REVIEW_LABEL)
 
-function isIpacConsultationChecklistKey(key: string) {
+function isIpacConsultationChecklistKey(key: string, permitId?: string) {
+  if (permitId === FWS_ESA_CONSULTATION_PERMIT_ID) {
+    return true
+  }
   if (key.includes("noaa") || key.includes("nmfs")) {
     return false
   }
@@ -113,7 +123,10 @@ function isIpacConsultationChecklistKey(key: string) {
   )
 }
 
-function getChecklistIntegrationLink(label: string): PermittingChecklistItem["link"] | undefined {
+function getChecklistIntegrationLink(
+  label: string,
+  permitId?: string
+): PermittingChecklistItem["link"] | undefined {
   const key = toChecklistKey(label)
   if (key === BASIC_PERMIT_CHECKLIST_KEY) {
     return BASIC_PERMIT_LINK
@@ -121,7 +134,7 @@ function getChecklistIntegrationLink(label: string): PermittingChecklistItem["li
   if (key === COMPLEX_REVIEW_CHECKLIST_KEY) {
     return COMPLEX_REVIEW_LINK
   }
-  if (isIpacConsultationChecklistKey(key)) {
+  if (isIpacConsultationChecklistKey(key, permitId)) {
     return IPAC_CONSULTATION_LINK
   }
   return undefined
@@ -1579,7 +1592,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             updated = true
           }
           let nextLink = existing.link
-          const integrationLink = getChecklistIntegrationLink(entry.label)
+          const integrationLink = getChecklistIntegrationLink(entry.label, entry.permitId)
           if (integrationLink && !existing.link) {
             nextLink = integrationLink
             updated = true
@@ -1597,7 +1610,10 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
           }
         } else {
           // Look up permit info link for special items first
-          let itemLink: PermittingChecklistItem["link"] = getChecklistIntegrationLink(entry.label)
+          let itemLink: PermittingChecklistItem["link"] = getChecklistIntegrationLink(
+            entry.label,
+            entry.permitId
+          )
           if (!itemLink && entry.permitId) {
             // Use permitId directly if provided (from CopilotKit action)
             itemLink = {
@@ -1634,8 +1650,8 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
   }, [])
 
   const handleAddChecklistItem = useCallback(
-    (label: string) => {
-      upsertPermittingChecklistItems([{ label, completed: false, source: "manual" }])
+    ({ label, permitId }: ManualChecklistItemInput) => {
+      upsertPermittingChecklistItems([{ label, permitId, completed: false, source: "manual" }])
     },
     [upsertPermittingChecklistItems]
   )

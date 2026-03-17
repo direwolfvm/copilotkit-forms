@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 
 import { CollapsibleCard, type CollapsibleCardStatus } from "./CollapsibleCard"
 import { isAutoPopulatedChecklistItem } from "../utils/projectStatus"
+import { findPermitByLabel, getPermitById, getPermitOptions } from "../utils/permitInventory"
 
 export type PermittingChecklistItem = {
   id: string
@@ -16,9 +17,14 @@ export type PermittingChecklistItem = {
   }
 }
 
+export type ManualChecklistItemInput = {
+  label: string
+  permitId?: string
+}
+
 type PermittingChecklistSectionProps = {
   items: PermittingChecklistItem[]
-  onAddItem: (label: string) => void
+  onAddItem: (item: ManualChecklistItemInput) => void
   onToggleItem: (id: string) => void
   onRemoveItem: (id: string) => void
   onBulkAddFromSeed: (labels: string[]) => void
@@ -36,9 +42,36 @@ export function PermittingChecklistSection({
   onAddBasicPermit
 }: PermittingChecklistSectionProps) {
   const [draftLabel, setDraftLabel] = useState("")
+  const [selectedPermitId, setSelectedPermitId] = useState<string | undefined>()
+  const permitOptions = useMemo(() => getPermitOptions(), [])
 
   const manualItems = useMemo(() => items.filter((item) => !isAutoPopulatedChecklistItem(item)), [items])
   const pendingCount = useMemo(() => manualItems.filter((item) => !item.completed).length, [manualItems])
+  const selectedPermit = useMemo(
+    () => (selectedPermitId ? getPermitById(selectedPermitId) : undefined),
+    [selectedPermitId]
+  )
+  const matchingPermits = useMemo(() => {
+    const query = draftLabel.trim().toLowerCase()
+    if (query.length < 2) {
+      return [] as Array<{ id: string; name: string; agency: string }>
+    }
+
+    return permitOptions
+      .filter((permit) => {
+        const haystack = `${permit.name} ${permit.agency}`.toLowerCase()
+        return haystack.includes(query)
+      })
+      .sort((a, b) => {
+        const aStarts = a.name.toLowerCase().startsWith(query)
+        const bStarts = b.name.toLowerCase().startsWith(query)
+        if (aStarts !== bStarts) {
+          return aStarts ? -1 : 1
+        }
+        return a.name.localeCompare(b.name)
+      })
+      .slice(0, 6)
+  }, [draftLabel, permitOptions])
 
   const status: CollapsibleCardStatus = useMemo(() => {
     if (!manualItems.length) {
@@ -58,8 +91,19 @@ export function PermittingChecklistSection({
     if (!trimmed) {
       return
     }
-    onAddItem(trimmed)
+    const matchedPermit = selectedPermitId ? getPermitById(selectedPermitId) : findPermitByLabel(trimmed)
+    onAddItem({ label: trimmed, permitId: matchedPermit?.id })
     setDraftLabel("")
+    setSelectedPermitId(undefined)
+  }
+
+  const handleSelectPermit = (permitId: string) => {
+    const permit = getPermitById(permitId)
+    if (!permit) {
+      return
+    }
+    setSelectedPermitId(permit.id)
+    setDraftLabel(permit.name)
   }
 
   return (
@@ -85,11 +129,44 @@ export function PermittingChecklistSection({
           placeholder="Add permit or authorization"
           value={draftLabel}
           onChange={(event) => setDraftLabel(event.target.value)}
+          list="permitting-checklist-suggestions"
         />
+        <datalist id="permitting-checklist-suggestions">
+          {matchingPermits.map((permit) => (
+            <option key={permit.id} value={permit.name}>
+              {permit.agency}
+            </option>
+          ))}
+        </datalist>
         <button type="submit" className="primary">
           Add item
         </button>
       </form>
+      {selectedPermit ? (
+        <div className="checklist-panel__match">
+          <p>
+            Inventory match: <strong>{selectedPermit.name}</strong>
+          </p>
+          <button type="button" className="secondary" onClick={() => setSelectedPermitId(undefined)}>
+            Use custom text instead
+          </button>
+        </div>
+      ) : null}
+      {matchingPermits.length > 0 ? (
+        <div className="checklist-panel__suggestions" aria-label="Matching permits">
+          {matchingPermits.map((permit) => (
+            <button
+              key={permit.id}
+              type="button"
+              className="checklist-panel__suggestion"
+              onClick={() => handleSelectPermit(permit.id)}
+            >
+              <span>{permit.name}</span>
+              <span>{permit.agency}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       {!hasBasicPermit ? (
         <div className="checklist-panel__basic-permit">
           <p>Need to track the Basic Permit workflow?</p>
