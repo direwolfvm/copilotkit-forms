@@ -10,7 +10,22 @@ import {
 } from "./utils/permitInventory"
 import type { PermitInfo, IntegrationStatus } from "./utils/permitInventory"
 
-const INTEGRATION_STATUS_OPTIONS: IntegrationStatus[] = ["integrated", "integration-ready", "app-exists", "manual"]
+type PermitIntegrationStatusFilter = IntegrationStatus | "manual-info"
+
+const INTEGRATION_STATUS_OPTIONS: PermitIntegrationStatusFilter[] = [
+  "integrated",
+  "integration-ready",
+  "app-exists",
+  "manual-info",
+  "manual"
+]
+
+function getIntegrationStatusOptionLabel(status: PermitIntegrationStatusFilter) {
+  if (status === "manual-info") {
+    return "Manual Integration (not data standards compliant)"
+  }
+  return INTEGRATION_STATUS_LABELS[status]
+}
 
 function IntegrationStatusBadge({ permit }: { permit: PermitInfo }) {
   return (
@@ -37,7 +52,7 @@ function groupByAgency(permits: PermitInfo[]): Map<string, PermitInfo[]> {
 export default function ResourcesPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedAgency, setSelectedAgency] = useState<string>("all")
-  const [selectedStatus, setSelectedStatus] = useState<string>("all")
+  const [selectedStatus, setSelectedStatus] = useState<PermitIntegrationStatusFilter | "all">("all")
   const [selectedSource, setSelectedSource] = useState<string>("primary")
 
   // Get unique agencies for filter dropdown
@@ -56,7 +71,8 @@ export default function ResourcesPage() {
 
       const matchesAgency = selectedAgency === "all" || permit.responsibleAgency === selectedAgency
 
-      const matchesStatus = selectedStatus === "all" || permit.integrationStatus === selectedStatus
+      const matchesStatus =
+        selectedStatus === "all" || getIntegrationStatusTone(permit) === selectedStatus
 
       const matchesSource = selectedSource === "all" || permit.source === selectedSource
 
@@ -115,15 +131,15 @@ export default function ResourcesPage() {
             <select
               id="status-filter"
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              onChange={(e) => setSelectedStatus(e.target.value as PermitIntegrationStatusFilter | "all")}
               className="resources-page__select"
             >
               <option value="all">All Statuses</option>
               {INTEGRATION_STATUS_OPTIONS.map(status => {
-                const count = permitInventory.filter(p => p.integrationStatus === status).length
+                const count = permitInventory.filter(p => getIntegrationStatusTone(p) === status).length
                 return (
                   <option key={status} value={status}>
-                    {INTEGRATION_STATUS_LABELS[status]} ({count})
+                    {getIntegrationStatusOptionLabel(status)} ({count})
                   </option>
                 )
               })}
