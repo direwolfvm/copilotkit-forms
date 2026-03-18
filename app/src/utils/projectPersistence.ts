@@ -10,6 +10,11 @@ import type { PermittingChecklistItem } from "../components/PermittingChecklistS
 import { getSupabaseAnonKey, getSupabaseTenantId, getSupabaseUrl } from "../runtimeConfig"
 import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "../types/gis"
 import { summarizeNepassist, summarizeIpac } from "./geospatial"
+import {
+  IPAC_SHADOW_DECISION_ELEMENT_IDS,
+  IPAC_SHADOW_PROCESS_MODEL_ID,
+  IPAC_SHADOW_WORKFLOW_TITLE_SUFFIX
+} from "./ipacShadowWorkflow"
 
 const DATA_SOURCE_SYSTEM = "project-portal"
 const PROJECT_REPORT_DOCUMENT_TYPE = "project-report"
@@ -19,7 +24,11 @@ const PRE_SCREENING_TITLE_SUFFIX = "Pre-Screening"
 const CASE_EVENT_TYPES = {
   PROJECT_INITIATED: "Project initiated",
   PRE_SCREENING_INITIATED: "Pre-screening initiated",
-  PRE_SCREENING_COMPLETE: "Pre-screening complete"
+  PRE_SCREENING_COMPLETE: "Pre-screening complete",
+  IPAC_CONSULTATION_INITIATED: "IPaC consultation initiated",
+  IPAC_GEOSPATIAL_DATA_SUBMITTED: "IPaC geospatial data submitted",
+  IPAC_PROJECT_CREATED: "IPaC project created",
+  IPAC_CONSULTATION_COMPLETE: "IPaC consultation complete"
 } as const
 
 const SUPABASE_PROXY_PREFIX = "/api/supabase"
@@ -256,6 +265,19 @@ export type ProjectProcessSummary = {
   lastUpdated?: string | null
   createdTimestamp?: string | null
   caseEvents: CaseEventSummary[]
+}
+
+export type IpacShadowWorkflowStatus = {
+  processInstanceId?: number
+  exists: boolean
+  title: string
+  description: string
+  startedAt?: string | null
+  lastUpdated?: string | null
+  startProjectUrl?: string | null
+  geospatialDataCompletedAt?: string | null
+  projectCreatedAt?: string | null
+  consultationCompletedAt?: string | null
 }
 
 export type ProjectSummary = {
@@ -2655,6 +2677,606 @@ async function fetchExistingProcessInstanceId({
   return typeof processInstanceId === "number" ? processInstanceId : undefined
 }
 
+async function fetchLatestIpacShadowProcessInstanceRecord({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId
+}: FetchExistingProcessInstanceIdArgs): Promise<ProcessInstanceRow | undefined> {
+  const rows = await fetchSupabaseList<ProcessInstanceRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_instance",
+    "IPaC shadow process instance",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        "id,parent_project_id,process_model,last_updated,created_at,title:description,description"
+      )
+      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+      endpoint.searchParams.append("order", "last_updated.desc.nullslast")
+      endpoint.searchParams.append("order", "id.desc")
+      endpoint.searchParams.set("limit", "20")
+    }
+  )
+
+  return rows.find((row) => isIpacShadowProcessDescription(row.description ?? row.title))
+}
+
+type CreateShadowProcessInstanceArgs = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  projectId: number
+  projectTitle: string | null
+  descriptionSuffix: string
+  existingProcessInstanceId?: number
+}
+
+async function createShadowProcessInstance({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId,
+  projectTitle,
+  descriptionSuffix,
+  existingProcessInstanceId
+}: CreateShadowProcessInstanceArgs): Promise<number> {
+  const timestamp = new Date().toISOString()
+  const processInstancePayload = withPortalTenantId(
+    stripUndefined({
+      description: buildShadowProcessInstanceDescription(projectTitle, descriptionSuffix),
+      process_model: IPAC_SHADOW_PROCESS_MODEL_ID,
+      parent_project_id: projectId,
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: timestamp,
+      retrieved_timestamp: timestamp
+    })
+  )
+
+  if (typeof existingProcessInstanceId === "number") {
+    const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
+    endpoint.searchParams.set("id", `eq.${existingProcessInstanceId}`)
+
+    const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify(processInstancePayload)
+    })
+    const response = await fetch(url, init)
+    const responseText = await response.text()
+
+    if (!response.ok) {
+      const errorDetail = extractErrorDetail(responseText)
+      throw new ProjectPersistenceError(
+        errorDetail
+          ? `Failed to update process instance (${response.status}): ${errorDetail}`
+          : `Failed to update process instance (${response.status}).`
+      )
+    }
+
+    return existingProcessInstanceId
+  }
+
+  const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(processInstancePayload)
+  })
+  const response = await fetch(url, init)
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to create process instance (${response.status}): ${errorDetail}`
+        : `Failed to create process instance (${response.status}).`
+    )
+  }
+
+  const payload = responseText ? safeJsonParse(responseText) : undefined
+  const processInstanceId = extractNumericId(payload)
+  if (typeof processInstanceId !== "number" || !Number.isFinite(processInstanceId)) {
+    throw new ProjectPersistenceError("Supabase response did not include a process instance identifier.")
+  }
+
+  return processInstanceId
+}
+
+function extractLatestDecisionPayload(
+  rows: ProcessDecisionPayloadRow[],
+  decisionElementId: number
+): ProcessDecisionPayloadRow | undefined {
+  let latest: ProcessDecisionPayloadRow | undefined
+  let latestTimestamp = Number.NEGATIVE_INFINITY
+
+  for (const row of rows) {
+    if (parseNumericId(row.process_decision_element) !== decisionElementId) {
+      continue
+    }
+
+    const timestamp = parseTimestamp(row.last_updated) ?? Number.NEGATIVE_INFINITY
+    if (!latest || timestamp >= latestTimestamp) {
+      latest = row
+      latestTimestamp = timestamp
+    }
+  }
+
+  return latest
+}
+
+function parseDecisionPayloadEvaluationRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined
+}
+
+function extractCompletedAtFromDecisionPayload(
+  payload?: ProcessDecisionPayloadRow
+): string | null | undefined {
+  const evaluation = parseDecisionPayloadEvaluationRecord(payload?.evaluation_data)
+  const completedAt = evaluation?.completed_at
+  if (typeof completedAt === "string" && completedAt.trim().length > 0) {
+    return completedAt
+  }
+  return payload?.last_updated
+}
+
+async function upsertIpacShadowDecisionPayload({
+  supabaseUrl,
+  supabaseAnonKey,
+  processInstanceId,
+  projectId,
+  decisionElementId,
+  evaluationData
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  processInstanceId: number
+  projectId: number
+  decisionElementId: number
+  evaluationData: Record<string, unknown>
+}): Promise<void> {
+  const timestamp = new Date().toISOString()
+  const existingRows = await fetchProcessDecisionPayloadRows({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId
+  })
+  const existing = extractLatestDecisionPayload(existingRows, decisionElementId)
+  const payload = withPortalTenantId(
+    stripUndefined({
+      process: processInstanceId,
+      project: projectId,
+      process_decision_element: decisionElementId,
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: timestamp,
+      retrieved_timestamp: timestamp,
+      evaluation_data: {
+        ...evaluationData,
+        completed_at:
+          typeof evaluationData.completed_at === "string" && evaluationData.completed_at.length > 0
+            ? evaluationData.completed_at
+            : timestamp
+      }
+    })
+  )
+
+  if (typeof parseNumericId(existing?.id) === "number") {
+    const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
+    endpoint.searchParams.set("id", `eq.${parseNumericId(existing?.id)}`)
+
+    const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify(payload)
+    })
+    const response = await fetch(url, init)
+    const responseText = await response.text()
+
+    if (!response.ok) {
+      const errorDetail = extractErrorDetail(responseText)
+      throw new ProjectPersistenceError(
+        errorDetail
+          ? `Failed to update decision payload (${response.status}): ${errorDetail}`
+          : `Failed to update decision payload (${response.status}).`
+      )
+    }
+
+    return
+  }
+
+  const endpoint = new URL("/rest/v1/process_decision_payload", supabaseUrl)
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+  const response = await fetch(url, init)
+  const responseText = await response.text()
+
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to create decision payload (${response.status}): ${errorDetail}`
+        : `Failed to create decision payload (${response.status}).`
+    )
+  }
+}
+
+function parseCaseEventOtherRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined
+}
+
+function extractLatestCaseEvent(
+  rows: CaseEventRow[],
+  eventType: CaseEventType
+): CaseEventRow | undefined {
+  return rows.find((row) => row.type === eventType)
+}
+
+function buildIpacShadowWorkflowStatus({
+  process,
+  caseEvents,
+  decisionPayloads
+}: {
+  process?: ProcessInstanceRow
+  caseEvents: CaseEventRow[]
+  decisionPayloads: ProcessDecisionPayloadRow[]
+}): IpacShadowWorkflowStatus {
+  const initiatedEvent = extractLatestCaseEvent(caseEvents, CASE_EVENT_TYPES.IPAC_CONSULTATION_INITIATED)
+  const geospatialEvent = extractLatestCaseEvent(
+    caseEvents,
+    CASE_EVENT_TYPES.IPAC_GEOSPATIAL_DATA_SUBMITTED
+  )
+  const projectCreatedEvent = extractLatestCaseEvent(
+    caseEvents,
+    CASE_EVENT_TYPES.IPAC_PROJECT_CREATED
+  )
+  const consultationCompleteEvent = extractLatestCaseEvent(
+    caseEvents,
+    CASE_EVENT_TYPES.IPAC_CONSULTATION_COMPLETE
+  )
+  const geospatialOther = parseCaseEventOtherRecord(geospatialEvent?.other)
+  const initiatedOther = parseCaseEventOtherRecord(initiatedEvent?.other)
+  const geospatialPayload = extractLatestDecisionPayload(
+    decisionPayloads,
+    IPAC_SHADOW_DECISION_ELEMENT_IDS.geospatialData
+  )
+  const projectCreatedPayload = extractLatestDecisionPayload(
+    decisionPayloads,
+    IPAC_SHADOW_DECISION_ELEMENT_IDS.projectCreated
+  )
+  const consultationCompletePayload = extractLatestDecisionPayload(
+    decisionPayloads,
+    IPAC_SHADOW_DECISION_ELEMENT_IDS.consultationComplete
+  )
+  const geospatialPayloadEvaluation = parseDecisionPayloadEvaluationRecord(
+    geospatialPayload?.evaluation_data
+  )
+  const startProjectUrlCandidate =
+    geospatialPayloadEvaluation?.start_project_url ??
+    geospatialOther?.start_project_url ??
+    initiatedOther?.start_project_url
+
+  return {
+    processInstanceId: parseNumericId(process?.id),
+    exists: typeof parseNumericId(process?.id) === "number",
+    title: typeof process?.title === "string" && process.title.trim().length > 0
+      ? process.title
+      : IPAC_SHADOW_WORKFLOW_TITLE_SUFFIX,
+    description: typeof process?.description === "string" && process.description.trim().length > 0
+      ? process.description
+      : IPAC_SHADOW_WORKFLOW_TITLE_SUFFIX,
+    startedAt: initiatedEvent?.last_updated ?? null,
+    lastUpdated: process?.last_updated ?? geospatialEvent?.last_updated ?? null,
+    startProjectUrl:
+      typeof startProjectUrlCandidate === "string" && startProjectUrlCandidate.trim().length > 0
+        ? startProjectUrlCandidate
+        : null,
+    geospatialDataCompletedAt:
+      extractCompletedAtFromDecisionPayload(geospatialPayload) ?? geospatialEvent?.last_updated ?? null,
+    projectCreatedAt:
+      extractCompletedAtFromDecisionPayload(projectCreatedPayload) ??
+      projectCreatedEvent?.last_updated ??
+      null,
+    consultationCompletedAt:
+      extractCompletedAtFromDecisionPayload(consultationCompletePayload) ??
+      consultationCompleteEvent?.last_updated ??
+      null
+  }
+}
+
+async function getOrCreateIpacShadowProcessInstance({
+  supabaseUrl,
+  supabaseAnonKey,
+  projectId,
+  projectTitle
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  projectId: number
+  projectTitle: string | null
+}): Promise<number> {
+  const existing = await fetchLatestIpacShadowProcessInstanceRecord({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId
+  })
+  const existingId = parseNumericId(existing?.id)
+  return createShadowProcessInstance({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId,
+    projectTitle,
+    descriptionSuffix: IPAC_SHADOW_WORKFLOW_TITLE_SUFFIX,
+    existingProcessInstanceId: existingId,
+  })
+}
+
+export async function loadIpacShadowWorkflowStatus(
+  projectId: number
+): Promise<IpacShadowWorkflowStatus> {
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const process = await fetchLatestIpacShadowProcessInstanceRecord({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId
+  })
+  const processInstanceId = parseNumericId(process?.id)
+  const caseEvents =
+    typeof processInstanceId === "number"
+      ? await fetchCaseEventsForProcessInstance({ supabaseUrl, supabaseAnonKey, processInstanceId })
+      : []
+  const decisionPayloads =
+    typeof processInstanceId === "number"
+      ? await fetchProcessDecisionPayloadRows({ supabaseUrl, supabaseAnonKey, processInstanceId })
+      : []
+
+  return buildIpacShadowWorkflowStatus({ process, caseEvents, decisionPayloads })
+}
+
+export async function recordIpacShadowWorkflowSubmission({
+  projectId,
+  projectTitle,
+  startProjectUrl
+}: {
+  projectId: number
+  projectTitle: string | null
+  startProjectUrl: string
+}): Promise<IpacShadowWorkflowStatus> {
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const processInstanceId = await getOrCreateIpacShadowProcessInstance({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId,
+    projectTitle
+  })
+
+  await ensureCaseEvent({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    eventType: CASE_EVENT_TYPES.IPAC_CONSULTATION_INITIATED,
+    eventData: {
+      name: "IPaC consultation initiated",
+      description: "The IPaC consultation shadow workflow has been started in HelpPermitMe.",
+      status: "started",
+      project_id: projectId,
+      start_project_url: startProjectUrl
+    }
+  })
+
+  await createCaseEvent({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    eventType: CASE_EVENT_TYPES.IPAC_GEOSPATIAL_DATA_SUBMITTED,
+    eventData: {
+      name: "Geospatial data submitted",
+      description: "The project footprint was submitted to IPaC from HelpPermitMe.",
+      status: "complete",
+      project_id: projectId,
+      start_project_url: startProjectUrl
+    }
+  })
+  await upsertIpacShadowDecisionPayload({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    projectId,
+    decisionElementId: IPAC_SHADOW_DECISION_ELEMENT_IDS.geospatialData,
+    evaluationData: {
+      title: "Geospatial data",
+      status: "complete",
+      complete: true,
+      completed_at: new Date().toISOString(),
+      start_project_url: startProjectUrl,
+      source: "helppermitme"
+    }
+  })
+
+  const process = await fetchLatestIpacShadowProcessInstanceRecord({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId
+  })
+  const caseEvents = await fetchCaseEventsForProcessInstance({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId
+  })
+  const decisionPayloads = await fetchProcessDecisionPayloadRows({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId
+  })
+  return buildIpacShadowWorkflowStatus({ process, caseEvents, decisionPayloads })
+}
+
+export async function completeIpacShadowWorkflowProjectCreated({
+  projectId,
+  projectTitle
+}: {
+  projectId: number
+  projectTitle: string | null
+}): Promise<IpacShadowWorkflowStatus> {
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const processInstanceId = await getOrCreateIpacShadowProcessInstance({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId,
+    projectTitle
+  })
+
+  await ensureCaseEvent({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    eventType: CASE_EVENT_TYPES.IPAC_PROJECT_CREATED,
+    eventData: {
+      name: "IPaC project created",
+      description: "The user created the project in IPaC.",
+      status: "complete",
+      project_id: projectId
+    }
+  })
+  await upsertIpacShadowDecisionPayload({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    projectId,
+    decisionElementId: IPAC_SHADOW_DECISION_ELEMENT_IDS.projectCreated,
+    evaluationData: {
+      title: "Project Created",
+      status: "complete",
+      complete: true,
+      completed_at: new Date().toISOString(),
+      source: "user-attestation"
+    }
+  })
+
+  const process = await fetchLatestIpacShadowProcessInstanceRecord({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId
+  })
+  const caseEvents = await fetchCaseEventsForProcessInstance({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId
+  })
+  const decisionPayloads = await fetchProcessDecisionPayloadRows({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId
+  })
+  return buildIpacShadowWorkflowStatus({ process, caseEvents, decisionPayloads })
+}
+
+export async function completeIpacShadowWorkflowConsultation({
+  projectId,
+  projectTitle
+}: {
+  projectId: number
+  projectTitle: string | null
+}): Promise<IpacShadowWorkflowStatus> {
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const processInstanceId = await getOrCreateIpacShadowProcessInstance({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId,
+    projectTitle
+  })
+
+  await ensureCaseEvent({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    eventType: CASE_EVENT_TYPES.IPAC_CONSULTATION_COMPLETE,
+    eventData: {
+      name: "IPaC consultation complete",
+      description: "The user completed the external IPaC consultation.",
+      status: "complete",
+      project_id: projectId
+    }
+  })
+  await upsertIpacShadowDecisionPayload({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId,
+    projectId,
+    decisionElementId: IPAC_SHADOW_DECISION_ELEMENT_IDS.consultationComplete,
+    evaluationData: {
+      title: "Consultation Complete",
+      status: "complete",
+      complete: true,
+      completed_at: new Date().toISOString(),
+      source: "user-attestation"
+    }
+  })
+
+  const process = await fetchLatestIpacShadowProcessInstanceRecord({
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId
+  })
+  const caseEvents = await fetchCaseEventsForProcessInstance({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId
+  })
+  const decisionPayloads = await fetchProcessDecisionPayloadRows({
+    supabaseUrl,
+    supabaseAnonKey,
+    processInstanceId
+  })
+  return buildIpacShadowWorkflowStatus({ process, caseEvents, decisionPayloads })
+}
+
 type FetchDecisionElementsArgs = {
   supabaseUrl: string
   supabaseAnonKey: string
@@ -3374,6 +3996,21 @@ function buildProcessInstanceDescription(projectTitle: string | null): string {
   return PRE_SCREENING_TITLE_SUFFIX
 }
 
+function buildShadowProcessInstanceDescription(projectTitle: string | null, suffix: string): string {
+  if (projectTitle && projectTitle.length > 0) {
+    return `${projectTitle} ${suffix}`
+  }
+  return suffix
+}
+
+function isIpacShadowProcessDescription(description?: string | null): boolean {
+  if (!description) {
+    return false
+  }
+  const normalized = description.toLowerCase()
+  return normalized.includes("ipac") && normalized.includes("consultation")
+}
+
 function determineProjectId(
   explicitId: number | undefined,
   payload: unknown
@@ -3798,7 +4435,9 @@ type CaseEventRow = {
 }
 
 type ProcessDecisionPayloadRow = {
+  id?: number | null
   process?: number | null
+  project?: number | null
   process_decision_element?: number | null
   evaluation_data?: unknown
   last_updated?: string | null
@@ -4496,7 +5135,7 @@ async function fetchProcessDecisionPayloadRows({
     (endpoint) => {
       endpoint.searchParams.set(
         "select",
-        "process_decision_element,evaluation_data,last_updated"
+        "id,process,project,process_decision_element,evaluation_data,last_updated"
       )
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
       endpoint.searchParams.set("process", `eq.${processInstanceId}`)
@@ -4839,7 +5478,7 @@ async function fetchCaseEventsForProcessInstance({
       "/rest/v1/case_event",
       "case events",
       (endpoint) => {
-        endpoint.searchParams.set("select", "id,parent_process_id,type,last_updated")
+        endpoint.searchParams.set("select", "id,parent_process_id,type,last_updated,other")
         endpoint.searchParams.set("parent_process_id", `eq.${processInstanceId}`)
         endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
         endpoint.searchParams.append("order", "last_updated.desc.nullslast")
