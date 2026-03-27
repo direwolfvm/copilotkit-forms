@@ -153,7 +153,7 @@ export default function PermitStartPage() {
     if (!projectId) {
       setProjectState({
         status: "error",
-        message: "Provide a project identifier to submit to PermitFlow."
+        message: "Provide a project identifier to submit to PermitFast."
       })
       setPermitflowStatus({ status: "idle" })
       return () => {
@@ -211,7 +211,7 @@ export default function PermitStartPage() {
     if (!Number.isFinite(projectId)) {
       setPermitflowStatus({
         status: "error",
-        message: "Project identifiers must be numeric to check PermitFlow status."
+        message: "Project identifiers must be numeric to check PermitFast status."
       })
       return
     }
@@ -235,7 +235,7 @@ export default function PermitStartPage() {
             ? error.message
             : error instanceof Error
               ? error.message
-              : "Unable to check PermitFlow status."
+              : "Unable to check PermitFast status."
         setPermitflowStatus({ status: "error", message })
       })
 
@@ -350,7 +350,7 @@ export default function PermitStartPage() {
             ? error.message
             : error instanceof Error
               ? error.message
-              : "Unable to load PermitFlow custom form."
+              : "Unable to load PermitFast custom form."
         setCustomFormState({ status: "error", message })
       })
     return () => {
@@ -383,7 +383,7 @@ export default function PermitStartPage() {
           ? error.message
           : error instanceof Error
             ? error.message
-            : "Unable to authenticate with PermitFlow."
+            : "Unable to authenticate with PermitFast."
       setAuthState({ status: "error", message })
     }
   }
@@ -403,7 +403,7 @@ export default function PermitStartPage() {
     if (authState.status !== "authenticated") {
       setSubmitState({
         status: "error",
-        message: "Authenticate with PermitFlow before submitting."
+        message: "Authenticate with PermitFast before submitting."
       })
       return
     }
@@ -428,8 +428,8 @@ export default function PermitStartPage() {
       setSubmitState({
         status: "success",
         message: hasExistingPermitflowProject
-          ? "Project updated in PermitFlow."
-          : "Project submitted to PermitFlow."
+          ? "Project updated in PermitFast."
+          : "Project submitted to PermitFast."
       })
       const projectIdValue = projectState.formData.id
       const projectId = projectIdValue ? Number.parseInt(projectIdValue, 10) : Number.NaN
@@ -438,7 +438,7 @@ export default function PermitStartPage() {
           const info = await loadPermitflowProjectStatus(projectId)
           setPermitflowStatus({ status: "success", info })
         } catch (statusError) {
-          console.warn("Failed to refresh PermitFlow status after submission.", statusError)
+          console.warn("Failed to refresh PermitFast status after submission.", statusError)
         }
       }
     } catch (error) {
@@ -447,7 +447,7 @@ export default function PermitStartPage() {
           ? error.message
           : error instanceof Error
             ? error.message
-            : "Unable to submit the project to PermitFlow."
+            : "Unable to submit the project to PermitFast."
       setSubmitState({ status: "error", message })
     }
   }
@@ -460,7 +460,7 @@ export default function PermitStartPage() {
     if (authState.status !== "authenticated") {
       setCustomFormSaveState({
         status: "error",
-        message: "Authenticate with PermitFlow before saving the custom form."
+        message: "Authenticate with PermitFast before saving the custom form."
       })
       return
     }
@@ -501,7 +501,7 @@ export default function PermitStartPage() {
     if (authState.status !== "authenticated") {
       setCustomFormSubmitState({
         status: "error",
-        message: "Authenticate with PermitFlow before submitting for approval."
+        message: "Authenticate with PermitFast before submitting for approval."
       })
       return
     }
@@ -527,7 +527,7 @@ export default function PermitStartPage() {
         const info = await loadPermitflowProjectStatus(projectId)
         setPermitflowStatus({ status: "success", info })
       } catch (statusError) {
-        console.warn("Failed to refresh PermitFlow status after custom form submission.", statusError)
+        console.warn("Failed to refresh PermitFast status after custom form submission.", statusError)
       }
     } catch (error) {
       const message =
@@ -585,15 +585,15 @@ export default function PermitStartPage() {
           <p className="permit-start-page__eyebrow">Basic permit</p>
           <h1>Start this permit.</h1>
           <p>
-            Use this checklist item to kick off the PermitFlow workflow. Review the process
+            Use this checklist item to kick off the PermitFast workflow. Review the process
             model and decision elements below before advancing the application.
           </p>
         </header>
         <section className="permit-start-page__content">
           <section className="permit-start-page__panel">
-            <h2>Submit this project to PermitFlow</h2>
+            <h2>Submit this project to PermitFast</h2>
             <p>
-              PermitFlow requires a complete project profile and an authenticated Supabase
+              PermitFast requires a complete project profile and an authenticated Supabase
               session. Once authenticated, your user identifier will be attached to the
               submission record.
             </p>
@@ -614,10 +614,10 @@ export default function PermitStartPage() {
                   <pre className="permit-start-page__project-summary">{projectSummary}</pre>
                 </div>
                 <div>
-                  <h3>PermitFlow status</h3>
+                  <h3>PermitFast status</h3>
                   {permitflowStatus.status === "loading" ? (
                     <p className="permit-start-page__status" role="status" aria-live="polite">
-                      Checking PermitFlow for existing records…
+                      Checking PermitFast for existing records…
                     </p>
                   ) : null}
                   {permitflowStatus.status === "error" ? (
@@ -629,13 +629,13 @@ export default function PermitStartPage() {
                     <div className="permit-start-page__status" role="status" aria-live="polite">
                       {permitflowStatus.info.exists ? (
                         <p>
-                          PermitFlow already has this project.
+                          PermitFast already has this project.
                           {formattedPermitflowTimestamp
                             ? ` Last updated ${formattedPermitflowTimestamp}.`
                             : null}
                         </p>
                       ) : (
-                        <p>No PermitFlow submission found for this project yet.</p>
+                        <p>No PermitFast submission found for this project yet.</p>
                       )}
                       {permitflowStatus.info.basicPermitProcess ? (
                         <p>
@@ -666,7 +666,7 @@ export default function PermitStartPage() {
                       This process includes a custom form ({customFormIndicator.title}, decision element{" "}
                       {customFormIndicator.decisionElementId}).
                     </p>
-                    <p>Complete it after you initiate the PermitFlow project.</p>
+                    <p>Complete it after you initiate the PermitFast project.</p>
                   </div>
                 ) : null}
               </div>
@@ -674,7 +674,7 @@ export default function PermitStartPage() {
             <form className="permit-start-page__auth" onSubmit={handleAuthenticate}>
               <div className="permit-start-page__auth-fields">
                 <label>
-                  PermitFlow email
+                  PermitFast email
                   <input
                     type="email"
                     value={authEmail}
@@ -683,7 +683,7 @@ export default function PermitStartPage() {
                   />
                 </label>
                 <label>
-                  PermitFlow password
+                  PermitFast password
                   <input
                     type="password"
                     value={authPassword}
@@ -700,7 +700,7 @@ export default function PermitStartPage() {
                 >
                   {authState.status === "authenticating"
                     ? "Authenticating…"
-                    : "Authenticate with PermitFlow"}
+                    : "Authenticate with PermitFast"}
                 </button>
                 {authState.status === "authenticated" ? (
                   <span className="permit-start-page__auth-success" role="status">
@@ -724,8 +724,8 @@ export default function PermitStartPage() {
                 {submitState.status === "submitting"
                   ? "Submitting…"
                   : hasExistingPermitflowProject
-                    ? "Update project in PermitFlow"
-                    : "Submit project to PermitFlow"}
+                    ? "Update project in PermitFast"
+                    : "Submit project to PermitFast"}
               </button>
               {submitState.status === "error" ? (
                 <span className="permit-start-page__submit-error" role="alert">
@@ -878,7 +878,7 @@ function PermitflowCustomFormModal({
               ) : null}
               {!isAuthenticated ? (
                 <div className="permit-start-page__warning" role="status">
-                  Authenticate with PermitFlow on the start page to save or submit this form.
+                  Authenticate with PermitFast on the start page to save or submit this form.
                 </div>
               ) : null}
               <div className="permit-start-page__custom-form-shell">

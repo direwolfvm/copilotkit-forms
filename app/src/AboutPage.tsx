@@ -116,7 +116,7 @@ export default function AboutPage() {
                   <td>
                     HelpPermitMe now includes explicit integrations with{" "}
                     <a href="https://reviewworks.app.cloud.gov/">ReviewWorks</a> and{" "}
-                    <a href="https://permitflow.app.cloud.gov/">PermitFlow</a>, with shared project and case data exchanged across systems.
+                    <a href="https://permitflow.app.cloud.gov/">PermitFast</a>, with shared project and case data exchanged across systems.
                   </td>
                 </tr>
                 <tr>
@@ -135,7 +135,7 @@ export default function AboutPage() {
                   <td>
                     Case management is supported through integrated demonstration systems,{" "}
                     <a href="https://reviewworks.app.cloud.gov/">ReviewWorks</a> and{" "}
-                    <a href="https://permitflow.app.cloud.gov/">PermitFlow</a>, which receive and manage shared case data from HelpPermitMe.
+                    <a href="https://permitflow.app.cloud.gov/">PermitFast</a>, which receive and manage shared case data from HelpPermitMe.
                   </td>
                 </tr>
                 <tr>

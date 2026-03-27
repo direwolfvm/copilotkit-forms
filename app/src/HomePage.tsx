@@ -66,11 +66,11 @@ const featurePanels: FeaturePanel[] = [
   },
   {
     kind: "external",
-    title: "PermitFlow demo system",
+    title: "PermitFast demo system",
     description:
-      "Visit the PermitFlow demonstration environment to explore its case-management workflows and shared data integration with HelpPermitMe.",
+      "Visit the PermitFast demonstration environment to explore its case-management workflows and shared data integration with HelpPermitMe.",
     href: "https://permitflow.app.cloud.gov/",
-    linkLabel: "Open PermitFlow"
+    linkLabel: "Open PermitFast"
   },
   {
     kind: "internal",

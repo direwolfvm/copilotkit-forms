@@ -213,7 +213,7 @@ async function resolveBasicPermitProcessModelId(options: PermitflowFetchOptions)
   const resolvedId = parseNumericId(rows[0]?.id)
   if (typeof resolvedId !== "number") {
     throw new ProjectPersistenceError(
-      `PermitFlow process model \"${BASIC_PERMIT_PROCESS_MODEL_TITLE}\" was not found.`
+      `PermitFast process model \"${BASIC_PERMIT_PROCESS_MODEL_TITLE}\" was not found.`
     )
   }
 
@@ -287,7 +287,7 @@ async function resolveBasicPermitDecisionElementIds(
     typeof sf299 !== "number"
   ) {
     throw new ProjectPersistenceError(
-      "PermitFlow decision elements for the Basic Permit process could not be resolved."
+      "PermitFast decision elements for the Basic Permit process could not be resolved."
     )
   }
 
@@ -368,8 +368,8 @@ async function fetchPermitflowList<T>(
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
       errorDetail
-        ? `PermitFlow request failed (${response.status}): ${errorDetail}`
-        : `PermitFlow request failed (${response.status}).`
+        ? `PermitFast request failed (${response.status}): ${errorDetail}`
+        : `PermitFast request failed (${response.status}).`
     )
   }
 
@@ -700,7 +700,7 @@ export async function loadPermitflowProcessInformation(
   const tenantId = getPermitflowTenantId()
   if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
 
@@ -740,7 +740,7 @@ export async function authenticatePermitflowUser({
   const supabaseAnonKey = getPermitflowAnonKey()
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL and PERMITFLOW_SUPABASE_ANON_KEY."
     )
   }
 
@@ -759,14 +759,14 @@ export async function authenticatePermitflowUser({
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
       errorDetail
-        ? `PermitFlow authentication failed (${response.status}): ${errorDetail}`
-        : `PermitFlow authentication failed (${response.status}).`
+        ? `PermitFast authentication failed (${response.status}): ${errorDetail}`
+        : `PermitFast authentication failed (${response.status}).`
     )
   }
 
   const payload = responseText ? safeJsonParse(responseText) : undefined
   if (!payload || typeof payload !== "object") {
-    throw new ProjectPersistenceError("PermitFlow authentication response was empty.")
+    throw new ProjectPersistenceError("PermitFast authentication response was empty.")
   }
 
   const accessToken =
@@ -790,7 +790,7 @@ export async function authenticatePermitflowUser({
 
   if (!accessToken || !userId) {
     throw new ProjectPersistenceError(
-      "PermitFlow authentication response was missing required fields."
+      "PermitFast authentication response was missing required fields."
     )
   }
 
@@ -843,8 +843,8 @@ async function patchPermitflowProjectById({
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
       errorDetail
-        ? `PermitFlow update failed (${response.status}): ${errorDetail}`
-        : `PermitFlow update failed (${response.status}).`
+        ? `PermitFast update failed (${response.status}): ${errorDetail}`
+        : `PermitFast update failed (${response.status}).`
     )
   }
 }
@@ -878,8 +878,8 @@ async function createPermitflowRecord<T>(
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
       errorDetail
-        ? `PermitFlow ${table} creation failed (${response.status}): ${errorDetail}`
-        : `PermitFlow ${table} creation failed (${response.status}).`
+        ? `PermitFast ${table} creation failed (${response.status}): ${errorDetail}`
+        : `PermitFast ${table} creation failed (${response.status}).`
     )
   }
 
@@ -890,7 +890,7 @@ async function createPermitflowRecord<T>(
   if (parsed && typeof parsed === "object") {
     return parsed as T
   }
-  throw new ProjectPersistenceError(`PermitFlow ${table} creation returned empty response.`)
+  throw new ProjectPersistenceError(`PermitFast ${table} creation returned empty response.`)
 }
 
 async function createPermitflowRecordsBatch<T>(
@@ -918,8 +918,8 @@ async function createPermitflowRecordsBatch<T>(
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
       errorDetail
-        ? `PermitFlow ${table} batch creation failed (${response.status}): ${errorDetail}`
-        : `PermitFlow ${table} batch creation failed (${response.status}).`
+        ? `PermitFast ${table} batch creation failed (${response.status}): ${errorDetail}`
+        : `PermitFast ${table} batch creation failed (${response.status}).`
     )
   }
 
@@ -946,7 +946,7 @@ export async function submitPermitflowProject({
   const tenantId = getPermitflowTenantId()
   if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
 
@@ -992,7 +992,7 @@ export async function submitPermitflowProject({
     )
     permitflowProjectId = parseNumericId(projectResult.id)
     if (typeof permitflowProjectId !== "number") {
-      throw new ProjectPersistenceError("PermitFlow project creation did not return a valid ID.")
+      throw new ProjectPersistenceError("PermitFast project creation did not return a valid ID.")
     }
   }
 
@@ -1034,7 +1034,7 @@ export async function submitPermitflowProject({
   const processInstanceId = parseNumericId(processResult.id)
   if (typeof processInstanceId !== "number") {
     throw new ProjectPersistenceError(
-      "PermitFlow process instance creation did not return a valid ID."
+      "PermitFast process instance creation did not return a valid ID."
     )
   }
 
@@ -1196,7 +1196,7 @@ async function resolvePermitflowCustomFormContext(
   const permitflowProjectId = parseNumericId(permitflowProject?.id)
   if (typeof permitflowProjectId !== "number") {
     throw new ProjectPersistenceError(
-      `PermitFlow project for portal project ${portalProjectId} was not found. Submit it first.`
+      `PermitFast project for portal project ${portalProjectId} was not found. Submit it first.`
     )
   }
 
@@ -1221,7 +1221,7 @@ async function resolvePermitflowCustomFormContext(
   decisionElements.sort((a, b) => a.id - b.id)
   const decisionElement = resolveCustomFormDecisionElement(decisionElements)
   if (!decisionElement) {
-    throw new ProjectPersistenceError("No custom form decision element is configured in PermitFlow.")
+    throw new ProjectPersistenceError("No custom form decision element is configured in PermitFast.")
   }
 
   const payloadRows = await fetchPermitflowList<PermitflowDecisionPayloadRow>(
@@ -1278,8 +1278,8 @@ async function patchPermitflowProcessInstanceById({
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
       errorDetail
-        ? `PermitFlow process update failed (${response.status}): ${errorDetail}`
-        : `PermitFlow process update failed (${response.status}).`
+        ? `PermitFast process update failed (${response.status}): ${errorDetail}`
+        : `PermitFast process update failed (${response.status}).`
     )
   }
 }
@@ -1317,8 +1317,8 @@ async function patchPermitflowDecisionPayloadById({
     const errorDetail = extractErrorDetail(responseText)
     throw new ProjectPersistenceError(
       errorDetail
-        ? `PermitFlow decision payload update failed (${response.status}): ${errorDetail}`
-        : `PermitFlow decision payload update failed (${response.status}).`
+        ? `PermitFast decision payload update failed (${response.status}): ${errorDetail}`
+        : `PermitFast decision payload update failed (${response.status}).`
     )
   }
 }
@@ -1372,7 +1372,7 @@ export async function loadPermitflowCustomFormState(
   const tenantId = getPermitflowTenantId()
   if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
   if (!Number.isFinite(portalProjectId)) {
@@ -1418,7 +1418,7 @@ export async function savePermitflowCustomForm({
   const tenantId = getPermitflowTenantId()
   if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
   const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
@@ -1476,7 +1476,7 @@ export async function submitPermitflowCustomFormForApproval({
   const tenantId = getPermitflowTenantId()
   if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
   const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
@@ -1548,12 +1548,12 @@ export async function loadPermitflowProjectStatus(
   const tenantId = getPermitflowTenantId()
   if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
 
   if (!Number.isFinite(projectId)) {
-    throw new ProjectPersistenceError("PermitFlow project identifiers must be numeric.")
+    throw new ProjectPersistenceError("PermitFast project identifiers must be numeric.")
   }
 
   const options = { supabaseUrl, supabaseAnonKey, tenantId }
@@ -1626,7 +1626,7 @@ export async function updatePermitflowProject({
   const tenantId = getPermitflowTenantId()
   if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     throw new ProjectPersistenceError(
-      "PermitFlow credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
     )
   }
 
@@ -1634,7 +1634,7 @@ export async function updatePermitflowProject({
   const portalProjectId = normalizedId ? Number.parseInt(normalizedId, 10) : undefined
 
   if (!portalProjectId || Number.isNaN(portalProjectId) || !Number.isFinite(portalProjectId)) {
-    throw new ProjectPersistenceError("A numeric project identifier is required to update PermitFlow.")
+    throw new ProjectPersistenceError("A numeric project identifier is required to update PermitFast.")
   }
 
   const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
@@ -1642,7 +1642,7 @@ export async function updatePermitflowProject({
   const permitflowProjectId = parseNumericId(existingProject?.id)
   if (typeof permitflowProjectId !== "number") {
     throw new ProjectPersistenceError(
-      `PermitFlow project for portal project ${portalProjectId} was not found. Submit it first.`
+      `PermitFast project for portal project ${portalProjectId} was not found. Submit it first.`
     )
   }
 
@@ -1739,7 +1739,7 @@ export async function loadBasicPermitProcessesForProjects(
         continue
       }
       if (matchedProjects.length > 1) {
-        console.warn("[projects] Multiple PermitFlow projects share a title.", {
+        console.warn("[projects] Multiple PermitFast projects share a title.", {
           title: entry.rawTitle ?? entry.title,
           permitflowProjectIds: matchedProjects
             .map((project) => parseNumericId(project.id))
@@ -1752,7 +1752,7 @@ export async function loadBasicPermitProcessesForProjects(
         continue
       }
       if (permitflowProjectId !== entry.id) {
-        console.warn("[projects] PermitFlow project id mismatch for title match.", {
+        console.warn("[projects] PermitFast project id mismatch for title match.", {
           title: entry.rawTitle ?? entry.title,
           portalProjectId: entry.id,
           permitflowProjectId
@@ -1866,7 +1866,7 @@ export async function loadBasicPermitProcessesForProjects(
 
     return results
   } catch (error) {
-    console.warn("[projects] Failed to load PermitFlow basic permit processes.", error)
+    console.warn("[projects] Failed to load PermitFast basic permit processes.", error)
     return new Map()
   }
 }
@@ -1904,7 +1904,7 @@ export async function loadBasicPermitAnalytics(): Promise<BasicPermitAnalyticsPo
 
   if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
     console.warn(
-      "[analytics] PermitFlow credentials not configured (requires URL, anon key, and tenant id)"
+      "[analytics] PermitFast credentials not configured (requires URL, anon key, and tenant id)"
     )
     return []
   }
