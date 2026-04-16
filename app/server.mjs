@@ -370,12 +370,51 @@ async function proxyNepaMcpRuntimeRequest(req, res) {
     return;
   }
 
+  if (method === "POST" && requestPath === "/" && shouldHandleSingleEndpointNepaRequest(req)) {
+    await handleSingleEndpointNepaRequest(req, res);
+    return;
+  }
+
   if (!shouldHandleGraphqlCustomAdk(req)) {
     res.status(404).json({ error: "Unsupported NEPA MCP runtime operation" });
     return;
   }
 
   await handleGraphqlNepaMcpRequest(req, res);
+}
+
+function shouldHandleSingleEndpointNepaRequest(req) {
+  if (!req.body || typeof req.body !== "object") {
+    return false;
+  }
+
+  return typeof req.body.method === "string" && req.body.method.length > 0;
+}
+
+async function handleSingleEndpointNepaRequest(req, res) {
+  const envelope = req.body ?? {};
+  const routeMethod = typeof envelope.method === "string" ? envelope.method : "";
+  const params = envelope.params && typeof envelope.params === "object" ? envelope.params : {};
+  const body = envelope.body && typeof envelope.body === "object" ? envelope.body : {};
+
+  switch (routeMethod) {
+    case "info":
+      res.json(buildNepaRuntimeInfo());
+      return;
+    case "agent/connect":
+      req.body = body;
+      await handleNepaAgentConnectRequest(req, res, params.agentId);
+      return;
+    case "agent/run":
+      req.body = body;
+      await handleNepaAgentRunRequest(req, res, params.agentId);
+      return;
+    case "agent/stop":
+      handleNepaAgentStopRequest(res, params.agentId, params.threadId);
+      return;
+    default:
+      res.status(404).json({ error: "Unsupported NEPA MCP runtime operation" });
+  }
 }
 
 function buildNepaRuntimeInfo() {
