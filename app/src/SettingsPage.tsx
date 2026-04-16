@@ -246,14 +246,14 @@ export default function SettingsPage() {
         <section className="settings__section" aria-labelledby="settings-runtime-heading">
           <h2 id="settings-runtime-heading">Copilot runtime</h2>
           <p className="settings__description">
-            Choose between the hosted Copilot Cloud or the local Permitting ADK proxy for development and testing.
+            Choose between the hosted Copilot Cloud, the local Permitting ADK proxy, or the NEPA MCP bridge.
           </p>
           <div className="settings__control">
             <RuntimeSelectionControl />
           </div>
           <p className="settings__hint">
-            Switching to the Permitting ADK routes Copilot requests through the local <code>/api/custom-adk</code>
-            proxy.
+            Permitting ADK uses <code>/api/custom-adk</code>. NEPA MCP uses <code>/api/nepa-mcp-runtime</code>
+            and expects a compatible NEPA tool service behind the server proxy.
           </p>
         </section>
 

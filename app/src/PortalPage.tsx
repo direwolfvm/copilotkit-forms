@@ -80,6 +80,7 @@ import { createProjectReportPdf } from "./utils/projectReportPdf"
 import { isAutoPopulatedChecklistItem } from "./utils/projectStatus"
 
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
+const NEPA_MCP_PROXY_URL = "/api/nepa-mcp-runtime"
 
 const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
   (permit) => `${permit.title}: ${permit.description}`
@@ -3302,7 +3303,12 @@ function PortalPage() {
   const { runtimeMode } = useCopilotRuntimeSelection()
   const runtimeUrl = getRuntimeUrl()
 
-  const effectiveRuntimeUrl = runtimeMode === "custom" ? CUSTOM_ADK_PROXY_URL : runtimeUrl ?? defaultRuntimeUrl
+  const effectiveRuntimeUrl =
+    runtimeMode === "custom"
+      ? CUSTOM_ADK_PROXY_URL
+      : runtimeMode === "nepa"
+        ? NEPA_MCP_PROXY_URL
+        : runtimeUrl ?? defaultRuntimeUrl
   const showRuntimeWarning = runtimeMode === "default" && !runtimeUrl
 
   return (

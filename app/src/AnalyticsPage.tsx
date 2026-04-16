@@ -33,6 +33,7 @@ import { loadComplexReviewAnalytics } from "./utils/reviewworks"
 
 const defaultRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
+const NEPA_MCP_PROXY_URL = "/api/nepa-mcp-runtime"
 
 const ANALYTICS_INSTRUCTIONS = [
   "You are an analytics copilot for the HelpPermitMe pre-screening, Basic Permit, and Complex Review workflows.",
@@ -996,7 +997,11 @@ function AnalyticsContent() {
 export default function AnalyticsPage() {
   const { runtimeMode } = useCopilotRuntimeSelection()
   const effectiveRuntimeUrl =
-    runtimeMode === "custom" ? CUSTOM_ADK_PROXY_URL : defaultRuntimeUrl
+    runtimeMode === "custom"
+      ? CUSTOM_ADK_PROXY_URL
+      : runtimeMode === "nepa"
+        ? NEPA_MCP_PROXY_URL
+        : defaultRuntimeUrl
 
   return (
     <CopilotKit

@@ -17,6 +17,9 @@ const customAdkBaseUrl =
 const copilotkitRuntimeProxyBaseUrl =
   normalizeEnvValue(process.env.COPILOTKIT_RUNTIME_PROXY_BASE_URL) ??
   "https://copilotkit-runtime.app.cloud.gov/copilotkit";
+const nepaMcpWebBaseUrl =
+  normalizeEnvValue(process.env.NEPA_MCP_WEB_BASE_URL) ??
+  "https://nepa-chat.app.cloud.gov/";
 
 function resolveSupabaseUrl() {
   return (
@@ -340,6 +343,15 @@ async function proxyCopilotkitRuntimeRequest(req, res) {
   }
 }
 
+async function proxyNepaMcpRuntimeRequest(req, res) {
+  if (!shouldHandleGraphqlCustomAdk(req)) {
+    res.status(404).json({ error: "Unsupported NEPA MCP runtime operation" });
+    return;
+  }
+
+  await handleGraphqlNepaMcpRequest(req, res);
+}
+
 async function readRawRequestBody(req) {
   if (!req.readable || req.readableEnded) {
     return undefined;
@@ -474,6 +486,93 @@ async function handleGraphqlCustomAdkRequest(req, res) {
   }
 }
 
+async function handleGraphqlNepaMcpRequest(req, res) {
+  const { operationName, query, variables } = req.body ?? {};
+
+  if (operationName === "availableAgents" || query?.includes("availableAgents")) {
+    res.json({ data: { availableAgents: { agents: [] } } });
+    return;
+  }
+
+  if (operationName === "loadAgentState" || query?.includes("loadAgentState")) {
+    const threadId = variables?.data?.threadId ?? "";
+    const agentName = variables?.data?.agentName ?? "";
+    res.json({
+      data: {
+        loadAgentState: {
+          threadId,
+          agentName,
+          messages: JSON.stringify([]),
+        },
+      },
+    });
+    return;
+  }
+
+  if (!(operationName === "generateCopilotResponse" || query?.includes("generateCopilotResponse"))) {
+    res.status(400).json({ error: "Unsupported NEPA MCP runtime operation" });
+    return;
+  }
+
+  const runtimeData = variables?.data;
+  if (!runtimeData || typeof runtimeData !== "object") {
+    res.status(400).json({ error: "Invalid Copilot request payload" });
+    return;
+  }
+
+  const threadId = typeof runtimeData.threadId === "string" && runtimeData.threadId
+    ? runtimeData.threadId
+    : randomUUID();
+  const runId = typeof runtimeData.runId === "string" && runtimeData.runId
+    ? runtimeData.runId
+    : randomUUID();
+  const messages = buildAdkMessages(runtimeData.messages ?? []);
+  const latestUserMessage = findLatestUserMessage(messages);
+
+  if (!latestUserMessage) {
+    res.json({
+      data: {
+        generateCopilotResponse: buildGraphqlResponseFromEvents(
+          createAssistantTextEvents("I need a user question before I can run NEPA MCP tools."),
+          threadId,
+          runId
+        ),
+      },
+    });
+    return;
+  }
+
+  try {
+    const response = await fetch(new URL("/api/chat", nepaMcpWebBaseUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        session_id: threadId,
+        message: latestUserMessage,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      const errorPayload = await safeParseJson(response);
+      res.status(response.status).json(
+        errorPayload ?? { error: "NEPA MCP request failed", status: response.status },
+      );
+      return;
+    }
+
+    const rawEvents = await collectSseEvents(response.body);
+    const copilotEvents = convertNepaMcpEvents(rawEvents);
+    const gqlPayload = buildGraphqlResponseFromEvents(copilotEvents, threadId, runId);
+    res.json({ data: { generateCopilotResponse: gqlPayload } });
+  } catch (error) {
+    console.error("NEPA MCP GraphQL bridge error", error);
+    res.status(502).json({
+      error: "Failed to reach the NEPA MCP bridge service",
+      details: "Ensure the deployed NEPA chat service is reachable or override it with NEPA_MCP_WEB_BASE_URL.",
+    });
+  }
+}
+
 function buildAdkTools(actions) {
   if (!Array.isArray(actions)) {
     return [];
@@ -605,6 +704,113 @@ function buildAdkState(agentStates) {
   }
 
   return { agentStates };
+}
+
+function findLatestUserMessage(messages) {
+  if (!Array.isArray(messages)) {
+    return undefined;
+  }
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const entry = messages[index];
+    if (entry?.role === "user" && typeof entry.content === "string" && entry.content.trim()) {
+      return entry.content.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function createAssistantTextEvents(content) {
+  const messageId = randomUUID();
+  return [
+    { type: "TEXT_MESSAGE_START", messageId, role: "assistant" },
+    { type: "TEXT_MESSAGE_CONTENT", messageId, delta: content },
+    { type: "TEXT_MESSAGE_END", messageId },
+  ];
+}
+
+function convertNepaMcpEvents(events) {
+  if (!Array.isArray(events)) {
+    return [];
+  }
+
+  const converted = [];
+  let assistantMessageId = null;
+
+  for (const event of events) {
+    if (!event || typeof event !== "object") {
+      continue;
+    }
+
+    switch (event.type) {
+      case "tool_start": {
+        const toolCallId = randomUUID();
+        converted.push({
+          type: "TOOL_CALL_START",
+          toolCallId,
+          toolCallName: typeof event.name === "string" ? event.name : "tool_call",
+          parentMessageId: assistantMessageId,
+        });
+        converted.push({
+          type: "TOOL_CALL_ARGS",
+          toolCallId,
+          delta: JSON.stringify(event.arguments ?? {}),
+        });
+        converted.push({
+          type: "TOOL_CALL_END",
+          toolCallId,
+        });
+        break;
+      }
+      case "content": {
+        assistantMessageId ??= randomUUID();
+        if (!converted.some((entry) => entry.type === "TEXT_MESSAGE_START" && entry.messageId === assistantMessageId)) {
+          converted.push({
+            type: "TEXT_MESSAGE_START",
+            messageId: assistantMessageId,
+            role: "assistant",
+          });
+        }
+        converted.push({
+          type: "TEXT_MESSAGE_CONTENT",
+          messageId: assistantMessageId,
+          delta: typeof event.text === "string" ? event.text : "",
+        });
+        break;
+      }
+      case "error": {
+        assistantMessageId ??= randomUUID();
+        if (!converted.some((entry) => entry.type === "TEXT_MESSAGE_START" && entry.messageId === assistantMessageId)) {
+          converted.push({
+            type: "TEXT_MESSAGE_START",
+            messageId: assistantMessageId,
+            role: "assistant",
+          });
+        }
+        converted.push({
+          type: "TEXT_MESSAGE_CONTENT",
+          messageId: assistantMessageId,
+          delta:
+            typeof event.message === "string"
+              ? `NEPA MCP error: ${event.message}`
+              : "NEPA MCP error.",
+        });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  if (assistantMessageId) {
+    converted.push({
+      type: "TEXT_MESSAGE_END",
+      messageId: assistantMessageId,
+    });
+  }
+
+  return converted;
 }
 
 function buildForwardedProps(forwardedParameters, properties) {
@@ -790,6 +996,8 @@ function buildGraphqlResponseFromEvents(events, threadId, runId) {
 app.use("/api/supabase", proxySupabaseRequest);
 
 app.use("/api/custom-adk", proxyCustomAdkRequest);
+
+app.use("/api/nepa-mcp-runtime", proxyNepaMcpRuntimeRequest);
 
 app.use("/api/copilotkit-runtime", proxyCopilotkitRuntimeRequest);
 

@@ -19,6 +19,7 @@ import {
   summarizeNepassist
 } from "./utils/geospatial"
 import { getRuntimeUrl } from "./runtimeConfig"
+import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
 
 function createInitialGeospatialResults(): GeospatialResultsState {
   return {
@@ -161,6 +162,8 @@ function formatImplicationsForCopilot(results: GeospatialResultsState | undefine
 }
 
 const defaultRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
+const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
+const NEPA_MCP_PROXY_URL = "/api/nepa-mcp-runtime"
 
 export function ResourceCheckContent() {
   const [geometry, setGeometry] = useState<string | undefined>(undefined)
@@ -622,7 +625,14 @@ export function ResourceCheckContent() {
 }
 
 export default function ResourceCheckPage() {
-  const effectiveRuntimeUrl = defaultRuntimeUrl
+  const { runtimeMode } = useCopilotRuntimeSelection()
+  const runtimeUrl = getRuntimeUrl()
+  const effectiveRuntimeUrl =
+    runtimeMode === "custom"
+      ? CUSTOM_ADK_PROXY_URL
+      : runtimeMode === "nepa"
+        ? NEPA_MCP_PROXY_URL
+        : runtimeUrl ?? defaultRuntimeUrl
   return (
     <CopilotKit runtimeUrl={effectiveRuntimeUrl}>
       <ResourceCheckContent />

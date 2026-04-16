@@ -9,6 +9,7 @@ import "./App.css"
 import "./DeveloperToolsPage.css"
 
 import { getRuntimeUrl } from "./runtimeConfig"
+import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
 
 interface EndpointDoc {
   title: string
@@ -316,7 +317,14 @@ function DeveloperToolsContent({ hasCopilotConfiguration }: DeveloperToolsConten
 }
 
 export default function DeveloperToolsPage() {
-  const effectiveRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
+  const { runtimeMode } = useCopilotRuntimeSelection()
+  const runtimeUrl = getRuntimeUrl()
+  const effectiveRuntimeUrl =
+    runtimeMode === "custom"
+      ? "/api/custom-adk/agent"
+      : runtimeMode === "nepa"
+        ? "/api/nepa-mcp-runtime"
+        : runtimeUrl ?? "/api/copilotkit-runtime"
   const hasCopilotConfiguration = Boolean(effectiveRuntimeUrl)
 
   return (
