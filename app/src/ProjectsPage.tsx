@@ -18,9 +18,15 @@ import {
   determinePreScreeningStatus,
   determineBasicPermitStatus,
   determineComplexReviewStatus,
+  determineIpacStatus,
   determineProjectStatus,
   getLatestCaseEvent,
-  isAutoPopulatedChecklistItem
+  isBasicPermitProcess,
+  isComplexReviewProcess,
+  isIpacChecklistItem,
+  isIpacShadowProcess,
+  isPreScreeningProcess,
+  isWorkflowBackedChecklistItem
 } from "./utils/projectStatus"
 
 function ProcessTree({ process }: { process: ProjectProcessSummary }) {
@@ -34,6 +40,7 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
   const preScreeningStatus = determinePreScreeningStatus(process)
   const basicPermitStatus = determineBasicPermitStatus(process)
   const complexReviewStatus = determineComplexReviewStatus(process)
+  const ipacStatus = determineIpacStatus(process)
   const latestEventLabel = latestCaseEvent?.name || latestCaseEvent?.eventType
 
   return (
@@ -62,6 +69,9 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
             ) : null}
             {complexReviewStatus ? (
               <StatusIndicator variant={complexReviewStatus.variant} label={complexReviewStatus.label} />
+            ) : null}
+            {ipacStatus ? (
+              <StatusIndicator variant={ipacStatus.variant} label={ipacStatus.label} />
             ) : null}
             {latestEventLabel ? (
               <span className="projects-tree__latest-event">
@@ -124,6 +134,28 @@ function CaseEventTree({ event }: { event: CaseEventSummary }) {
   )
 }
 
+function WorkflowChecklistProcess({
+  itemLabel,
+  process
+}: {
+  itemLabel: string
+  process?: ProjectProcessSummary
+}) {
+  if (!process) {
+    return (
+      <div className="projects-tree__permit-checklist-process-empty">
+        No workflow has been started yet for {itemLabel}.
+      </div>
+    )
+  }
+
+  return (
+    <ul className="projects-tree__processes projects-tree__processes--nested">
+      <ProcessTree process={process} />
+    </ul>
+  )
+}
+
 function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
   const formattedUpdated = formatTimestamp(entry.project.lastUpdated)
   const projectTitle = entry.project.title?.trim().length
@@ -136,8 +168,35 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
   const geometry = entry.project.geometry ?? undefined
   const latestEvent = getLatestCaseEvent(entry)
   const projectStatus = useMemo(() => determineProjectStatus(entry), [entry])
+  const preScreeningProcesses = useMemo(
+    () => entry.processes.filter((process) => isPreScreeningProcess(process)),
+    [entry.processes]
+  )
+  const basicPermitProcess = useMemo(
+    () => entry.processes.find((process) => isBasicPermitProcess(process)),
+    [entry.processes]
+  )
+  const complexReviewProcess = useMemo(
+    () => entry.processes.find((process) => isComplexReviewProcess(process)),
+    [entry.processes]
+  )
+  const ipacProcess = useMemo(
+    () => entry.processes.find((process) => isIpacShadowProcess(process)),
+    [entry.processes]
+  )
+  const additionalProcesses = useMemo(
+    () =>
+      entry.processes.filter(
+        (process) =>
+          !isPreScreeningProcess(process) &&
+          !isBasicPermitProcess(process) &&
+          !isComplexReviewProcess(process) &&
+          !isIpacShadowProcess(process)
+      ),
+    [entry.processes]
+  )
   const permitChecklistStatus = useMemo(() => {
-    const manualItems = entry.permittingChecklist.filter((item) => !isAutoPopulatedChecklistItem(item))
+    const manualItems = entry.permittingChecklist.filter((item) => !isWorkflowBackedChecklistItem(item))
     const total = manualItems.length
     if (total === 0) {
       return { tone: "empty", label: "No checklist items" }
@@ -155,6 +214,23 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
   }, [])
 
   const geometryToRender = isOpen ? geometry : undefined
+
+  const getWorkflowProcessForItem = useCallback(
+    (label: string) => {
+      const normalized = label.toLowerCase().trim()
+      if (normalized === "basic permit") {
+        return basicPermitProcess
+      }
+      if (normalized === "complex review") {
+        return complexReviewProcess
+      }
+      if (isIpacChecklistItem({ label })) {
+        return ipacProcess
+      }
+      return undefined
+    },
+    [basicPermitProcess, complexReviewProcess, ipacProcess]
+  )
 
   return (
     <li className="projects-tree__project">
@@ -215,15 +291,20 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
               ) : null}
             </div>
           </div>
-          {entry.processes.length > 0 ? (
-            <ul className="projects-tree__processes">
-              {entry.processes.map((process) => (
-                <ProcessTree key={process.id} process={process} />
-              ))}
-            </ul>
-          ) : (
-            <p className="projects-tree__empty">No processes recorded for this project.</p>
-          )}
+          <section className="projects-tree__section">
+            <div className="projects-tree__section-header">
+              <span className="projects-tree__section-title">Pre-screening process</span>
+            </div>
+            {preScreeningProcesses.length > 0 ? (
+              <ul className="projects-tree__processes">
+                {preScreeningProcesses.map((process) => (
+                  <ProcessTree key={process.id} process={process} />
+                ))}
+              </ul>
+            ) : (
+              <p className="projects-tree__empty">No pre-screening process recorded for this project.</p>
+            )}
+          </section>
           <div className="projects-tree__permit-checklist">
             <div className="projects-tree__permit-checklist-header">
               <span className="projects-tree__permit-checklist-title">Permitting checklist</span>
@@ -239,11 +320,30 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
                   <li
                     key={`${item.label}-${index}`}
                     className={`projects-tree__permit-checklist-item${
-                      item.completed ? " projects-tree__permit-checklist-item--complete" : ""
+                      !isWorkflowBackedChecklistItem(item) && item.completed
+                        ? " projects-tree__permit-checklist-item--complete"
+                        : ""
                     }`}
                   >
-                    <span className="projects-tree__permit-checklist-marker" aria-hidden="true" />
-                    <span className="projects-tree__permit-checklist-label">{item.label}</span>
+                    <div className="projects-tree__permit-checklist-item-row">
+                      <span className="projects-tree__permit-checklist-marker" aria-hidden="true" />
+                      <span className="projects-tree__permit-checklist-label">{item.label}</span>
+                      {!isWorkflowBackedChecklistItem(item) ? (
+                        <span
+                          className={`projects-tree__permit-checklist-item-status projects-tree__permit-checklist-item-status--${
+                            item.completed ? "complete" : "pending"
+                          }`}
+                        >
+                          {item.completed ? "Complete" : "Not complete"}
+                        </span>
+                      ) : null}
+                    </div>
+                    {isWorkflowBackedChecklistItem(item) ? (
+                      <WorkflowChecklistProcess
+                        itemLabel={item.label}
+                        process={getWorkflowProcessForItem(item.label)}
+                      />
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -251,6 +351,18 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
               <p className="projects-tree__empty">No permitting checklist items recorded.</p>
             )}
           </div>
+          {additionalProcesses.length > 0 ? (
+            <section className="projects-tree__section">
+              <div className="projects-tree__section-header">
+                <span className="projects-tree__section-title">Additional processes</span>
+              </div>
+              <ul className="projects-tree__processes">
+                {additionalProcesses.map((process) => (
+                  <ProcessTree key={process.id} process={process} />
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
       </details>
     </li>

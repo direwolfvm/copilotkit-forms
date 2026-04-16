@@ -77,6 +77,7 @@ import {
 import { majorPermits } from "./utils/majorPermits"
 import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "./types/gis"
 import { createProjectReportPdf } from "./utils/projectReportPdf"
+import { isAutoPopulatedChecklistItem } from "./utils/projectStatus"
 
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
 
@@ -1454,13 +1455,18 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     })
   }, [formData])
 
+  const manualPermitChecklistItems = useMemo(
+    () => permitChecklistItems.filter((item) => !isAutoPopulatedChecklistItem(item)),
+    [permitChecklistItems]
+  )
+
   const geospatialComplete =
     geospatialResults.nepassist.status === "success" && geospatialResults.ipac.status === "success"
   const locationEstablished =
     Boolean(formData.location_text?.trim()) &&
     Boolean(formData.location_object?.trim()) &&
     geospatialComplete
-  const permittingChecklistCreated = permitChecklistItems.length > 0
+  const permittingChecklistCreated = manualPermitChecklistItems.length > 0
   const environmentalReviewComplete = ([
     "nepa_categorical_exclusion_code",
     "nepa_conformance_conditions",
@@ -3179,7 +3185,10 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                 actions={renderPaneAction("checklist")}
                 status={
                   permittingChecklistCreated
-                    ? { tone: "success", text: `${permitChecklistItems.length} item${permitChecklistItems.length === 1 ? "" : "s"} listed` }
+                    ? {
+                        tone: "success",
+                        text: `${manualPermitChecklistItems.length} item${manualPermitChecklistItems.length === 1 ? "" : "s"} listed`
+                      }
                     : { tone: "danger", text: "Create the permitting checklist" }
                 }
                 ariaLabel="Permitting checklist"
@@ -3191,7 +3200,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                 }}
               >
                 <div className="portal-static-panel">
-                  {permitChecklistItems.length === 0 ? (
+                  {!permittingChecklistCreated ? (
                     <p>No checklist items yet.</p>
                   ) : (
                     <ul className="portal-static-list">

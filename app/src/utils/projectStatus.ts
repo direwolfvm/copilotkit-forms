@@ -1,4 +1,6 @@
 import type { ProjectHierarchy, ProjectProcessSummary, CaseEventSummary } from "./projectPersistence"
+import { FWS_ESA_CONSULTATION_PERMIT_ID, findPermitByLabel } from "./permitInventory"
+import { IPAC_SHADOW_WORKFLOW_TITLE_SUFFIX } from "./ipacShadowWorkflow"
 
 export { StatusIndicator } from "../components/StatusIndicator"
 export type { ProcessStatusVariant, StatusIndicatorProps } from "../components/StatusIndicator"
@@ -10,6 +12,8 @@ const BASIC_PERMIT_LABEL = "Basic Permit"
 const BASIC_PERMIT_APPROVED_EVENT = "project_approved"
 const COMPLEX_REVIEW_LABEL = "Complex Review"
 const COMPLEX_REVIEW_APPROVED_EVENT = "project_approved"
+const IPAC_CONSULTATION_COMPLETE_EVENT = "IPaC consultation complete"
+const IPAC_CONSULTATION_LABEL = "IPaC consultation"
 
 export type PreScreeningStatus = "complete" | "pending" | "caution"
 
@@ -172,6 +176,46 @@ export function determineComplexReviewStatus(
   return { variant: "pending", label: `${COMPLEX_REVIEW_LABEL} in progress` }
 }
 
+export function isIpacShadowProcess(process: ProjectProcessSummary): boolean {
+  const haystack = `${process.title ?? ""} ${process.description ?? ""}`.toLowerCase()
+  return (
+    haystack.includes(IPAC_SHADOW_WORKFLOW_TITLE_SUFFIX.toLowerCase()) ||
+    (haystack.includes("ipac") && haystack.includes("consultation"))
+  )
+}
+
+export function determineIpacStatus(
+  process: ProjectProcessSummary
+): { variant: PreScreeningStatus; label: string } | undefined {
+  if (!isIpacShadowProcess(process)) {
+    return undefined
+  }
+
+  const hasCompletion = process.caseEvents.some(
+    (event) => event.eventType?.toLowerCase() === IPAC_CONSULTATION_COMPLETE_EVENT.toLowerCase()
+  )
+  if (hasCompletion) {
+    return { variant: "complete", label: `${IPAC_CONSULTATION_LABEL} complete` }
+  }
+
+  const latestEvent = process.caseEvents[0]
+  if (!latestEvent) {
+    return undefined
+  }
+
+  const eventStatus = latestEvent.status?.toLowerCase()
+  if (eventStatus === "late" || eventStatus === "overdue" || eventStatus === "delayed") {
+    return { variant: "caution", label: `${IPAC_CONSULTATION_LABEL} delayed` }
+  }
+
+  const latestTimestamp = parseTimestampMillis(latestEvent.lastUpdated)
+  if (latestTimestamp && Date.now() - latestTimestamp > PRE_SCREENING_ONE_WEEK_MS) {
+    return { variant: "caution", label: `${IPAC_CONSULTATION_LABEL} pending for over 7 days` }
+  }
+
+  return { variant: "pending", label: `${IPAC_CONSULTATION_LABEL} in progress` }
+}
+
 export function isProcessComplete(process: ProjectProcessSummary): boolean {
   if (isPreScreeningProcess(process)) {
     return process.caseEvents.some((event) => event.eventType === PRE_SCREENING_COMPLETE_EVENT)
@@ -186,6 +230,12 @@ export function isProcessComplete(process: ProjectProcessSummary): boolean {
   if (isComplexReviewProcess(process)) {
     return process.caseEvents.some(
       (event) => event.eventType?.toLowerCase() === COMPLEX_REVIEW_APPROVED_EVENT
+    )
+  }
+
+  if (isIpacShadowProcess(process)) {
+    return process.caseEvents.some(
+      (event) => event.eventType?.toLowerCase() === IPAC_CONSULTATION_COMPLETE_EVENT.toLowerCase()
     )
   }
 
@@ -211,6 +261,10 @@ export function isProcessDelayed(process: ProjectProcessSummary): boolean {
     return true
   }
 
+  if (determineIpacStatus(process)?.variant === "caution") {
+    return true
+  }
+
   return process.caseEvents.some((event) => {
     const status = event.status?.toLowerCase()
     return status === "late" || status === "overdue" || status === "delayed"
@@ -226,8 +280,33 @@ export function isAutoPopulatedChecklistItem(item: { label: string }): boolean {
   return AUTO_POPULATED_CHECKLIST_LABELS.has(item.label.toLowerCase())
 }
 
+export function isIpacChecklistItem(item: { label: string }): boolean {
+  const permit = findPermitByLabel(item.label)
+  if (permit?.id === FWS_ESA_CONSULTATION_PERMIT_ID) {
+    return true
+  }
+
+  const normalized = item.label.toLowerCase().trim()
+  if (normalized.includes("noaa") || normalized.includes("nmfs")) {
+    return false
+  }
+
+  return (
+    normalized.includes("endangered species act consultation") ||
+    normalized.includes("endangered species act section 7 consultation") ||
+    normalized.includes("endangered species consultation") ||
+    normalized.includes("esa section 7 consultation") ||
+    normalized.includes("fws esa consultation") ||
+    normalized.includes("ipac")
+  )
+}
+
+export function isWorkflowBackedChecklistItem(item: { label: string }): boolean {
+  return isAutoPopulatedChecklistItem(item) || isIpacChecklistItem(item)
+}
+
 export function isPermitChecklistComplete(entry: ProjectHierarchy): boolean {
-  const manualItems = entry.permittingChecklist.filter((item) => !isAutoPopulatedChecklistItem(item))
+  const manualItems = entry.permittingChecklist.filter((item) => !isWorkflowBackedChecklistItem(item))
   return manualItems.length > 0 && manualItems.every((item) => item.completed)
 }
 
