@@ -980,12 +980,15 @@ function convertNepaMcpEvents(events) {
     switch (event.type) {
       case "tool_start": {
         const toolCallId = randomUUID();
-        converted.push({
+        const toolStartEvent = {
           type: "TOOL_CALL_START",
           toolCallId,
           toolCallName: typeof event.name === "string" ? event.name : "tool_call",
-          parentMessageId: assistantMessageId,
-        });
+        };
+        if (typeof assistantMessageId === "string" && assistantMessageId) {
+          toolStartEvent.parentMessageId = assistantMessageId;
+        }
+        converted.push(toolStartEvent);
         converted.push({
           type: "TOOL_CALL_ARGS",
           toolCallId,
@@ -1189,7 +1192,6 @@ function buildGraphqlResponseFromEvents(events, threadId, runId) {
       id: entry.id,
       createdAt: new Date().toISOString(),
       role: entry.role,
-      parentMessageId: null,
       content: [content],
       status: {
         __typename: "SuccessMessageStatus",
