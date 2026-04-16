@@ -15,6 +15,7 @@ import { CollapsibleCard, type CollapsibleCardStatus } from "./CollapsibleCard"
 interface LocationSectionProps {
   title: string
   description?: string
+  actions?: ReactNode
   placeholder?: string
   rows?: number
   locationText?: string
@@ -172,6 +173,7 @@ function formatTimestamp(timestamp?: string) {
 export function LocationSection({
   title,
   description,
+  actions,
   placeholder,
   rows,
   locationText,
@@ -237,6 +239,7 @@ export function LocationSection({
     <CollapsibleCard
       className="location-section"
       title={title}
+      actions={actions}
       aria-label="Project location details"
       dataAttributes={{
         "data-tour-id": "portal-location",

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useParams } from "react-router-dom"
+import { Link, useParams } from "react-router-dom"
 import type { ChangeEvent, FormEvent, ReactNode } from "react"
 import Form from "@rjsf/core"
 import type { IChangeEvent } from "@rjsf/core"
@@ -14,7 +14,8 @@ import {
 import {
   CopilotSidebar,
   RenderSuggestion,
-  type RenderSuggestionsListProps
+  type RenderSuggestionsListProps,
+  useChatContext
 } from "@copilotkit/react-ui"
 import "@copilotkit/react-ui/styles.css"
 import "./copilot-overrides.css"
@@ -231,6 +232,18 @@ function normalizeCopilotProjectFieldTarget(rawKey: string): CopilotProjectField
 type SupportedDocumentExtension = (typeof SUPPORTED_DOCUMENT_EXTENSIONS)[number]
 type DocumentUploadStatus = { type: "success" | "error"; message: string }
 type DocumentUploadInput = { title: string; file: File }
+
+const CORE_PROJECT_DATA_FIELDS: SimpleProjectField[] = [
+  "id",
+  "title",
+  "description",
+  "sector",
+  "lead_agency",
+  "participating_agencies",
+  "sponsor",
+  "funding",
+  "other"
+]
 
 function extractFileExtension(fileName: string): SupportedDocumentExtension | undefined {
   if (typeof fileName !== "string") {
@@ -481,27 +494,47 @@ function formatProgressDate(iso?: string): string | undefined {
 
 type PortalProgressIndicatorProps = {
   progress: PortalProgressState
-  hasSavedSnapshot: boolean
+  coreProjectDataStarted: boolean
+  coreProjectDataComplete: boolean
+  locationEstablished: boolean
+  permittingChecklistCreated: boolean
+  environmentalReviewComplete: boolean
 }
 
-function PortalProgressIndicator({ progress, hasSavedSnapshot }: PortalProgressIndicatorProps) {
-  const projectSnapshotComplete = hasSavedSnapshot || !!progress.projectSnapshot.initiatedAt
-  const projectSnapshotStatus: ProgressStatus = projectSnapshotComplete ? "complete" : "not-started"
+function PortalProgressIndicator({
+  progress,
+  coreProjectDataStarted,
+  coreProjectDataComplete,
+  locationEstablished,
+  permittingChecklistCreated,
+  environmentalReviewComplete
+}: PortalProgressIndicatorProps) {
+  const projectSnapshotStatus: ProgressStatus = coreProjectDataComplete
+    ? "complete"
+    : coreProjectDataStarted
+      ? "in-progress"
+      : "not-started"
   const projectSnapshotDate = formatProgressDate(progress.projectSnapshot.initiatedAt)
-  const projectSnapshotDetail = projectSnapshotComplete
-    ? "Project initiation case event recorded."
-    : "Save the project snapshot to start the process."
+  const projectSnapshotDetail = coreProjectDataComplete
+    ? "Core project data is complete."
+    : "Complete the required core project data fields."
   const projectSnapshotTimestamp = projectSnapshotDate
     ? `Initiated ${projectSnapshotDate}`
     : undefined
 
   const preScreening = progress.preScreening
-  let preScreeningStatus: ProgressStatus = "not-started"
-  if (preScreening.completedAt) {
-    preScreeningStatus = "complete"
-  } else if (preScreening.initiatedAt) {
-    preScreeningStatus = "in-progress"
-  }
+  const preScreeningCriteria = [
+    { label: "Location established", complete: locationEstablished },
+    { label: "Permitting Checklist Created", complete: permittingChecklistCreated },
+    { label: "Environmental Review Information", complete: environmentalReviewComplete }
+  ]
+  const completedPreScreeningCriteria = preScreeningCriteria.filter((criterion) => criterion.complete).length
+  const preScreeningStatus: ProgressStatus =
+    completedPreScreeningCriteria === 0
+      ? "not-started"
+      : completedPreScreeningCriteria === preScreeningCriteria.length
+        ? "complete"
+        : "in-progress"
 
   const hasPreScreeningActivity =
     preScreening.hasDecisionPayloads ||
@@ -513,15 +546,16 @@ function PortalProgressIndicator({ progress, hasSavedSnapshot }: PortalProgressI
   const lastActivityDate = formatProgressDate(lastActivityTimestamp)
 
   const preScreeningDetail = (() => {
-    if (preScreeningStatus === "complete") {
+    if (preScreening.completedAt) {
       return lastActivityDate
-        ? `Decision payload submitted ${lastActivityDate}.`
-        : "Decision payload submitted."
+        ? `Pre-screening submitted ${lastActivityDate}.`
+        : "Pre-screening submitted."
     }
     if (preScreeningStatus === "in-progress") {
-      return lastActivityDate
-        ? `Pre-screening in progress. Last activity ${lastActivityDate}.`
-        : "Pre-screening in progress."
+      return `${completedPreScreeningCriteria} of ${preScreeningCriteria.length} criteria complete.`
+    }
+    if (preScreeningStatus === "complete") {
+      return "All pre-screening criteria are complete."
     }
     return "Pre-screening has not started."
   })()
@@ -550,15 +584,17 @@ function PortalProgressIndicator({ progress, hasSavedSnapshot }: PortalProgressI
       data-tour-intro="These status cards reflect whether you've saved a project snapshot and advanced pre-screening steps."
     >
       <ProgressPanel
-        name="Project snapshot"
+        name="Core Project Data"
         status={projectSnapshotStatus}
         detail={projectSnapshotDetail}
         timestampLabel={projectSnapshotTimestamp}
+        criteria={[{ label: "Core Project Data complete", complete: coreProjectDataComplete }]}
       />
       <ProgressPanel
-        name="Pre-screening"
+        name="Pre-Screening Process"
         status={preScreeningStatus}
         detail={preScreeningDetail}
+        criteria={preScreeningCriteria}
         caution={showCaution}
         cautionMessage={cautionMessage}
       />
@@ -809,6 +845,7 @@ type ProgressPanelProps = {
   status: ProgressStatus
   detail: string
   timestampLabel?: string
+  criteria?: Array<{ label: string; complete: boolean }>
   caution?: boolean
   cautionMessage?: string
 }
@@ -818,6 +855,7 @@ function ProgressPanel({
   status,
   detail,
   timestampLabel,
+  criteria,
   caution,
   cautionMessage
 }: ProgressPanelProps) {
@@ -832,6 +870,25 @@ function ProgressPanel({
       </div>
       {timestampLabel ? <div className="portal-progress__timestamp">{timestampLabel}</div> : null}
       <p className="portal-progress__detail">{detail}</p>
+      {criteria && criteria.length > 0 ? (
+        <ul className="portal-progress__criteria" aria-label={`${name} criteria`}>
+          {criteria.map((criterion) => (
+            <li
+              key={criterion.label}
+              className={
+                criterion.complete
+                  ? "portal-progress__criteria-item portal-progress__criteria-item--complete"
+                  : "portal-progress__criteria-item"
+              }
+            >
+              <span className="portal-progress__criteria-indicator" aria-hidden="true">
+                {criterion.complete ? "✓" : "○"}
+              </span>
+              <span>{criterion.label}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {caution && cautionMessage ? (
         <div className="portal-progress__notice" role="note">
           <span className="portal-progress__notice-icon" aria-hidden="true">
@@ -842,6 +899,24 @@ function ProgressPanel({
       ) : null}
     </div>
   )
+}
+
+type EditablePane = "core" | "location" | "checklist" | "environment"
+
+type CopilotOpenSyncProps = {
+  requestKey: number
+}
+
+function CopilotOpenSync({ requestKey }: CopilotOpenSyncProps) {
+  const { setOpen } = useChatContext()
+
+  useEffect(() => {
+    if (requestKey > 0) {
+      setOpen(true)
+    }
+  }, [requestKey, setOpen])
+
+  return null
 }
 
 type ProjectFormWithCopilotProps = {
@@ -1018,6 +1093,8 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
   )
   const [isGeneratingReport, setIsGeneratingReport] = useState(false)
   const [reportError, setReportError] = useState<string | undefined>(undefined)
+  const [activeEditPane, setActiveEditPane] = useState<EditablePane | null>(null)
+  const [copilotOpenRequest, setCopilotOpenRequest] = useState(0)
   const permitChecklistItems = useMemo(() => {
     const projectIdValue = typeof formData.id === "string" ? formData.id.trim() : ""
     if (!projectIdValue) {
@@ -1040,6 +1117,11 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     () => permittingChecklist.some((item) => toChecklistKey(item.label) === BASIC_PERMIT_CHECKLIST_KEY),
     [permittingChecklist]
   )
+  const isNewProject = !projectId
+
+  useEffect(() => {
+    setActiveEditPane(null)
+  }, [projectId])
 
   const startPortalTour = useCallback(() => {
     if (typeof window === "undefined") {
@@ -1064,7 +1146,6 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       "[data-tour-id='portal-progress']",
       "[data-tour-id='portal-summary']",
       "[data-tour-id='portal-location']",
-      "[data-tour-id='portal-form']",
       "[data-tour-id='portal-checklist']",
       "[data-tour-id='portal-nepa']"
     ]
@@ -1362,19 +1443,79 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     [formData, projectRequiredFields]
   )
 
+  const coreProjectDataComplete = missingProjectFields.length === 0
+  const coreProjectDataStarted = useMemo(() => {
+    return CORE_PROJECT_DATA_FIELDS.some((field) => {
+      const value = formData[field]
+      if (typeof value === "number") {
+        return Number.isFinite(value)
+      }
+      return typeof value === "string" && value.trim().length > 0
+    })
+  }, [formData])
+
+  const geospatialComplete =
+    geospatialResults.nepassist.status === "success" && geospatialResults.ipac.status === "success"
+  const locationEstablished =
+    Boolean(formData.location_text?.trim()) &&
+    Boolean(formData.location_object?.trim()) &&
+    geospatialComplete
+  const permittingChecklistCreated = permitChecklistItems.length > 0
+  const environmentalReviewComplete = ([
+    "nepa_categorical_exclusion_code",
+    "nepa_conformance_conditions",
+    "nepa_extraordinary_circumstances"
+  ] as const).every((key) => {
+    const value = formData?.[key]
+    return !(value === undefined || value === null || (typeof value === "string" && value.trim().length === 0))
+  })
+
+  const startEditingPane = useCallback((pane: EditablePane) => {
+    setActiveEditPane(pane)
+    setCopilotOpenRequest((previous) => previous + 1)
+  }, [])
+
+  const stopEditingPane = useCallback((pane: EditablePane) => {
+    setActiveEditPane((previous) => (previous === pane ? null : previous))
+  }, [])
+
+  const isPaneEditing = useCallback(
+    (pane: EditablePane) => isNewProject || activeEditPane === pane,
+    [activeEditPane, isNewProject]
+  )
+
+  const renderPaneAction = useCallback(
+    (pane: EditablePane) => {
+      if (isNewProject) {
+        return null
+      }
+
+      const editing = activeEditPane === pane
+      return (
+        <button
+          type="button"
+          className="usa-button usa-button--outline secondary"
+          onClick={() => (editing ? stopEditingPane(pane) : startEditingPane(pane))}
+        >
+          {editing ? "Done editing" : "Edit"}
+        </button>
+      )
+    },
+    [activeEditPane, isNewProject, startEditingPane, stopEditingPane]
+  )
+
   const projectFormStatus: CollapsibleCardStatus = useMemo(() => {
-    if (missingProjectFields.length > 0) {
-      const label = `${missingProjectFields.length} required field${missingProjectFields.length === 1 ? "" : "s"} missing`
-      return { tone: "danger", text: label }
+    if (coreProjectDataComplete) {
+      return { tone: "success", text: "Core Project Data complete" }
     }
 
-    if (!hasSavedSnapshot) {
-      return { tone: "warning", text: "Save the project snapshot to continue" }
+    if (coreProjectDataStarted) {
+      const label = `${missingProjectFields.length} required field${missingProjectFields.length === 1 ? "" : "s"} remaining`
+      return { tone: "warning", text: label }
     }
 
-    const savedLabel = lastSaved ? `Snapshot saved ${lastSaved}` : "Snapshot saved"
-    return { tone: "success", text: savedLabel }
-  }, [hasSavedSnapshot, lastSaved, missingProjectFields.length])
+    return { tone: "danger", text: "Add core project data" }
+  }, [coreProjectDataComplete, coreProjectDataStarted, missingProjectFields.length])
 
   const nepaStatus: CollapsibleCardStatus = useMemo(() => {
     const missingFields = ([
@@ -1394,21 +1535,20 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
       return { tone: "danger", text: `Add ${labels}` }
     }
 
-    const geospatialComplete =
-      geospatialResults.nepassist.status === "success" && geospatialResults.ipac.status === "success"
-
-    const hasChecklistItems = permittingChecklist.length > 0
-
-    if (!geospatialComplete) {
-      return { tone: "danger", text: "Run the geospatial screen" }
-    }
-
     if (portalProgress.preScreening.completedAt) {
       return { tone: "success", text: "Pre-screening submitted" }
     }
 
-    if (!hasChecklistItems) {
-      return { tone: "danger", text: "Add permitting checklist items" }
+    if (!locationEstablished) {
+      return { tone: "danger", text: "Complete location and geospatial data" }
+    }
+
+    if (!permittingChecklistCreated) {
+      return { tone: "danger", text: "Create the permitting checklist" }
+    }
+
+    if (!environmentalReviewComplete) {
+      return { tone: "danger", text: "Complete environmental review information" }
     }
 
     if (!hasSavedSnapshot) {
@@ -1422,10 +1562,11 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     return { tone: "warning", text: "Save pre-screening data" }
   }, [
     formData,
-    geospatialResults,
+    environmentalReviewComplete,
     hasSavedSnapshot,
+    locationEstablished,
     nepaFieldConfigs,
-    permittingChecklist.length,
+    permittingChecklistCreated,
     portalProgress.preScreening
   ])
 
@@ -2685,24 +2826,28 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     geospatialResults.nepassist.status === "loading" || geospatialResults.ipac.status === "loading"
 
   const hasGeometry = Boolean(formData.location_object)
+  const geospatialResultsSummary = useMemo(
+    () => formatGeospatialResultsSummary(geospatialResults),
+    [geospatialResults]
+  )
 
   return (
     <CopilotSidebar
       instructions={instructions}
       suggestions={conversationStarters}
-      defaultOpen
+      defaultOpen={isNewProject}
       clickOutsideToClose={false}
       labels={{ title: "Permitting Copilot" }}
       RenderSuggestionsList={ConversationStartersList}
     >
+      <CopilotOpenSync requestKey={copilotOpenRequest} />
       <main className="app">
         <div className="app__inner">
           <header className="app-header">
             <div>
               <h1>Project Portal</h1>
               <p>
-                Start your project by filling out the forms below. The Copilot can translate unstructured notes into the schema or suggest
-                corrections as you work.
+                Review core project data, location, permitting, and environmental review information in one place. Open edit mode on any pane when you want the Copilot and form controls to help update it.
               </p>
             </div>
             <div className="actions">
@@ -2722,7 +2867,14 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             </div>
           </header>
 
-          <PortalProgressIndicator progress={portalProgress} hasSavedSnapshot={hasSavedSnapshot} />
+          <PortalProgressIndicator
+            progress={portalProgress}
+            coreProjectDataStarted={coreProjectDataStarted}
+            coreProjectDataComplete={coreProjectDataComplete}
+            locationEstablished={locationEstablished}
+            permittingChecklistCreated={permittingChecklistCreated}
+            environmentalReviewComplete={environmentalReviewComplete}
+          />
 
           {projectLoadState.status === "loading" ? (
             <div className="usa-alert usa-alert--info usa-alert--slim" role="status" aria-live="polite">
@@ -2754,198 +2906,369 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
           ) : null}
 
           <section className="content">
-            <ProjectSummary
-              data={formData}
-              actions={
-                <>
-                  <div className="summary-panel__buttons">
-                    <button
-                      type="button"
-                      className="usa-button usa-button--outline secondary"
-                      onClick={handleGenerateProjectReport}
-                      disabled={!canGenerateReport || isGeneratingReport}
-                      title={
-                        !canGenerateReport
-                          ? "Save the project snapshot to enable report generation."
-                          : undefined
-                      }
-                    >
-                      {isGeneratingReport ? "Generating…" : "Generate PDF"}
-                    </button>
-                    {projectReport ? (
-                      <a
-                        className="usa-button"
-                        href={projectReport.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+            {isPaneEditing("core") ? (
+              <CollapsibleCard
+                className="form-panel"
+                title="Core Project Data"
+                description="Complete the core CEQ project fields."
+                ariaLabel="Core project data"
+                status={projectFormStatus}
+                actions={renderPaneAction("core")}
+                dataAttributes={{
+                  "data-tour-id": "portal-summary",
+                  "data-tour-title": "Edit core project data",
+                  "data-tour-intro":
+                    "Open edit mode to update the core CEQ project fields. The Copilot can translate your notes into structured data."
+                }}
+              >
+                <Form<ProjectFormData>
+                  schema={projectSchema}
+                  uiSchema={projectUiSchema}
+                  validator={validator}
+                  formData={formData}
+                  onChange={handleChange}
+                  onSubmit={handleSubmit}
+                  liveValidate
+                >
+                  <div className="form-panel__actions">
+                    {documentUploadStatus ? (
+                      <span
+                        className={`form-panel__status-message status${
+                          documentUploadStatus.type === "error" ? " status--error" : ""
+                        }`}
+                        aria-live="polite"
                       >
-                        View latest PDF
-                      </a>
-                    ) : (
+                        {documentUploadStatus.message}
+                      </span>
+                    ) : null}
+                    <div className="form-panel__actions-group">
+                      <button type="submit" className="usa-button primary" disabled={isSaving}>
+                        {isSaving ? "Saving…" : "Save core project data"}
+                      </button>
                       <button
                         type="button"
-                        className="usa-button"
-                        disabled
-                        title="Generate a report to enable the download."
+                        className="usa-button usa-button--outline secondary"
+                        onClick={handleOpenDocumentModal}
+                        disabled={!canUploadDocument}
+                        title={
+                          !canUploadDocument
+                            ? "Save the project data before uploading documents."
+                            : undefined
+                        }
                       >
-                        View latest PDF
+                        Upload supporting document
                       </button>
-                    )}
-                  </div>
-                  <div className="summary-panel__status-group" aria-live="polite">
-                    {isGeneratingReport ? (
-                      <span className="summary-panel__status">Generating report…</span>
-                    ) : projectReport?.generatedAt ? (
-                      <span className="summary-panel__status">
-                        {formattedReportTimestamp
-                          ? `Generated ${formattedReportTimestamp}`
-                          : `Generated ${projectReport.generatedAt}`}
-                      </span>
-                    ) : null}
-                    {reportError ? (
-                      <span className="summary-panel__status summary-panel__status--error" role="alert">
-                        {reportError}
-                      </span>
-                    ) : null}
-                  </div>
-                </>
-              }
-            />
-            <CollapsibleCard
-              className="form-panel"
-              title="Project form"
-              description="Complete the CEQ project fields."
-              ariaLabel="Project form"
-              status={projectFormStatus}
-              dataAttributes={{
-                "data-tour-id": "portal-form",
-                "data-tour-title": "Fill out the CEQ form",
-                "data-tour-intro":
-                  "Work through the structured fields or ask the Copilot to take your narrative and populate the schema for you."
-              }}
-            >
-              <Form<ProjectFormData>
-                schema={projectSchema}
-                uiSchema={projectUiSchema}
-                validator={validator}
-                formData={formData}
-                onChange={handleChange}
-                onSubmit={handleSubmit}
-                liveValidate
-              >
-                <div className="form-panel__actions">
-                  {documentUploadStatus ? (
-                    <span
-                      className={`form-panel__status-message status${
-                        documentUploadStatus.type === "error" ? " status--error" : ""
-                      }`}
-                      aria-live="polite"
-                    >
-                      {documentUploadStatus.message}
-                    </span>
-                  ) : null}
-                  <div className="form-panel__actions-group">
-                    <button type="submit" className="usa-button primary" disabled={isSaving}>
-                      {isSaving ? "Saving…" : "Save project snapshot"}
-                    </button>
-                    <button
-                      type="button"
-                      className="usa-button usa-button--outline secondary"
-                      onClick={handleOpenDocumentModal}
-                      disabled={!canUploadDocument}
-                      title={
-                        !canUploadDocument
-                          ? "Save the project snapshot before uploading documents."
-                          : undefined
-                      }
-                    >
-                      Upload supporting document
-                    </button>
-                  </div>
-                  {supportingDocuments.length > 0 ? (
-                    <div className="supporting-documents" aria-live="polite">
-                      <p className="supporting-documents__heading">Uploaded documents</p>
-                      <ul className="supporting-documents__list">
-                        {supportingDocuments.map((document) => {
-                          const uploadedAt = formatDocumentTimestamp(document.uploadedAt)
-                          const fileSizeLabel = formatFileSize(document.fileSize)
-                          const metaParts: string[] = []
-                          if (document.fileName) {
-                            metaParts.push(document.fileName)
-                          }
-                          if (fileSizeLabel) {
-                            metaParts.push(fileSizeLabel)
-                          }
-                          if (uploadedAt) {
-                            metaParts.push(`Uploaded ${uploadedAt}`)
-                          }
-                          const metaText = metaParts.join(" • ")
-                          return (
-                            <li key={document.id} className="supporting-documents__item">
-                              <a
-                                className="supporting-documents__link"
-                                href={document.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {document.title}
-                              </a>
-                              {metaText ? <span className="supporting-documents__meta">{metaText}</span> : null}
-                            </li>
-                          )
-                        })}
-                      </ul>
+                      <button
+                        type="button"
+                        className="usa-button usa-button--outline secondary"
+                        onClick={handleGenerateProjectReport}
+                        disabled={!canGenerateReport || isGeneratingReport}
+                        title={
+                          !canGenerateReport
+                            ? "Save the project data to enable report generation."
+                            : undefined
+                        }
+                      >
+                        {isGeneratingReport ? "Generating…" : "Generate PDF"}
+                      </button>
                     </div>
-                  ) : null}
-                </div>
-              </Form>
-            </CollapsibleCard>
-            {locationFieldDetail ? (
-              <LocationSection
-                key={locationSectionKey}
-                title="Location and Geospatial Screening"
-                description={locationFieldDetail.description}
-                placeholder={locationFieldDetail.placeholder}
-                rows={locationFieldDetail.rows}
-                locationText={formData.location_text}
-                geometry={formData.location_object}
-                activeUploadFileName={projectGisUpload.uploadedFile?.fileName}
-                enableFileUpload
-                onLocationTextChange={handleLocationTextChange}
-                onLocationGeometryChange={handleLocationGeometryChange}
-                geospatialResults={geospatialResults}
-                onRunGeospatialScreen={handleRunGeospatialScreen}
-                isRunningGeospatial={isGeospatialRunning}
-                hasGeometry={hasGeometry}
-                bufferMiles={DEFAULT_BUFFER_MILES}
+                    <div className="summary-panel__status-group" aria-live="polite">
+                      {isGeneratingReport ? (
+                        <span className="summary-panel__status">Generating report…</span>
+                      ) : projectReport?.generatedAt ? (
+                        <span className="summary-panel__status">
+                          {formattedReportTimestamp
+                            ? `Generated ${formattedReportTimestamp}`
+                            : `Generated ${projectReport.generatedAt}`}
+                        </span>
+                      ) : null}
+                      {reportError ? (
+                        <span className="summary-panel__status summary-panel__status--error" role="alert">
+                          {reportError}
+                        </span>
+                      ) : null}
+                    </div>
+                    {supportingDocuments.length > 0 ? (
+                      <div className="supporting-documents" aria-live="polite">
+                        <p className="supporting-documents__heading">Uploaded documents</p>
+                        <ul className="supporting-documents__list">
+                          {supportingDocuments.map((document) => {
+                            const uploadedAt = formatDocumentTimestamp(document.uploadedAt)
+                            const fileSizeLabel = formatFileSize(document.fileSize)
+                            const metaParts: string[] = []
+                            if (document.fileName) {
+                              metaParts.push(document.fileName)
+                            }
+                            if (fileSizeLabel) {
+                              metaParts.push(fileSizeLabel)
+                            }
+                            if (uploadedAt) {
+                              metaParts.push(`Uploaded ${uploadedAt}`)
+                            }
+                            const metaText = metaParts.join(" • ")
+                            return (
+                              <li key={document.id} className="supporting-documents__item">
+                                <a
+                                  className="supporting-documents__link"
+                                  href={document.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {document.title}
+                                </a>
+                                {metaText ? <span className="supporting-documents__meta">{metaText}</span> : null}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                </Form>
+              </CollapsibleCard>
+            ) : (
+              <ProjectSummary
+                data={formData}
+                title="Core Project Data"
+                description="Review the saved project data here. Open edit mode when you want to update these fields."
+                actions={
+                  <>
+                    <div className="summary-panel__buttons">
+                      {renderPaneAction("core")}
+                      <button
+                        type="button"
+                        className="usa-button usa-button--outline secondary"
+                        onClick={handleGenerateProjectReport}
+                        disabled={!canGenerateReport || isGeneratingReport}
+                        title={
+                          !canGenerateReport
+                            ? "Save the project data to enable report generation."
+                            : undefined
+                        }
+                      >
+                        {isGeneratingReport ? "Generating…" : "Generate PDF"}
+                      </button>
+                      {projectReport ? (
+                        <a
+                          className="usa-button"
+                          href={projectReport.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          View latest PDF
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          className="usa-button"
+                          disabled
+                          title="Generate a report to enable the download."
+                        >
+                          View latest PDF
+                        </button>
+                      )}
+                    </div>
+                    <div className="summary-panel__status-group" aria-live="polite">
+                      {isGeneratingReport ? (
+                        <span className="summary-panel__status">Generating report…</span>
+                      ) : projectReport?.generatedAt ? (
+                        <span className="summary-panel__status">
+                          {formattedReportTimestamp
+                            ? `Generated ${formattedReportTimestamp}`
+                            : `Generated ${projectReport.generatedAt}`}
+                        </span>
+                      ) : null}
+                      {reportError ? (
+                        <span className="summary-panel__status summary-panel__status--error" role="alert">
+                          {reportError}
+                        </span>
+                      ) : null}
+                    </div>
+                  </>
+                }
+                dataAttributes={{
+                  "data-tour-id": "portal-summary",
+                  "data-tour-title": "Review core project data",
+                  "data-tour-intro":
+                    "Existing projects open in a read-only summary view. Select Edit on a pane when you want the Copilot and form controls."
+                }}
               />
+            )}
+
+            {locationFieldDetail ? (
+              isPaneEditing("location") ? (
+                <LocationSection
+                  key={locationSectionKey}
+                  title="Location and Geospatial Data"
+                  description={locationFieldDetail.description}
+                  actions={renderPaneAction("location")}
+                  placeholder={locationFieldDetail.placeholder}
+                  rows={locationFieldDetail.rows}
+                  locationText={formData.location_text}
+                  geometry={formData.location_object}
+                  activeUploadFileName={projectGisUpload.uploadedFile?.fileName}
+                  enableFileUpload
+                  onLocationTextChange={handleLocationTextChange}
+                  onLocationGeometryChange={handleLocationGeometryChange}
+                  geospatialResults={geospatialResults}
+                  onRunGeospatialScreen={handleRunGeospatialScreen}
+                  isRunningGeospatial={isGeospatialRunning}
+                  hasGeometry={hasGeometry}
+                  bufferMiles={DEFAULT_BUFFER_MILES}
+                />
+              ) : (
+                <CollapsibleCard
+                  className="location-section"
+                  title="Location and Geospatial Data"
+                  description="Review the saved location narrative, geometry, and geospatial screening outputs."
+                  actions={renderPaneAction("location")}
+                  status={
+                    locationEstablished
+                      ? { tone: "success", text: "Location established" }
+                      : { tone: "danger", text: "Complete location and geospatial data" }
+                  }
+                  ariaLabel="Location and geospatial data"
+                  dataAttributes={{
+                    "data-tour-id": "portal-location",
+                    "data-tour-title": "Review location data",
+                    "data-tour-intro":
+                      "Saved location text, geometry, and screening results appear here until you choose to edit them."
+                  }}
+                >
+                  <div className="portal-static-panel">
+                    <div className="portal-static-panel__section">
+                      <h3>Location Description</h3>
+                      <p>{formData.location_text?.trim() || "Not provided."}</p>
+                    </div>
+                    <div className="portal-static-panel__section">
+                      <h3>Geometry</h3>
+                      <p>{hasGeometry ? "Project geometry is attached." : "No project geometry attached yet."}</p>
+                      {projectGisUpload.uploadedFile?.fileName ? (
+                        <p className="portal-static-panel__meta">
+                          Uploaded file: {projectGisUpload.uploadedFile.fileName}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="portal-static-panel__section portal-static-panel__section--full">
+                      <h3>Geospatial Screening</h3>
+                      <pre className="portal-static-panel__pre">{geospatialResultsSummary}</pre>
+                    </div>
+                  </div>
+                </CollapsibleCard>
+              )
             ) : null}
-        <PermittingChecklistSection
-          items={permitChecklistItems}
-          onAddItem={handleAddChecklistItem}
-          onToggleItem={handleToggleChecklistItem}
-          onRemoveItem={handleRemoveChecklistItem}
-          onBulkAddFromSeed={handleBulkAddFromSeed}
-          hasBasicPermit={hasBasicPermitChecklistItem}
-          onAddBasicPermit={handleAddBasicPermit}
-        />
-            <NepaReviewSection
-              values={{
-                nepa_categorical_exclusion_code: formData.nepa_categorical_exclusion_code,
-                nepa_conformance_conditions: formData.nepa_conformance_conditions,
-                nepa_extraordinary_circumstances: formData.nepa_extraordinary_circumstances
-              }}
-              fieldConfigs={nepaFieldConfigs}
-              onFieldChange={handleNepaFieldChange}
-              onSavePreScreeningData={handleSavePreScreeningData}
-              onSubmitPreScreeningData={handleSubmitPreScreeningData}
-              preScreeningSubmitState={decisionSubmitState}
-              isProjectSaving={isSaving}
-              canSubmitPreScreening={hasSavedSnapshot}
-              onShowProcessInformation={handleShowProcessInformation}
-              isProcessInformationLoading={processInformationState.status === "loading"}
-              status={nepaStatus}
-            />
+
+            {isPaneEditing("checklist") ? (
+              <PermittingChecklistSection
+                title="Permitting Checklist"
+                description="Track anticipated permits and authorizations for this project."
+                actions={renderPaneAction("checklist")}
+                items={permitChecklistItems}
+                onAddItem={handleAddChecklistItem}
+                onToggleItem={handleToggleChecklistItem}
+                onRemoveItem={handleRemoveChecklistItem}
+                onBulkAddFromSeed={handleBulkAddFromSeed}
+                hasBasicPermit={hasBasicPermitChecklistItem}
+                onAddBasicPermit={handleAddBasicPermit}
+              />
+            ) : (
+              <CollapsibleCard
+                className="checklist-panel"
+                title="Permitting Checklist"
+                description="Review the permits and authorizations currently associated with this project."
+                actions={renderPaneAction("checklist")}
+                status={
+                  permittingChecklistCreated
+                    ? { tone: "success", text: `${permitChecklistItems.length} item${permitChecklistItems.length === 1 ? "" : "s"} listed` }
+                    : { tone: "danger", text: "Create the permitting checklist" }
+                }
+                ariaLabel="Permitting checklist"
+                dataAttributes={{
+                  "data-tour-id": "portal-checklist",
+                  "data-tour-title": "Review permitting checklist",
+                  "data-tour-intro":
+                    "Checklist items and integration links stay visible here until you choose to edit the list."
+                }}
+              >
+                <div className="portal-static-panel">
+                  {permitChecklistItems.length === 0 ? (
+                    <p>No checklist items yet.</p>
+                  ) : (
+                    <ul className="portal-static-list">
+                      {permitChecklistItems.map((item) => (
+                        <li key={item.id} className="portal-static-list__item">
+                          <div>
+                            <p className="portal-static-list__title">{item.label}</p>
+                            <p className="portal-static-list__meta">
+                              {item.completed ? "Marked complete" : "Not complete"}
+                              {item.notes ? ` • ${item.notes}` : ""}
+                            </p>
+                          </div>
+                          {item.link ? (
+                            <Link className="checklist-panel__link" to={item.link.href}>
+                              {item.link.label}
+                            </Link>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </CollapsibleCard>
+            )}
+
+            {isPaneEditing("environment") ? (
+              <NepaReviewSection
+                title="Environmental Review"
+                description="Capture environmental review information and pre-screening process details."
+                actions={renderPaneAction("environment")}
+                values={{
+                  nepa_categorical_exclusion_code: formData.nepa_categorical_exclusion_code,
+                  nepa_conformance_conditions: formData.nepa_conformance_conditions,
+                  nepa_extraordinary_circumstances: formData.nepa_extraordinary_circumstances
+                }}
+                fieldConfigs={nepaFieldConfigs}
+                onFieldChange={handleNepaFieldChange}
+                onSavePreScreeningData={handleSavePreScreeningData}
+                onSubmitPreScreeningData={handleSubmitPreScreeningData}
+                preScreeningSubmitState={decisionSubmitState}
+                isProjectSaving={isSaving}
+                canSubmitPreScreening={hasSavedSnapshot}
+                onShowProcessInformation={handleShowProcessInformation}
+                isProcessInformationLoading={processInformationState.status === "loading"}
+                status={nepaStatus}
+              />
+            ) : (
+              <CollapsibleCard
+                className="form-panel"
+                title="Environmental Review"
+                description="Review the environmental review information currently saved for this project."
+                actions={renderPaneAction("environment")}
+                status={nepaStatus}
+                ariaLabel="Environmental review"
+                dataAttributes={{
+                  "data-tour-id": "portal-nepa",
+                  "data-tour-title": "Review environmental information",
+                  "data-tour-intro":
+                    "Environmental review information is read-only by default for existing projects and becomes editable when you open that pane."
+                }}
+              >
+                <div className="portal-static-panel">
+                  <div className="portal-static-panel__section">
+                    <h3>{nepaFieldConfigs.nepa_categorical_exclusion_code?.title ?? "Categorical Exclusion"}</h3>
+                    <p>{formData.nepa_categorical_exclusion_code?.trim() || "Not provided."}</p>
+                  </div>
+                  <div className="portal-static-panel__section">
+                    <h3>{nepaFieldConfigs.nepa_conformance_conditions?.title ?? "Conditions for Conformance"}</h3>
+                    <p>{formData.nepa_conformance_conditions?.trim() || "Not provided."}</p>
+                  </div>
+                  <div className="portal-static-panel__section portal-static-panel__section--full">
+                    <h3>{nepaFieldConfigs.nepa_extraordinary_circumstances?.title ?? "Environmental Narrative"}</h3>
+                    <p>{formData.nepa_extraordinary_circumstances?.trim() || "Not provided."}</p>
+                  </div>
+                </div>
+              </CollapsibleCard>
+            )}
           </section>
         </div>
       </main>

@@ -36,9 +36,22 @@ function hasContact(contact?: ProjectContact) {
 interface ProjectSummaryProps {
   data: ProjectFormData
   actions?: ReactNode
+  title?: string
+  description?: string
+  ariaLabel?: string
+  defaultExpanded?: boolean
+  dataAttributes?: Record<string, string | number | boolean | undefined>
 }
 
-export function ProjectSummary({ data, actions }: ProjectSummaryProps) {
+export function ProjectSummary({
+  data,
+  actions,
+  title = "Project snapshot",
+  description = "As you populate the form, this summary updates so it can be copied into status reports or sent to collaborators.",
+  ariaLabel = title,
+  defaultExpanded = true,
+  dataAttributes
+}: ProjectSummaryProps) {
   const summaryText = formatProjectSummary(data)
   const contact = data.sponsor_contact
   const showContact = hasContact(contact)
@@ -48,11 +61,12 @@ export function ProjectSummary({ data, actions }: ProjectSummaryProps) {
   return (
     <CollapsibleCard
       className="summary-panel"
-      title="Project snapshot"
-      description="As you populate the form, this summary updates so it can be copied into status reports or sent to collaborators."
+      title={title}
+      description={description}
+      ariaLabel={ariaLabel}
       actions={actions ? <div className="summary-panel__actions">{actions}</div> : null}
-      defaultExpanded
-      dataAttributes={{
+      defaultExpanded={defaultExpanded}
+      dataAttributes={dataAttributes ?? {
         "data-tour-id": "portal-summary",
         "data-tour-title": "Snapshot updates",
         "data-tour-intro":

@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from "react"
+import { type FormEvent, type ReactNode, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 
 import { CollapsibleCard, type CollapsibleCardStatus } from "./CollapsibleCard"
@@ -23,6 +23,9 @@ export type ManualChecklistItemInput = {
 }
 
 type PermittingChecklistSectionProps = {
+  title?: string
+  description?: string
+  actions?: ReactNode
   items: PermittingChecklistItem[]
   onAddItem: (item: ManualChecklistItemInput) => void
   onToggleItem: (id: string) => void
@@ -33,6 +36,9 @@ type PermittingChecklistSectionProps = {
 }
 
 export function PermittingChecklistSection({
+  title = "Permitting Checklist",
+  description = "Track anticipated permits and authorizations alongside the project form. Use the Copilot to suggest items based on project scope, or add your own below.",
+  actions,
   items,
   onAddItem,
   onToggleItem,
@@ -109,8 +115,9 @@ export function PermittingChecklistSection({
   return (
     <CollapsibleCard
       className="checklist-panel"
-      title="Permitting checklist"
-      description="Track anticipated permits and authorizations alongside the project form. Use the Copilot to suggest items based on project scope, or add your own below."
+      title={title}
+      description={description}
+      actions={actions}
       status={status}
       dataAttributes={{
         "data-tour-id": "portal-checklist",

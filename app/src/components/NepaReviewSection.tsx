@@ -17,6 +17,9 @@ interface FieldConfig {
 }
 
 interface NepaReviewSectionProps {
+  title?: string
+  description?: string
+  actions?: ReactNode
   values: Pick<
     ProjectFormData,
     "nepa_categorical_exclusion_code" | "nepa_conformance_conditions" | "nepa_extraordinary_circumstances"
@@ -38,6 +41,9 @@ interface NepaReviewSectionProps {
 }
 
 export function NepaReviewSection({
+  title = "Environmental Review",
+  description = "Capture information related to environmental review and pre-screening.",
+  actions,
   values,
   fieldConfigs,
   onFieldChange,
@@ -100,8 +106,9 @@ export function NepaReviewSection({
   return (
     <CollapsibleCard
       className="form-panel"
-      title="NEPA review"
-      description="Capture information related to the NEPA review process."
+      title={title}
+      description={description}
+      actions={actions}
       ariaLabel="NEPA review details"
       status={status}
       dataAttributes={{
