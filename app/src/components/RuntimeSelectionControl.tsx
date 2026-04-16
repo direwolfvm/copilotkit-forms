@@ -6,10 +6,7 @@ export default function RuntimeSelectionControl() {
   const { runtimeMode, setRuntimeMode } = useCopilotRuntimeSelection()
 
   const handleModeChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const value =
-      event.target.value === "custom" || event.target.value === "nepa"
-        ? event.target.value
-        : "default"
+    const value = event.target.value === "custom" ? event.target.value : "default"
     setRuntimeMode(value)
   }
 
@@ -24,7 +21,6 @@ export default function RuntimeSelectionControl() {
       >
         <option value="default">Copilot Cloud</option>
         <option value="custom">Permitting ADK</option>
-        <option value="nepa">NEPA MCP</option>
       </select>
     </label>
   )

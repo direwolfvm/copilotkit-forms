@@ -246,14 +246,15 @@ export default function SettingsPage() {
         <section className="settings__section" aria-labelledby="settings-runtime-heading">
           <h2 id="settings-runtime-heading">Copilot runtime</h2>
           <p className="settings__description">
-            Choose between the hosted Copilot Cloud, the local Permitting ADK proxy, or the NEPA MCP bridge.
+            Choose between the hosted Copilot Cloud runtime and the local Permitting ADK proxy.
           </p>
           <div className="settings__control">
             <RuntimeSelectionControl />
           </div>
           <p className="settings__hint">
-            Permitting ADK uses <code>/api/custom-adk</code>. NEPA MCP uses <code>/api/nepa-mcp-runtime</code>
-            and expects a compatible NEPA tool service behind the server proxy.
+            Permitting ADK uses <code>/api/custom-adk</code>. NEPA guidance is now available to the main
+            portal copilot through the integrated NEPA query tool, so it can use the live project, checklist,
+            and geospatial context already loaded in the app.
           </p>
         </section>
 

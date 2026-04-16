@@ -80,8 +80,6 @@ import { createProjectReportPdf } from "./utils/projectReportPdf"
 import { isAutoPopulatedChecklistItem } from "./utils/projectStatus"
 
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
-const NEPA_MCP_PROXY_URL = "/api/nepa-mcp-runtime"
-
 const MAJOR_PERMIT_SUMMARIES = majorPermits.map(
   (permit) => `${permit.title}: ${permit.description}`
 )
@@ -1690,6 +1688,24 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     [permittingChecklist]
   )
 
+  const projectSummaryForNepa = useMemo(() => formatProjectSummary(formData), [formData])
+  const geospatialSummaryForNepa = useMemo(
+    () => formatGeospatialResultsSummary(geospatialResults),
+    [geospatialResults]
+  )
+  const checklistSummaryForNepa = useMemo(
+    () =>
+      permittingChecklist.length
+        ? permittingChecklist
+            .map(
+              (item) =>
+                `- [${item.completed ? "x" : " "}] ${item.label}${item.notes ? ` — ${item.notes}` : ""}`
+            )
+            .join("\n")
+        : "No permitting checklist items yet.",
+    [permittingChecklist]
+  )
+
   const upsertPermittingChecklistItems = useCallback((entries: ChecklistUpsertInput[]) => {
     setPermittingChecklist((previous) => {
       if (!entries.length) {
@@ -2023,6 +2039,78 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     hasSavedSnapshot,
     setPortalProgress
   ])
+
+  useCopilotAction(
+    {
+      name: "queryNepaMcp",
+      description:
+        "Ask the NEPA specialist assistant a project-specific question. This tool automatically includes the current project form, permitting checklist, and geospatial screening context from the portal.",
+      parameters: [
+        {
+          name: "prompt",
+          type: "string",
+          description: "The NEPA-related question to answer using the current portal context.",
+          required: true
+        },
+        {
+          name: "includeProjectContext",
+          type: "boolean",
+          description: "Set to false only if you want to ask a generic NEPA question without the current project context.",
+          required: false
+        }
+      ],
+      handler: async ({
+        prompt,
+        includeProjectContext
+      }: {
+        prompt?: string
+        includeProjectContext?: boolean
+      }) => {
+        const trimmedPrompt = typeof prompt === "string" ? prompt.trim() : ""
+        if (!trimmedPrompt) {
+          return "No NEPA MCP query was sent because the prompt was empty."
+        }
+
+        const shouldIncludeProjectContext = includeProjectContext !== false
+        const contextSections = shouldIncludeProjectContext
+          ? [
+              "Current project context:",
+              `Project summary:\n${projectSummaryForNepa || "No project summary available."}`,
+              `Permitting checklist:\n${checklistSummaryForNepa}`,
+              `Geospatial screening:\n${geospatialSummaryForNepa || "No geospatial screening results available."}`
+            ]
+          : []
+
+        const enrichedPrompt = [...contextSections, `Question:\n${trimmedPrompt}`].join("\n\n")
+
+        try {
+          const response = await fetch("/api/nepa-mcp-query", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              prompt: enrichedPrompt,
+              sessionId: formData.id || undefined
+            })
+          })
+
+          const payload = (await response.json()) as { text?: string; error?: string; details?: string }
+          if (!response.ok) {
+            return payload.error || payload.details || "The NEPA MCP query failed."
+          }
+
+          return payload.text || "NEPA MCP did not return a text response."
+        } catch (error) {
+          if (error instanceof Error) {
+            return `The NEPA MCP query failed: ${error.message}`
+          }
+          return "The NEPA MCP query failed."
+        }
+      }
+    },
+    [checklistSummaryForNepa, formData.id, geospatialSummaryForNepa, projectSummaryForNepa]
+  )
 
   useCopilotAction(
     {
@@ -3306,9 +3394,7 @@ function PortalPage() {
   const effectiveRuntimeUrl =
     runtimeMode === "custom"
       ? CUSTOM_ADK_PROXY_URL
-      : runtimeMode === "nepa"
-        ? NEPA_MCP_PROXY_URL
-        : runtimeUrl ?? defaultRuntimeUrl
+      : runtimeUrl ?? defaultRuntimeUrl
   const showRuntimeWarning = runtimeMode === "default" && !runtimeUrl
 
   return (

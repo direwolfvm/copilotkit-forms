@@ -57,15 +57,11 @@ describe('RuntimeSelectionControl', () => {
     expect(screen.getByTestId('runtime-mode')).toHaveTextContent('default')
   })
 
-  it('switches to the NEPA MCP runtime when selected', async () => {
-    const { user } = renderControl()
+  it('does not offer a separate NEPA runtime option', () => {
+    renderControl()
 
     const select = screen.getByLabelText('Select Copilot runtime') as HTMLSelectElement
-    const runtimeOutput = screen.getByTestId('runtime-mode')
 
-    await user.selectOptions(select, 'nepa')
-
-    expect(select.value).toBe('nepa')
-    expect(runtimeOutput).toHaveTextContent('nepa')
+    expect(select.querySelector('option[value="nepa"]')).toBeNull()
   })
 })

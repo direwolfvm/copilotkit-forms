@@ -322,9 +322,7 @@ export default function DeveloperToolsPage() {
   const effectiveRuntimeUrl =
     runtimeMode === "custom"
       ? "/api/custom-adk/agent"
-      : runtimeMode === "nepa"
-        ? "/api/nepa-mcp-runtime"
-        : runtimeUrl ?? "/api/copilotkit-runtime"
+      : runtimeUrl ?? "/api/copilotkit-runtime"
   const hasCopilotConfiguration = Boolean(effectiveRuntimeUrl)
 
   return (

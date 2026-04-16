@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react"
 
-type CopilotRuntimeMode = "default" | "custom" | "nepa"
+type CopilotRuntimeMode = "default" | "custom"
 
 type CopilotRuntimeContextValue = {
   runtimeMode: CopilotRuntimeMode

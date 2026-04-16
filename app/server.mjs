@@ -1229,6 +1229,31 @@ function buildGraphqlResponseFromEvents(events, threadId, runId) {
   };
 }
 
+function buildNepaTextResponse(events) {
+  if (!Array.isArray(events)) {
+    return "";
+  }
+
+  const parts = [];
+
+  for (const event of events) {
+    if (!event || typeof event !== "object") {
+      continue;
+    }
+
+    if (event.type === "content" && typeof event.text === "string" && event.text.trim()) {
+      parts.push(event.text.trim());
+      continue;
+    }
+
+    if (event.type === "error" && typeof event.message === "string" && event.message.trim()) {
+      parts.push(`NEPA MCP error: ${event.message.trim()}`);
+    }
+  }
+
+  return parts.join("\n\n").trim();
+}
+
 app.use("/api/supabase", proxySupabaseRequest);
 
 app.use("/api/custom-adk", proxyCustomAdkRequest);
@@ -1331,6 +1356,53 @@ app.post("/api/geospatial/ipac", async (req, res) => {
     handleProxyResponse(res, result);
   } catch (error) {
     handleProxyError(res, error);
+  }
+});
+
+app.post("/api/nepa-mcp-query", async (req, res) => {
+  const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
+
+  if (!prompt) {
+    res.status(400).json({ error: "A prompt is required for NEPA MCP queries." });
+    return;
+  }
+
+  const sessionId =
+    typeof req.body?.sessionId === "string" && req.body.sessionId.trim()
+      ? req.body.sessionId.trim()
+      : randomUUID();
+
+  try {
+    const response = await fetch(new URL("/api/chat", nepaMcpWebBaseUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        message: prompt,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      const errorPayload = await safeParseJson(response);
+      res.status(response.status).json(
+        errorPayload ?? { error: "NEPA MCP request failed", status: response.status },
+      );
+      return;
+    }
+
+    const rawEvents = await collectSseEvents(response.body);
+    const text = buildNepaTextResponse(rawEvents);
+
+    res.json({
+      text: text || "NEPA MCP did not return a text response.",
+      events: rawEvents,
+    });
+  } catch (error) {
+    console.error("NEPA MCP query proxy error", error);
+    res.status(502).json({
+      error: "Failed to reach the NEPA MCP bridge service",
+      details: "Ensure the deployed NEPA chat service is reachable or override it with NEPA_MCP_WEB_BASE_URL.",
+    });
   }
 });
 
