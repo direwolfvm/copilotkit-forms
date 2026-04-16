@@ -344,12 +344,193 @@ async function proxyCopilotkitRuntimeRequest(req, res) {
 }
 
 async function proxyNepaMcpRuntimeRequest(req, res) {
+  const method = req.method?.toUpperCase() ?? "GET";
+  const requestPath = req.path ?? req.url ?? "/";
+
+  if (method === "GET" && requestPath === "/info") {
+    res.json(buildNepaRuntimeInfo());
+    return;
+  }
+
+  const connectMatch = requestPath.match(/^\/agent\/([^/]+)\/connect$/);
+  if (method === "POST" && connectMatch) {
+    await handleNepaAgentConnectRequest(req, res, connectMatch[1]);
+    return;
+  }
+
+  const runMatch = requestPath.match(/^\/agent\/([^/]+)\/run$/);
+  if (method === "POST" && runMatch) {
+    await handleNepaAgentRunRequest(req, res, runMatch[1]);
+    return;
+  }
+
+  const stopMatch = requestPath.match(/^\/agent\/([^/]+)\/stop\/([^/]+)$/);
+  if (method === "POST" && stopMatch) {
+    handleNepaAgentStopRequest(res, stopMatch[1], stopMatch[2]);
+    return;
+  }
+
   if (!shouldHandleGraphqlCustomAdk(req)) {
     res.status(404).json({ error: "Unsupported NEPA MCP runtime operation" });
     return;
   }
 
   await handleGraphqlNepaMcpRequest(req, res);
+}
+
+function buildNepaRuntimeInfo() {
+  return {
+    version: "nepa-mcp-bridge/1",
+    agents: {
+      default: {
+        description: "NEPA MCP assistant",
+      },
+    },
+    audioFileTranscriptionEnabled: false,
+  };
+}
+
+async function handleNepaAgentConnectRequest(req, res, agentId) {
+  if (agentId !== "default") {
+    res.status(404).json({ error: `Unknown NEPA MCP agent '${agentId}'` });
+    return;
+  }
+
+  const input = req.body && typeof req.body === "object" ? req.body : {};
+  const threadId = typeof input.threadId === "string" && input.threadId ? input.threadId : randomUUID();
+  const runId = typeof input.runId === "string" && input.runId ? input.runId : randomUUID();
+
+  sendAgUiEventStream(res, [
+    createRunStartedEvent({ threadId, runId, input }),
+    createStateSnapshotEvent({ connected: true }),
+    createRunFinishedEvent({ threadId, runId, result: { connected: true } }),
+  ]);
+}
+
+async function handleNepaAgentRunRequest(req, res, agentId) {
+  if (agentId !== "default") {
+    res.status(404).json({ error: `Unknown NEPA MCP agent '${agentId}'` });
+    return;
+  }
+
+  const input = req.body && typeof req.body === "object" ? req.body : {};
+  const threadId = typeof input.threadId === "string" && input.threadId ? input.threadId : randomUUID();
+  const runId = typeof input.runId === "string" && input.runId ? input.runId : randomUUID();
+  const latestUserMessage = findLatestUserMessage(input.messages ?? []);
+
+  if (!latestUserMessage) {
+    sendAgUiEventStream(res, [
+      createRunStartedEvent({ threadId, runId, input }),
+      createStateSnapshotEvent({ lastSubmissionStatus: "missing_user_message" }),
+      ...createAssistantTextEvents("I need a user question before I can run NEPA MCP tools."),
+      createRunFinishedEvent({ threadId, runId, result: { ok: true } }),
+    ]);
+    return;
+  }
+
+  try {
+    const response = await fetch(new URL("/api/chat", nepaMcpWebBaseUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        session_id: threadId,
+        message: latestUserMessage,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      const errorPayload = await safeParseJson(response);
+      const message =
+        typeof errorPayload?.error === "string"
+          ? errorPayload.error
+          : `NEPA MCP request failed with status ${response.status}`;
+      sendAgUiEventStream(res, [
+        createRunStartedEvent({ threadId, runId, input }),
+        createRunErrorEvent(message),
+      ]);
+      return;
+    }
+
+    const rawEvents = await collectSseEvents(response.body);
+    const agentEvents = convertNepaMcpEvents(rawEvents);
+    sendAgUiEventStream(res, [
+      createRunStartedEvent({ threadId, runId, input }),
+      createStateSnapshotEvent({
+        lastSubmissionStatus: "completed",
+        lastUserMessage: latestUserMessage,
+      }),
+      ...agentEvents,
+      createRunFinishedEvent({ threadId, runId, result: { ok: true } }),
+    ]);
+  } catch (error) {
+    console.error("NEPA MCP AG-UI bridge error", error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to reach the NEPA MCP bridge service";
+    sendAgUiEventStream(res, [
+      createRunStartedEvent({ threadId, runId, input }),
+      createRunErrorEvent(message),
+    ]);
+  }
+}
+
+function handleNepaAgentStopRequest(res, agentId, threadId) {
+  if (agentId !== "default") {
+    res.status(404).json({ error: `Unknown NEPA MCP agent '${agentId}'` });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    agentId,
+    threadId,
+  });
+}
+
+function createRunStartedEvent({ threadId, runId, input }) {
+  return {
+    type: "RUN_STARTED",
+    threadId,
+    runId,
+    input,
+  };
+}
+
+function createRunFinishedEvent({ threadId, runId, result }) {
+  return {
+    type: "RUN_FINISHED",
+    threadId,
+    runId,
+    result,
+  };
+}
+
+function createRunErrorEvent(message) {
+  return {
+    type: "RUN_ERROR",
+    message,
+  };
+}
+
+function createStateSnapshotEvent(snapshot) {
+  return {
+    type: "STATE_SNAPSHOT",
+    snapshot,
+  };
+}
+
+function sendAgUiEventStream(res, events) {
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Connection", "keep-alive");
+
+  for (const event of events) {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  }
+
+  res.end();
 }
 
 async function readRawRequestBody(req) {
@@ -490,7 +671,19 @@ async function handleGraphqlNepaMcpRequest(req, res) {
   const { operationName, query, variables } = req.body ?? {};
 
   if (operationName === "availableAgents" || query?.includes("availableAgents")) {
-    res.json({ data: { availableAgents: { agents: [] } } });
+    res.json({
+      data: {
+        availableAgents: {
+          agents: [
+            {
+              id: "default",
+              name: "default",
+              description: "NEPA MCP assistant",
+            },
+          ],
+        },
+      },
+    });
     return;
   }
 
@@ -502,6 +695,8 @@ async function handleGraphqlNepaMcpRequest(req, res) {
         loadAgentState: {
           threadId,
           agentName,
+          threadExists: false,
+          state: JSON.stringify({}),
           messages: JSON.stringify([]),
         },
       },
