@@ -2825,7 +2825,6 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     if (prepared.environmentalMap) {
       const environmentalMapBody = {
         ...prepared.environmentalMap,
-        title: formData.title ? `${formData.title} environmental map` : "Project environmental map",
         sessionId: formData.id || undefined
       }
 

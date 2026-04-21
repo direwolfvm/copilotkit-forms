@@ -123,12 +123,14 @@ export function EnvironmentalMapResult({
 }: {
   result?: GeospatialServiceState<EnvironmentalMapSummary>
 }) {
-  if (!result || result.status === "idle") {
-    return null
-  }
-
   let content: ReactNode
-  if (result.status === "loading") {
+  if (!result || result.status === "idle") {
+    content = (
+      <p className="geospatial-results__status muted">
+        Run the geospatial screen to compose an environmental map.
+      </p>
+    )
+  } else if (result.status === "loading") {
     content = <p className="geospatial-results__status">Composing environmental map…</p>
   } else if (result.status === "error") {
     content = (

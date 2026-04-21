@@ -1522,10 +1522,6 @@ app.post("/api/geospatial/environmental-map", async (req, res) => {
     return;
   }
 
-  const title =
-    typeof req.body?.title === "string" && req.body.title.trim()
-      ? req.body.title.trim()
-      : "Environmental screening map";
   const sessionId =
     typeof req.body?.sessionId === "string" && req.body.sessionId.trim()
       ? req.body.sessionId.trim()
@@ -1536,7 +1532,7 @@ app.post("/api/geospatial/environmental-map", async (req, res) => {
     `Latitude: ${latitude}`,
     `Longitude: ${longitude}`,
     `Buffer miles: ${bufferMiles}`,
-    `Title: ${title}`,
+    "Do not render a title, heading, banner, or other label over the map frame.",
     "Use the default environmental layers and OpenStreetMap basemap.",
     "Return the generated HTML map file.",
   ].join("\n");
@@ -1562,7 +1558,6 @@ app.post("/api/geospatial/environmental-map", async (req, res) => {
       map: {
         url: htmlFile.url,
         sourceUrl: htmlFile.sourceUrl,
-        title,
         latitude,
         longitude,
         bufferMiles,

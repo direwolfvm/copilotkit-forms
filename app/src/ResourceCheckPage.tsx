@@ -274,18 +274,13 @@ export function ResourceCheckContent() {
     const tasks: Promise<void>[] = []
 
     if (prepared.environmentalMap) {
-      const body = {
-        ...prepared.environmentalMap,
-        title: "Resource Check environmental map"
-      }
-
       tasks.push(
         (async () => {
           try {
             const response = await fetch("/api/geospatial/environmental-map", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body)
+              body: JSON.stringify(prepared.environmentalMap)
             })
             const text = await response.text()
             let payload: any = null
