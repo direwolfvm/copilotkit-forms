@@ -1254,6 +1254,115 @@ function buildNepaTextResponse(events) {
   return parts.join("\n\n").trim();
 }
 
+function normalizeNepaFileEvent(event) {
+  if (!event || typeof event !== "object" || event.type !== "file") {
+    return undefined;
+  }
+  const url = typeof event.url === "string" ? event.url.trim() : "";
+  if (!url) {
+    return undefined;
+  }
+
+  let sourceUrl;
+  try {
+    sourceUrl = new URL(url, nepaMcpWebBaseUrl).toString();
+  } catch {
+    return undefined;
+  }
+
+  let proxyUrl = sourceUrl;
+  const outputIndex = url.indexOf("/output/");
+  if (outputIndex !== -1) {
+    proxyUrl = `/api/nepa-mcp-output/${url.slice(outputIndex + "/output/".length)}`;
+  }
+
+  return {
+    url: proxyUrl,
+    sourceUrl,
+    name: typeof event.name === "string" ? event.name : undefined,
+    filetype: typeof event.filetype === "string" ? event.filetype : undefined,
+  };
+}
+
+function extractNepaFiles(events) {
+  if (!Array.isArray(events)) {
+    return [];
+  }
+  return events.map(normalizeNepaFileEvent).filter(Boolean);
+}
+
+function buildNepaFileLinks(files) {
+  if (!Array.isArray(files) || files.length === 0) {
+    return "";
+  }
+  return files
+    .map((file) => {
+      const label = file.name || file.url;
+      return `- [${label}](${file.url})`;
+    })
+    .join("\n");
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceNepaOutputReferences(text, files) {
+  if (!text || !Array.isArray(files) || files.length === 0) {
+    return text;
+  }
+
+  let sanitized = text;
+  for (const file of files) {
+    if (!file?.name || !file?.url) {
+      continue;
+    }
+    const escapedName = escapeRegExp(file.name);
+    sanitized = sanitized.replace(
+      new RegExp(`sandbox:/\\S*${escapedName}`, "g"),
+      file.url,
+    );
+    sanitized = sanitized.replace(
+      new RegExp(`/\\S*output/\\S*${escapedName}`, "g"),
+      file.url,
+    );
+  }
+  return sanitized;
+}
+
+async function callNepaMcpChat({ message, sessionId, areaContext }) {
+  const response = await fetch(new URL("/api/chat", nepaMcpWebBaseUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      session_id: sessionId,
+      message,
+      area_context: areaContext,
+    }),
+  });
+
+  if (!response.ok || !response.body) {
+    const errorPayload = await safeParseJson(response);
+    const error = new Error("NEPA MCP request failed");
+    error.status = response.status;
+    error.payload = errorPayload;
+    throw error;
+  }
+
+  const events = await collectSseEvents(response.body);
+  const files = extractNepaFiles(events);
+  const fileLinks = buildNepaFileLinks(files);
+  const text = [
+    replaceNepaOutputReferences(buildNepaTextResponse(events), files),
+    fileLinks ? `Generated files:\n${fileLinks}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+
+  return { text, events, files };
+}
+
 app.use("/api/supabase", proxySupabaseRequest);
 
 app.use("/api/custom-adk", proxyCustomAdkRequest);
@@ -1373,36 +1482,133 @@ app.post("/api/nepa-mcp-query", async (req, res) => {
       : randomUUID();
 
   try {
-    const response = await fetch(new URL("/api/chat", nepaMcpWebBaseUrl), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        session_id: sessionId,
-        message: prompt,
-      }),
+    const result = await callNepaMcpChat({
+      message: prompt,
+      sessionId,
+      areaContext: req.body?.areaContext,
     });
 
-    if (!response.ok || !response.body) {
-      const errorPayload = await safeParseJson(response);
-      res.status(response.status).json(
-        errorPayload ?? { error: "NEPA MCP request failed", status: response.status },
-      );
-      return;
-    }
-
-    const rawEvents = await collectSseEvents(response.body);
-    const text = buildNepaTextResponse(rawEvents);
-
     res.json({
-      text: text || "NEPA MCP did not return a text response.",
-      events: rawEvents,
+      text: result.text || "NEPA MCP did not return a text response.",
+      events: result.events,
+      files: result.files,
     });
   } catch (error) {
     console.error("NEPA MCP query proxy error", error);
-    res.status(502).json({
+    res.status(error.status ?? 502).json(
+      error.payload ?? {
       error: "Failed to reach the NEPA MCP bridge service",
       details: "Ensure the deployed NEPA chat service is reachable or override it with NEPA_MCP_WEB_BASE_URL.",
+      },
+    );
+  }
+});
+
+app.post("/api/geospatial/environmental-map", async (req, res) => {
+  const latitude = Number(req.body?.latitude);
+  const longitude = Number(req.body?.longitude);
+  const bufferMiles = Number(req.body?.bufferMiles);
+
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    res.status(400).json({ error: "A valid latitude is required." });
+    return;
+  }
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    res.status(400).json({ error: "A valid longitude is required." });
+    return;
+  }
+  if (!Number.isFinite(bufferMiles) || bufferMiles <= 0) {
+    res.status(400).json({ error: "A positive bufferMiles value is required." });
+    return;
+  }
+
+  const title =
+    typeof req.body?.title === "string" && req.body.title.trim()
+      ? req.body.title.trim()
+      : "Environmental screening map";
+  const sessionId =
+    typeof req.body?.sessionId === "string" && req.body.sessionId.trim()
+      ? req.body.sessionId.trim()
+      : randomUUID();
+
+  const prompt = [
+    "Use the compose_environmental_map tool to generate an interactive HTML environmental map.",
+    `Latitude: ${latitude}`,
+    `Longitude: ${longitude}`,
+    `Buffer miles: ${bufferMiles}`,
+    `Title: ${title}`,
+    "Use the default environmental layers and OpenStreetMap basemap.",
+    "Return the generated HTML map file.",
+  ].join("\n");
+
+  try {
+    const result = await callNepaMcpChat({
+      message: prompt,
+      sessionId,
+      areaContext: { centroid: [longitude, latitude] },
     });
+    const htmlFile = result.files.find((file) => file.filetype === "html");
+
+    if (!htmlFile) {
+      res.status(502).json({
+        error: "NEPA MCP did not return an environmental map HTML file.",
+        text: result.text,
+        events: result.events,
+      });
+      return;
+    }
+
+    res.json({
+      map: {
+        url: htmlFile.url,
+        sourceUrl: htmlFile.sourceUrl,
+        title,
+        latitude,
+        longitude,
+        bufferMiles,
+      },
+      text: result.text,
+      files: result.files,
+      events: result.events,
+    });
+  } catch (error) {
+    console.error("Environmental map proxy error", error);
+    res.status(error.status ?? 502).json(
+      error.payload ?? {
+        error: "Failed to compose the environmental map",
+        details: "Ensure the deployed NEPA chat service is reachable or override it with NEPA_MCP_WEB_BASE_URL.",
+      },
+    );
+  }
+});
+
+app.get("/api/nepa-mcp-output/*", async (req, res) => {
+  const relativePath = req.params[0] ?? "";
+  if (!relativePath || relativePath.includes("..")) {
+    res.status(400).json({ error: "Invalid NEPA MCP output path." });
+    return;
+  }
+
+  try {
+    const targetUrl = new URL(`/output/${relativePath}`, nepaMcpWebBaseUrl);
+    const response = await fetch(targetUrl);
+    if (!response.ok || !response.body) {
+      res.status(response.status).json({ error: "NEPA MCP output file not found." });
+      return;
+    }
+
+    res.status(response.status);
+    const contentType = response.headers.get("content-type");
+    if (contentType) {
+      res.setHeader("content-type", contentType);
+    }
+    res.setHeader("cache-control", "no-store");
+
+    const nodeStream = Readable.fromWeb(response.body);
+    nodeStream.pipe(res);
+  } catch (error) {
+    console.error("NEPA MCP output proxy error", error);
+    res.status(502).json({ error: "Failed to fetch NEPA MCP output file." });
   }
 });
 

@@ -1,6 +1,7 @@
 import { createEmptyProjectData } from "../schema/projectSchema"
 import type { ProjectContact, ProjectFormData } from "../schema/projectSchema"
 import type {
+  EnvironmentalMapSummary,
   GeospatialResultsState,
   GeospatialServiceState,
   NepassistSummaryItem,
@@ -3860,6 +3861,19 @@ function parseDelimitedList(value?: string | null): string[] {
 function buildResourceEntries(results: GeospatialResultsState): Array<Record<string, unknown>> {
   const entries: Array<Record<string, unknown>> = []
 
+  const environmentalMap = results.environmentalMap
+  if (shouldIncludeService(environmentalMap)) {
+    entries.push(
+      stripUndefined({
+        name: "Environmental Map",
+        status: environmentalMap?.status,
+        summary: emptyToNull(environmentalMap?.summary),
+        error: normalizeString(environmentalMap?.error),
+        meta: isNonEmptyObject(environmentalMap?.meta) ? environmentalMap?.meta : undefined
+      })
+    )
+  }
+
   const nepassist = results.nepassist
   if (shouldIncludeService(nepassist)) {
     entries.push(
@@ -3901,6 +3915,11 @@ function buildResourceSummary(results: GeospatialResultsState): string | null {
   const nepaStatus = formatServiceStatus("NEPA Assist", results.nepassist)
   if (nepaStatus) {
     sections.push(nepaStatus)
+  }
+
+  const mapStatus = formatServiceStatus("Environmental Map", results.environmentalMap)
+  if (mapStatus) {
+    sections.push(mapStatus)
   }
 
   const ipacStatus = formatServiceStatus("IPaC", results.ipac)
@@ -4167,6 +4186,7 @@ function buildOtherPayload(
       messages: Array.isArray(geospatialResults.messages) && geospatialResults.messages.length > 0
         ? geospatialResults.messages
         : undefined,
+      environmentalMap: sanitizeGeospatialService(geospatialResults.environmentalMap),
       nepassist: sanitizeGeospatialService(geospatialResults.nepassist),
       ipac: sanitizeGeospatialService(geospatialResults.ipac)
     }
@@ -4185,6 +4205,11 @@ function hasMeaningfulGeospatialResults(results: GeospatialResultsState): boolea
   }
 
   if (Array.isArray(results.messages) && results.messages.length > 0) {
+    return true
+  }
+
+  const environmentalMap = results.environmentalMap
+  if (environmentalMap && shouldIncludeService(environmentalMap)) {
     return true
   }
 
@@ -4217,7 +4242,13 @@ function hasMeaningfulGeospatialResults(results: GeospatialResultsState): boolea
   return false
 }
 
-function sanitizeGeospatialService<T>(service: GeospatialServiceState<T>): GeospatialServiceState<T> {
+function sanitizeGeospatialService<T>(
+  service?: GeospatialServiceState<T>
+): GeospatialServiceState<T> | undefined {
+  if (!service) {
+    return undefined
+  }
+
   const sanitized: GeospatialServiceState<T> = { status: service.status }
 
   if (typeof service.summary !== "undefined") {
@@ -4459,6 +4490,7 @@ type ProjectOtherRecord = {
   geospatial?: {
     lastRunAt?: string
     messages?: string[]
+    environmentalMap?: unknown
     nepassist?: unknown
     ipac?: unknown
   }
@@ -4595,6 +4627,9 @@ function parseProjectOther(value: unknown): ProjectOtherRecord | undefined {
     if (Array.isArray(geoRecord.messages)) {
       other.geospatial.messages = geoRecord.messages.filter((entry) => typeof entry === "string") as string[]
     }
+    if ("environmentalMap" in geoRecord) {
+      other.geospatial.environmentalMap = geoRecord.environmentalMap
+    }
     if ("nepassist" in geoRecord) {
       other.geospatial.nepassist = geoRecord.nepassist
     }
@@ -4718,6 +4753,15 @@ function applyProjectRecordToState({
     }
     if (other.geospatial.messages && other.geospatial.messages.length > 0) {
       geospatialResults.messages = other.geospatial.messages
+    }
+    const storedEnvironmentalMap = parseStoredGeospatialService<EnvironmentalMapSummary>(
+      other.geospatial.environmentalMap
+    )
+    if (storedEnvironmentalMap) {
+      geospatialResults.environmentalMap = {
+        ...geospatialResults.environmentalMap,
+        ...storedEnvironmentalMap
+      }
     }
     const storedNepassist = parseStoredGeospatialService<NepassistSummaryItem[]>(
       other.geospatial.nepassist
@@ -5868,6 +5912,7 @@ export async function loadProjectPortalState(projectId: number): Promise<LoadedP
   formData.id = projectId.toString()
 
   const geospatialResults: GeospatialResultsState = {
+    environmentalMap: { status: "idle" },
     nepassist: { status: "idle" },
     ipac: { status: "idle" }
   }

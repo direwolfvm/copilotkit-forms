@@ -64,7 +64,7 @@ import {
   uploadSupportingDocument,
   saveProjectReportDocument
 } from "./utils/projectPersistence"
-import { LocationSection } from "./components/LocationSection"
+import { EnvironmentalMapResult, LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
 import type { GeospatialResultsState } from "./types/geospatial"
 import {
@@ -435,7 +435,12 @@ function cloneValue<T>(value: T): T {
 }
 
 function createInitialGeospatialResults(): GeospatialResultsState {
-  return { nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] }
+  return {
+    environmentalMap: { status: "idle" },
+    nepassist: { status: "idle" },
+    ipac: { status: "idle" },
+    messages: []
+  }
 }
 
 function createInitialPortalProgress(): PortalProgressState {
@@ -2095,9 +2100,19 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             })
           })
 
-          const payload = (await response.json()) as { text?: string; error?: string; details?: string }
+          const payload = (await response.json()) as {
+            text?: string
+            error?: string
+            details?: string
+            files?: Array<{ url?: string; filetype?: string; name?: string }>
+          }
           if (!response.ok) {
             return payload.error || payload.details || "The NEPA MCP query failed."
+          }
+
+          const htmlMap = payload.files?.find((file) => file.filetype === "html" && file.url)
+          if (htmlMap?.url) {
+            window.open(htmlMap.url, "_blank", "noopener,noreferrer")
           }
 
           return payload.text || "NEPA MCP did not return a text response."
@@ -2746,7 +2761,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     (updates: LocationFieldUpdates) => {
       const nextUpdates: LocationFieldUpdates = { ...updates }
       if (Object.prototype.hasOwnProperty.call(nextUpdates, "location_object") && !nextUpdates.location_object) {
-        setGeospatialResults({ nepassist: { status: "idle" }, ipac: { status: "idle" }, messages: [] })
+        setGeospatialResults(createInitialGeospatialResults())
         nextUpdates.location_lat = undefined
         nextUpdates.location_lon = undefined
       }
@@ -2789,6 +2804,9 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     const generalMessages = ipacNotice ? messages.filter((message) => message !== ipacNotice) : messages
 
     setGeospatialResults({
+      environmentalMap: prepared.environmentalMap
+        ? { status: "loading" }
+        : { status: "error", error: generalMessages[0] ?? "Unable to prepare environmental map request." },
       nepassist: prepared.nepassist
         ? { status: "loading" }
         : { status: "error", error: generalMessages[0] ?? "Unable to prepare NEPA Assist request." },
@@ -2803,6 +2821,61 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     })
 
     const tasks: Promise<void>[] = []
+
+    if (prepared.environmentalMap) {
+      const environmentalMapBody = {
+        ...prepared.environmentalMap,
+        title: formData.title ? `${formData.title} environmental map` : "Project environmental map",
+        sessionId: formData.id || undefined
+      }
+
+      tasks.push(
+        (async () => {
+          try {
+            const response = await fetch("/api/geospatial/environmental-map", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(environmentalMapBody)
+            })
+            const text = await response.text()
+            let payload: any = null
+            if (text) {
+              try {
+                payload = JSON.parse(text)
+              } catch {
+                payload = { data: text }
+              }
+            }
+            if (!response.ok) {
+              const errorMessage =
+                (payload && typeof payload === "object" && typeof payload.error === "string"
+                  ? payload.error
+                  : text) || `Environmental map request failed (${response.status})`
+              throw new Error(errorMessage)
+            }
+            const map = payload && typeof payload === "object" ? payload.map : undefined
+            if (!map?.url) {
+              throw new Error("The environmental map service did not return a map URL.")
+            }
+            setGeospatialResults((previous) => ({
+              ...previous,
+              environmentalMap: {
+                status: "success",
+                summary: map,
+                raw: payload,
+                meta: { fileCount: Array.isArray(payload?.files) ? payload.files.length : 0 }
+              }
+            }))
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Environmental map request failed."
+            setGeospatialResults((previous) => ({
+              ...previous,
+              environmentalMap: { status: "error", error: message }
+            }))
+          }
+        })()
+      )
+    }
 
     if (prepared.nepassist) {
       const nepaBody = {
@@ -2915,10 +2988,12 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     }
 
     await Promise.allSettled(tasks)
-  }, [formData.location_object])
+  }, [formData.id, formData.location_object, formData.title])
 
   const isGeospatialRunning =
-    geospatialResults.nepassist.status === "loading" || geospatialResults.ipac.status === "loading"
+    geospatialResults.environmentalMap?.status === "loading" ||
+    geospatialResults.nepassist.status === "loading" ||
+    geospatialResults.ipac.status === "loading"
 
   const hasGeometry = Boolean(formData.location_object)
   const geospatialResultsSummary = useMemo(
@@ -3246,6 +3321,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                     </div>
                     <div className="portal-static-panel__section portal-static-panel__section--full">
                       <h3>Geospatial Screening</h3>
+                      <EnvironmentalMapResult result={geospatialResults.environmentalMap} />
                       <pre className="portal-static-panel__pre">{geospatialResultsSummary}</pre>
                     </div>
                   </div>

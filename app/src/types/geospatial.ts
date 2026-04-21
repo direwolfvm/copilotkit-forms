@@ -19,6 +19,15 @@ export interface IpacSummary {
   wetlands: IpacWetlandSummary[]
 }
 
+export interface EnvironmentalMapSummary {
+  url: string
+  sourceUrl?: string
+  title?: string
+  latitude: number
+  longitude: number
+  bufferMiles: number
+}
+
 export interface GeospatialServiceState<TSummary = unknown> {
   status: GeospatialStatus
   summary?: TSummary
@@ -28,6 +37,7 @@ export interface GeospatialServiceState<TSummary = unknown> {
 }
 
 export interface GeospatialResultsState {
+  environmentalMap?: GeospatialServiceState<EnvironmentalMapSummary>
   nepassist: GeospatialServiceState<NepassistSummaryItem[]>
   ipac: GeospatialServiceState<IpacSummary>
   lastRunAt?: string
@@ -35,6 +45,11 @@ export interface GeospatialResultsState {
 }
 
 export interface PreparedGeospatialPayload {
+  environmentalMap?: {
+    latitude: number
+    longitude: number
+    bufferMiles: number
+  }
   nepassist?: {
     coords: Array<[number, number]>
     coordsString: string

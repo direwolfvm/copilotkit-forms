@@ -1,4 +1,5 @@
 import type {
+  EnvironmentalMapSummary,
   GeospatialResultsState,
   GeospatialServiceState,
   GeospatialStatus,
@@ -9,6 +10,7 @@ import type {
 } from '../types/geospatial'
 
 export const DEFAULT_BUFFER_MILES = 0.1
+const ENVIRONMENTAL_MAP_MIN_BUFFER_MILES = 10
 
 function isNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -51,6 +53,69 @@ function buildPolygonWkt(points: Array<[number, number]>): string {
 function buildLineWkt(points: Array<[number, number]>): string {
   const segments = points.map(([lon, lat]) => `${lon} ${lat}`)
   return `LINESTRING(${segments.join(', ')})`
+}
+
+function haversineDistanceMiles([lonA, latA]: [number, number], [lonB, latB]: [number, number]): number {
+  const radiusMiles = 3958.7613
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180
+  const deltaLat = toRadians(latB - latA)
+  const deltaLon = toRadians(lonB - lonA)
+  const latARadians = toRadians(latA)
+  const latBRadians = toRadians(latB)
+  const haversine =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(latARadians) * Math.cos(latBRadians) * Math.sin(deltaLon / 2) ** 2
+  return radiusMiles * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+}
+
+function averagePoint(points: Array<[number, number]>): [number, number] {
+  const totals = points.reduce(
+    (accumulator, [lon, lat]) => {
+      accumulator.lon += lon
+      accumulator.lat += lat
+      return accumulator
+    },
+    { lon: 0, lat: 0 }
+  )
+  return [totals.lon / points.length, totals.lat / points.length]
+}
+
+function polygonCentroid(points: Array<[number, number]>): [number, number] {
+  const ring = ensureClosedRing(points)
+  let doubleArea = 0
+  let centroidLon = 0
+  let centroidLat = 0
+
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    const [lonA, latA] = ring[index]
+    const [lonB, latB] = ring[index + 1]
+    const cross = lonA * latB - lonB * latA
+    doubleArea += cross
+    centroidLon += (lonA + lonB) * cross
+    centroidLat += (latA + latB) * cross
+  }
+
+  if (Math.abs(doubleArea) < 1e-12) {
+    return averagePoint(points)
+  }
+
+  return [centroidLon / (3 * doubleArea), centroidLat / (3 * doubleArea)]
+}
+
+function buildEnvironmentalMapPayload(
+  points: Array<[number, number]>,
+  centroid: [number, number]
+): PreparedGeospatialPayload['environmentalMap'] {
+  const furthestPointMiles = points.reduce(
+    (maxDistance, point) => Math.max(maxDistance, haversineDistanceMiles(centroid, point)),
+    0
+  )
+  const bufferMiles = Math.max(ENVIRONMENTAL_MAP_MIN_BUFFER_MILES, furthestPointMiles + 10)
+  return {
+    longitude: Number(centroid[0].toFixed(6)),
+    latitude: Number(centroid[1].toFixed(6)),
+    bufferMiles: Number(bufferMiles.toFixed(2)),
+  }
 }
 
 export function prepareGeospatialPayload(geometryJson?: string | null): PreparedGeospatialPayload {
@@ -111,6 +176,7 @@ export function prepareGeospatialPayload(geometryJson?: string | null): Prepared
       result.errors.push('Polygon geometry requires at least three coordinate pairs.')
       return result
     }
+    result.environmentalMap = buildEnvironmentalMapPayload(pairs, polygonCentroid(pairs))
     result.nepassist = {
       coords: pairs,
       coordsString: flattenCoordinatePairs(pairs),
@@ -150,6 +216,7 @@ export function prepareGeospatialPayload(geometryJson?: string | null): Prepared
       result.errors.push('Line geometry requires at least two coordinate pairs.')
       return result
     }
+    result.environmentalMap = buildEnvironmentalMapPayload(pairs, averagePoint(pairs))
     result.nepassist = {
       coords: pairs,
       coordsString: flattenCoordinatePairs(pairs),
@@ -168,6 +235,7 @@ export function prepareGeospatialPayload(geometryJson?: string | null): Prepared
       result.errors.push('Point geometry is missing longitude/latitude coordinates.')
       return result
     }
+    result.environmentalMap = buildEnvironmentalMapPayload([pair], pair)
     result.nepassist = {
       coords: [pair],
       coordsString: flattenCoordinatePairs([pair]),
@@ -501,6 +569,23 @@ function formatIpacSummary(summary: IpacSummary | undefined): string[] {
   return lines
 }
 
+function formatEnvironmentalMapSummary(summary: EnvironmentalMapSummary | undefined): string[] {
+  if (!summary) {
+    return ['No environmental map URL was returned.']
+  }
+
+  const lines = [
+    summary.title ? `Map title: ${summary.title}` : 'Map generated.',
+    `Center: ${summary.latitude}, ${summary.longitude}.`,
+    `Buffer: ${summary.bufferMiles} miles.`,
+    `URL: ${summary.url}`,
+  ]
+  if (summary.sourceUrl && summary.sourceUrl !== summary.url) {
+    lines.push(`Source URL: ${summary.sourceUrl}`)
+  }
+  return lines
+}
+
 export function formatGeospatialResultsSummary(results: GeospatialResultsState | undefined | null): string {
   const safeResults: GeospatialResultsState = results ?? {
     nepassist: { status: 'idle' },
@@ -518,6 +603,18 @@ export function formatGeospatialResultsSummary(results: GeospatialResultsState |
     lines.push('System messages:')
     for (const message of safeResults.messages) {
       lines.push(`- ${message}`)
+    }
+  }
+
+  if (safeResults.environmentalMap) {
+    const mapStatus = describeServiceStatus(safeResults.environmentalMap.status)
+    lines.push(`Environmental map status: ${mapStatus}`)
+    if (safeResults.environmentalMap.status === 'error' && safeResults.environmentalMap.error) {
+      lines.push(`- Error: ${safeResults.environmentalMap.error}`)
+    } else if (safeResults.environmentalMap.status === 'success') {
+      for (const entry of formatEnvironmentalMapSummary(safeResults.environmentalMap.summary)) {
+        lines.push(`- ${entry}`)
+      }
     }
   }
 

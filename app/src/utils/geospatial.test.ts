@@ -23,6 +23,11 @@ describe('prepareGeospatialPayload', () => {
     const result = prepareGeospatialPayload(polygonGeometry)
 
     expect(result.errors).toEqual([])
+    expect(result.environmentalMap).toEqual({
+      latitude: 38.91,
+      longitude: -77.02,
+      bufferMiles: 10.88
+    })
     expect(result.nepassist).toEqual({
       coords: [
         [-77.03, 38.9],
@@ -44,6 +49,7 @@ describe('prepareGeospatialPayload', () => {
     expect(result.errors).toContain('The stored geometry is not valid JSON.')
     expect(result.nepassist).toBeUndefined()
     expect(result.ipac).toBeUndefined()
+    expect(result.environmentalMap).toBeUndefined()
   })
 
   it('warns when only a point geometry is available', () => {
@@ -62,6 +68,11 @@ describe('prepareGeospatialPayload', () => {
       coordsString: '-77.04,38.91',
       type: 'point'
     })
+    expect(result.environmentalMap).toEqual({
+      latitude: 38.91,
+      longitude: -77.04,
+      bufferMiles: 10
+    })
     expect(result.ipac).toBeUndefined()
   })
 })
@@ -69,6 +80,16 @@ describe('prepareGeospatialPayload', () => {
 describe('formatGeospatialResultsSummary', () => {
   it('summarizes messages and findings for Copilot', () => {
     const results: GeospatialResultsState = {
+      environmentalMap: {
+        status: 'success',
+        summary: {
+          url: '/api/nepa-mcp-output/map.html',
+          title: 'Project map',
+          latitude: 38.91,
+          longitude: -77.04,
+          bufferMiles: 10
+        }
+      },
       nepassist: {
         status: 'success',
         summary: [
@@ -95,6 +116,9 @@ describe('formatGeospatialResultsSummary', () => {
     expect(summary).toContain('Geospatial screening results:')
     expect(summary).toContain('Last run: not yet run')
     expect(summary).toContain('- Latest run succeeded')
+    expect(summary).toContain('Environmental map status: success')
+    expect(summary).toContain('- Map title: Project map')
+    expect(summary).toContain('- URL: /api/nepa-mcp-output/map.html')
     expect(summary).toContain('NEPA Assist status: success')
     expect(summary).toContain('  - ⚠️ Yes: Floodplains')
     expect(summary).toContain('IPaC status: success')

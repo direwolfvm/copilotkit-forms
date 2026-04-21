@@ -9,6 +9,7 @@ import "./copilot-overrides.css"
 import "./App.css"
 
 import { ArcgisSketchMap } from "./components/ArcgisSketchMap"
+import { EnvironmentalMapResult } from "./components/LocationSection"
 import type { GeometryChange, UploadedGisFile } from "./types/gis"
 import type { GeospatialResultsState, NepassistSummaryItem } from "./types/geospatial"
 import {
@@ -23,6 +24,7 @@ import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
 
 function createInitialGeospatialResults(): GeospatialResultsState {
   return {
+    environmentalMap: { status: "idle" },
     nepassist: { status: "idle" },
     ipac: { status: "idle" },
     messages: [],
@@ -33,6 +35,7 @@ function createInitialGeospatialResults(): GeospatialResultsState {
 function ensureGeospatialResults(results: GeospatialResultsState | undefined | null): GeospatialResultsState {
   return (
     results ?? {
+      environmentalMap: { status: "idle" },
       nepassist: { status: "idle" },
       ipac: { status: "idle" },
       messages: []
@@ -238,6 +241,7 @@ export function ResourceCheckContent() {
     setGeometry(undefined)
     setArcgisJson(undefined)
     setUploadedGisFile(null)
+    setGeospatialResults(createInitialGeospatialResults())
   }, [])
 
   const handleBufferChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -251,6 +255,9 @@ export function ResourceCheckContent() {
     const generalMessages = ipacNotice ? messages.filter((message) => message !== ipacNotice) : messages
 
     setGeospatialResults({
+      environmentalMap: prepared.environmentalMap
+        ? { status: "loading" }
+        : { status: "error", error: generalMessages[0] ?? "Unable to prepare environmental map request." },
       nepassist: prepared.nepassist
         ? { status: "loading" }
         : { status: "error", error: generalMessages[0] ?? "Unable to prepare NEPA Assist request." },
@@ -265,6 +272,60 @@ export function ResourceCheckContent() {
     })
 
     const tasks: Promise<void>[] = []
+
+    if (prepared.environmentalMap) {
+      const body = {
+        ...prepared.environmentalMap,
+        title: "Resource Check environmental map"
+      }
+
+      tasks.push(
+        (async () => {
+          try {
+            const response = await fetch("/api/geospatial/environmental-map", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body)
+            })
+            const text = await response.text()
+            let payload: any = null
+            if (text) {
+              try {
+                payload = JSON.parse(text)
+              } catch {
+                payload = { data: text }
+              }
+            }
+            if (!response.ok) {
+              const message =
+                (payload && typeof payload === "object" && typeof payload.error === "string"
+                  ? payload.error
+                  : text) || `Environmental map request failed (${response.status})`
+              throw new Error(message)
+            }
+            const map = payload && typeof payload === "object" ? payload.map : undefined
+            if (!map?.url) {
+              throw new Error("The environmental map service did not return a map URL.")
+            }
+            setGeospatialResults((previous) => ({
+              ...previous,
+              environmentalMap: {
+                status: "success",
+                summary: map,
+                raw: payload,
+                meta: { fileCount: Array.isArray(payload?.files) ? payload.files.length : 0 }
+              }
+            }))
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Environmental map request failed."
+            setGeospatialResults((previous) => ({
+              ...previous,
+              environmentalMap: { status: "error", error: message }
+            }))
+          }
+        })()
+      )
+    }
 
     if (prepared.nepassist) {
       const body = {
@@ -380,7 +441,9 @@ export function ResourceCheckContent() {
   }, [geometry, bufferMiles])
 
   const isRunning =
-    geospatialResults.nepassist.status === "loading" || geospatialResults.ipac.status === "loading"
+    geospatialResults.environmentalMap?.status === "loading" ||
+    geospatialResults.nepassist.status === "loading" ||
+    geospatialResults.ipac.status === "loading"
 
   return (
     <CopilotSidebar
@@ -438,7 +501,8 @@ export function ResourceCheckContent() {
               <div className="form-panel__header">
                 <h2>Screening controls</h2>
                 <p className="help-block">
-                  Choose the analysis buffer for NEPA Assist (miles) and run the combined NEPA Assist and IPaC screening.
+                  Choose the analysis buffer for NEPA Assist (miles), compose the environmental map, and run the
+                  combined NEPA Assist and IPaC screening.
                 </p>
               </div>
               <div className="form-panel__body">
@@ -490,6 +554,7 @@ export function ResourceCheckContent() {
                       ))}
                     </ul>
                   ) : null}
+                  <EnvironmentalMapResult result={geospatialResults.environmentalMap} />
                   <div className="geospatial-results__cards">
                     <div className="geospatial-results__card" aria-live="polite">
                       <h4>NEPA Assist</h4>

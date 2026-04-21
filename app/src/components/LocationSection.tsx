@@ -5,6 +5,7 @@ import type { ProjectFormData } from "../schema/projectSchema"
 import { ArcgisSketchMap } from "./ArcgisSketchMap"
 import type { GeometryChange, GeometrySource, UploadedGisFile } from "../types/gis"
 import type {
+  EnvironmentalMapSummary,
   GeospatialResultsState,
   GeospatialServiceState,
   IpacSummary,
@@ -113,6 +114,56 @@ function IpacSummaryDetails({ summary }: { summary: IpacSummary }) {
           )}
         </li>
       </ul>
+    </div>
+  )
+}
+
+export function EnvironmentalMapResult({
+  result
+}: {
+  result?: GeospatialServiceState<EnvironmentalMapSummary>
+}) {
+  if (!result || result.status === "idle") {
+    return null
+  }
+
+  let content: ReactNode
+  if (result.status === "loading") {
+    content = <p className="geospatial-results__status">Composing environmental map…</p>
+  } else if (result.status === "error") {
+    content = (
+      <p className="geospatial-results__status error">
+        {result.error ?? "The environmental map could not be generated."}
+      </p>
+    )
+  } else if (result.summary?.url) {
+    content = (
+      <>
+        <div className="environmental-map-frame">
+          <iframe
+            title={result.summary.title ?? "Environmental screening map"}
+            src={result.summary.url}
+            loading="lazy"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+          />
+        </div>
+        <p className="geospatial-results__status muted">
+          Centered at {result.summary.latitude.toFixed(4)}, {result.summary.longitude.toFixed(4)} with a{" "}
+          {result.summary.bufferMiles.toFixed(2)} mile map radius.{" "}
+          <a href={result.summary.url} target="_blank" rel="noreferrer">
+            Open map in a new tab.
+          </a>
+        </p>
+      </>
+    )
+  } else {
+    content = <p className="geospatial-results__status muted">No environmental map URL was returned.</p>
+  }
+
+  return (
+    <div className="geospatial-results__map" aria-live="polite">
+      <h4>Environmental map</h4>
+      {content}
     </div>
   )
 }
@@ -292,7 +343,8 @@ export function LocationSection({
               <div>
                 <h3>Geospatial screening</h3>
                 <p className="help-block">
-                  Runs NEPA Assist and IPaC with a {bufferMiles.toFixed(2)} mile buffer around the project geometry.
+                  Composes an environmental map, then runs NEPA Assist and IPaC with a{" "}
+                  {bufferMiles.toFixed(2)} mile buffer around the project geometry.
                 </p>
               </div>
               {geospatialResults.lastRunAt ? (
@@ -308,6 +360,7 @@ export function LocationSection({
                 ))}
               </ul>
             ) : null}
+            <EnvironmentalMapResult result={geospatialResults.environmentalMap} />
             <div className="geospatial-results__cards">
               <GeospatialServiceCard
                 title="NEPA Assist"
