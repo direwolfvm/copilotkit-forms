@@ -1603,6 +1603,8 @@ app.get("/api/nepa-mcp-output/*", async (req, res) => {
       res.setHeader("content-type", contentType);
     }
     res.setHeader("cache-control", "no-store");
+    res.setHeader("x-frame-options", "SAMEORIGIN");
+    res.setHeader("content-security-policy", "frame-ancestors 'self'");
 
     const nodeStream = Readable.fromWeb(response.body);
     nodeStream.pipe(res);
