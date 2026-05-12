@@ -1,0 +1,199 @@
+name: Publish Clean Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to create in target repo, e.g. v1.2.0"
+        required: true
+        type: string
+      source_ref:
+        description: "Source ref to publish (branch, tag, or SHA)"
+        required: false
+        default: main
+        type: string
+      create_github_release:
+        description: "Create a GitHub Release in the target repo"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: publish-clean-release-${{ github.event.inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    env:
+      TARGET_REPO: jeccles-eop/help-permit-me
+      DEFAULT_BRANCH: main
+
+    steps:
+      - name: Validate release tag format
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.release_tag }}"
+
+          if [[ ! "$TAG" =~ ^v[0-9]+(\.[0-9]+)*([-.][A-Za-z0-9._]+)?$ ]]; then
+            echo "Invalid release tag format: $TAG"
+            echo "Expected examples: v1.0.0, v2.1, v1.2.3-rc1"
+            exit 1
+          fi
+
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.source_ref }}
+          fetch-depth: 1
+
+      - name: Prepare export directory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf /tmp/export
+          mkdir -p /tmp/export
+
+          rsync -a \
+            --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            ./ /tmp/export/
+
+      - name: Clone target repo
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          rm -rf /tmp/target
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git" /tmp/target
+
+      - name: Checkout target default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/target
+          git checkout "${DEFAULT_BRANCH}"
+
+      - name: Verify target branch exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/target
+
+          if ! git show-ref --verify --quiet "refs/heads/${DEFAULT_BRANCH}"; then
+            echo "Branch ${DEFAULT_BRANCH} does not exist in target repo."
+            echo "Initialize the target repo with at least one commit on ${DEFAULT_BRANCH}."
+            exit 1
+          fi
+
+      - name: Check if release tag already exists in target repo
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          cd /tmp/target
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists in ${TARGET_REPO}"
+            exit 1
+          fi
+
+      - name: Replace target contents with exported snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/target
+
+          git rm -r --ignore-unmatch . || true
+          git clean -fdx
+
+          rsync -a /tmp/export/ /tmp/target/
+
+      - name: Commit snapshot if changed
+        id: commit
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          cd /tmp/target
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No content changes detected compared to target branch."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          SOURCE_SHA="${GITHUB_SHA}"
+          SOURCE_REF="${{ github.event.inputs.source_ref }}"
+          SOURCE_REPO="${GITHUB_REPOSITORY}"
+
+          git commit -m "Release ${RELEASE_TAG}" \
+                     -m "Source repository: ${SOURCE_REPO}" \
+                     -m "Source ref: ${SOURCE_REF}" \
+                     -m "Source SHA: ${SOURCE_SHA}"
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Fail if no changes detected
+        if: steps.commit.outputs.changed != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Refusing to create release tag because published content did not change."
+          exit 1
+
+      - name: Create annotated tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          cd /tmp/target
+          git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
+
+      - name: Push branch and tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          cd /tmp/target
+          git push origin "${DEFAULT_BRANCH}"
+          git push origin "${RELEASE_TAG}"
+
+      - name: Create GitHub Release in target repo
+        if: ${{ github.event.inputs.create_github_release }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          gh release create "${RELEASE_TAG}" \
+            --repo "${TARGET_REPO}" \
+            --title "${RELEASE_TAG}" \
+            --notes "$(cat <<EOF
+          Clean published release ${RELEASE_TAG}
+
+          Source repository: ${GITHUB_REPOSITORY}
+          Source ref: ${{ github.event.inputs.source_ref }}
+          Source SHA: ${GITHUB_SHA}
+          EOF
+          )"
