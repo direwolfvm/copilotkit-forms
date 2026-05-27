@@ -4,6 +4,11 @@ const NEPA_BROKER_URL = "https://nepassisttool.epa.gov/nepassist/nepaRESTbroker.
 const IPAC_URL = "https://ipac.ecosphere.fws.gov/location/api/resources";
 const IPAC_BETA_URL = "https://ipacb.ecosphere.fws.gov/location/api/resources";
 const USER_AGENT = "copilotkit-forms-geospatial-proxy/1.0";
+const IPAC_IDENTIFICATION_HEADERS = {
+  ...(process.env.IPAC_CONTACT_EMAIL ? { From: process.env.IPAC_CONTACT_EMAIL } : {}),
+  ...(process.env.IPAC_ORGANIZATION ? { "X-Organization": process.env.IPAC_ORGANIZATION } : {}),
+  ...(process.env.IPAC_PROJECT ? { "X-Project": process.env.IPAC_PROJECT } : {})
+};
 
 class ProxyError extends Error {
   constructor(message, status = 500, details) {
@@ -160,15 +165,31 @@ export async function callIpacProxy(payload = {}) {
   }
 
   const environment = payload.environment === "beta" ? "beta" : "production";
-  const upstreamUrl = environment === "beta" ? IPAC_BETA_URL : IPAC_URL;
+  const primaryUrl = environment === "beta" ? IPAC_BETA_URL : IPAC_URL;
   const { environment: _environment, ...upstreamPayload } = payload;
   const bodyText = JSON.stringify(upstreamPayload);
 
-  const { response, data, rawText } = await tryFetchJson(upstreamUrl, {
+  const requestOptions = {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...IPAC_IDENTIFICATION_HEADERS
+    },
     body: bodyText
-  });
+  };
+
+  let upstreamUrl = primaryUrl;
+  let usedFallback = false;
+  let { response, data, rawText } = await tryFetchJson(upstreamUrl, requestOptions);
+
+  if (!response.ok && environment === "production" && response.status === 403) {
+    const detailText = typeof data === "string" ? data : data?.errors?.message ?? data?.error ?? rawText;
+    if (String(detailText ?? "").toLowerCase().includes("ipac maintenance notice")) {
+      upstreamUrl = IPAC_BETA_URL;
+      usedFallback = true;
+      ({ response, data, rawText } = await tryFetchJson(upstreamUrl, requestOptions));
+    }
+  }
 
   if (!response.ok) {
     throw new ProxyError(
@@ -183,6 +204,7 @@ export async function callIpacProxy(payload = {}) {
     meta: {
       upstreamUrl,
       environment,
+      usedFallback,
       payloadSize: bodyText.length
     }
   };
