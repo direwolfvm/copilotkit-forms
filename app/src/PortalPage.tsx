@@ -64,15 +64,15 @@ import {
   uploadSupportingDocument,
   saveProjectReportDocument
 } from "./utils/projectPersistence"
-import { EnvironmentalMapResult, LocationSection } from "./components/LocationSection"
+import { GeospatialResultsPanel, LocationSection } from "./components/LocationSection"
 import { NepaReviewSection } from "./components/NepaReviewSection"
 import type { GeospatialResultsState } from "./types/geospatial"
 import {
   DEFAULT_BUFFER_MILES,
+  formatGeospatialResultsSummary,
   prepareGeospatialPayload,
   summarizeIpac,
-  summarizeNepassist,
-  formatGeospatialResultsSummary
+  summarizeNepassist
 } from "./utils/geospatial"
 import { majorPermits } from "./utils/majorPermits"
 import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "./types/gis"
@@ -2995,10 +2995,6 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     geospatialResults.ipac.status === "loading"
 
   const hasGeometry = Boolean(formData.location_object)
-  const geospatialResultsSummary = useMemo(
-    () => formatGeospatialResultsSummary(geospatialResults),
-    [geospatialResults]
-  )
 
   return (
     <CopilotSidebar
@@ -3319,9 +3315,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                       ) : null}
                     </div>
                     <div className="portal-static-panel__section portal-static-panel__section--full">
-                      <h3>Geospatial Screening</h3>
-                      <EnvironmentalMapResult result={geospatialResults.environmentalMap} />
-                      <pre className="portal-static-panel__pre">{geospatialResultsSummary}</pre>
+                      <GeospatialResultsPanel geospatialResults={geospatialResults} />
                     </div>
                   </div>
                 </CollapsibleCard>

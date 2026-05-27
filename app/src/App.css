@@ -1580,11 +1580,199 @@
   color: var(--color-heading);
 }
 
+.geospatial-results__table--compact {
+  font-size: 0.9rem;
+}
+
+.geospatial-results__result-column {
+  width: 7rem;
+  white-space: nowrap;
+}
+
+.geospatial-results__category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.geospatial-results__category,
+.geospatial-results__subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.geospatial-results__category h5,
+.geospatial-results__subsection h5 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--color-heading);
+}
+
+.geospatial-results__subsection h6 {
+  margin: 0 0 0.45rem;
+  font-size: 0.88rem;
+  color: var(--color-heading);
+}
+
+.geospatial-results__scientific {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+  font-style: italic;
+}
+
+.geospatial-results__ipac {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
 .geospatial-results__ipac ul {
   margin: 0;
   padding-left: 1.25rem;
   display: grid;
   gap: 0.4rem;
+}
+
+.geospatial-results__facility-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.presence-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.presence-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+}
+
+.presence-chart__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.presence-legend {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.55rem;
+  border-radius: 2px;
+}
+
+.presence-legend--probability {
+  background: #2e8540;
+}
+
+.presence-legend--breeding {
+  background: #f9c642;
+}
+
+.presence-legend--survey {
+  width: 2px;
+  height: 0.9rem;
+  background: #1a73b7;
+}
+
+.presence-legend--nodata {
+  height: 2px;
+  background: #c83a2d;
+}
+
+.presence-chart__scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.presence-grid {
+  display: grid;
+  grid-template-columns: 180px repeat(48, 14px);
+  min-width: 880px;
+  background: var(--surface);
+}
+
+.presence-grid__corner,
+.presence-grid__month,
+.presence-grid__species {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-muted) 86%, var(--surface) 14%);
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.presence-grid__month {
+  grid-column: span 4;
+  text-align: center;
+  border-left: 1px solid var(--border);
+}
+
+.presence-grid__row {
+  display: contents;
+}
+
+.presence-grid__species {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--border);
+  color: var(--color-heading);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.presence-cell {
+  position: relative;
+  height: 28px;
+  border-left: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.presence-cell--breeding {
+  background: color-mix(in srgb, #f9c642 36%, var(--surface) 64%);
+}
+
+.presence-cell__probability,
+.presence-cell__survey,
+.presence-cell__nodata {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.presence-cell__probability {
+  bottom: 3px;
+  width: 5px;
+  min-height: 3px;
+  background: #2e8540;
+  border-radius: 999px 999px 0 0;
+}
+
+.presence-cell__survey {
+  bottom: 2px;
+  width: 2px;
+  background: #1a73b7;
+}
+
+.presence-cell__nodata {
+  top: 50%;
+  width: 8px;
+  height: 2px;
+  background: #c83a2d;
 }
 
 .geospatial-footer {

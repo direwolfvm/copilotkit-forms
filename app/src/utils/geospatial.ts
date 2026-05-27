@@ -3,6 +3,11 @@ import type {
   GeospatialResultsState,
   GeospatialServiceState,
   GeospatialStatus,
+  IpacCoastalBarrierSummary,
+  IpacFacilitySummary,
+  IpacListedSpeciesSummary,
+  IpacMigratoryBirdSummary,
+  IpacMigratoryBirdWeekSummary,
   IpacSummary,
   IpacWetlandSummary,
   NepassistSummaryItem,
@@ -297,6 +302,14 @@ function normalizeAnswer(value: unknown): string {
   return String(value ?? '').trim()
 }
 
+function getStringValue(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  const text = String(value).trim()
+  return text || undefined
+}
+
 export function summarizeNepassist(data: unknown): NepassistSummaryItem[] {
   const report = extractReport(data)
   if (!report) {
@@ -306,6 +319,9 @@ export function summarizeNepassist(data: unknown): NepassistSummaryItem[] {
   const categories = toArray(categoryFolder?.Category)
   const items: NepassistSummaryItem[] = []
   for (const category of categories) {
+    const categoryName = getStringValue(
+      category?.categoryName ?? category?.CategoryName ?? category?.name ?? category?.Name ?? category?.title
+    )
     const questions = toArray(category?.Question ?? category?.question)
     for (const question of questions) {
       const questionText =
@@ -318,6 +334,8 @@ export function summarizeNepassist(data: unknown): NepassistSummaryItem[] {
         question: String(questionText || 'Unnamed question'),
         displayAnswer,
         severity,
+        category: categoryName,
+        rawAnswer: rawAnswer || undefined,
       })
     }
   }
@@ -403,13 +421,136 @@ function formatAcres(value: unknown): string | undefined {
   return undefined
 }
 
+function getNestedString(record: any, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record?.[key]
+    const text = getStringValue(value)
+    if (text) {
+      return text
+    }
+  }
+  return undefined
+}
+
+function getPopulationKey(value: any): string | undefined {
+  return getStringValue(value?.sid?.val ?? value?.sid ?? value?.populationSid?.val ?? value?.populationSid)
+}
+
+function formatCriticalHabitatStatus(popData: any): string {
+  const inFootprint = popData?.crithabInFootprint
+  const federalStatus = popData?.optionalFederalRegisterCrithabStatus
+  const type = getStringValue(federalStatus?.type ?? federalStatus?.name ?? federalStatus)
+
+  if (type) {
+    if (inFootprint === true) {
+      return `${type} in footprint`
+    }
+    if (inFootprint === false) {
+      return `${type}, not in footprint`
+    }
+    return type
+  }
+
+  if (inFootprint === true) {
+    return 'In footprint'
+  }
+  if (inFootprint === false) {
+    return 'Not in footprint'
+  }
+  return 'None returned'
+}
+
+function formatMonthDay(value: unknown): string | undefined {
+  const text = getStringValue(value)
+  if (!text) {
+    return undefined
+  }
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) {
+    return text
+  }
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+function formatBreedingSeason(from: unknown, to: unknown): string | undefined {
+  const fromText = formatMonthDay(from)
+  const toText = formatMonthDay(to)
+  if (fromText && toText) {
+    return `${fromText} - ${toText}`
+  }
+  return fromText ?? toText
+}
+
+function summarizeWeeklyData(data: unknown): IpacMigratoryBirdWeekSummary[] | undefined {
+  const items = Array.isArray(data) ? data : []
+  if (!items.length) {
+    return undefined
+  }
+  return items.flatMap((entry: any) => {
+    const weekId = Number(entry?.weekId)
+    if (!Number.isFinite(weekId)) {
+      return []
+    }
+    const probability = Number(entry?.aggProbability ?? entry?.probability)
+    const surveyBarHeight = Number(entry?.surveyBarHeight)
+    const surveyYPosition = Number(entry?.surveyYPosition)
+    const eventCount = Number(entry?.aggEventCount ?? entry?.eventCount)
+    return [{
+      weekId,
+      probability: Number.isFinite(probability) ? probability : undefined,
+      surveyBarHeight: Number.isFinite(surveyBarHeight) ? surveyBarHeight : undefined,
+      surveyYPosition: Number.isFinite(surveyYPosition) ? surveyYPosition : undefined,
+      eventCount: Number.isFinite(eventCount) ? eventCount : undefined,
+      noData: Number.isFinite(eventCount) ? eventCount <= 0 : undefined,
+    }]
+  })
+}
+
+function summarizeFacilityItems(value: unknown): IpacFacilitySummary[] {
+  const source: any = value
+  const items = Array.isArray(source) ? source : Array.isArray(source?.items) ? source.items : []
+  return items.flatMap((item: any) => {
+    const name = getNestedString(item, ['name', 'unitName', 'refugeName', 'stationName', 'facilityName'])
+    if (!name) {
+      return []
+    }
+    return [{
+      name,
+      type: getNestedString(item, ['type', 'unitType', 'facilityType', 'category']),
+      acres: formatAcres(item?.acres ?? item?.totalAcres),
+      url: getNestedString(item, ['url', 'website', 'profileUrl']),
+    }]
+  })
+}
+
+function summarizeCoastalBarriers(value: unknown): IpacCoastalBarrierSummary[] {
+  const source: any = value
+  const items = Array.isArray(source) ? source : Array.isArray(source?.items) ? source.items : []
+  return items.flatMap((item: any) => {
+    const nameOrCode = getNestedString(item, ['name', 'unitName', 'code', 'unitCode', 'systemUnit'])
+    if (!nameOrCode) {
+      return []
+    }
+    return [{
+      nameOrCode,
+      type: getNestedString(item, ['type', 'unitType', 'classification']),
+      fastAcres: formatAcres(item?.fastAcres ?? item?.fastlandAcres),
+      wetAcres: formatAcres(item?.wetAcres ?? item?.associatedAquaticHabitatAcres),
+      shoreMiles: formatAcres(item?.shoreMiles ?? item?.shorelineMiles),
+    }]
+  })
+}
+
 export function summarizeIpac(data: unknown): IpacSummary {
   const summary: IpacSummary = {
     locationDescription: undefined,
     listedSpecies: [],
     criticalHabitats: [],
     migratoryBirds: [],
+    refuges: [],
+    fishHatcheries: [],
     wetlands: [],
+    coastalBarriers: [],
   }
 
   if (!data || typeof data !== 'object') {
@@ -436,8 +577,22 @@ export function summarizeIpac(data: unknown): IpacSummary {
       undefined
     const status = popData?.listingStatusName || popData?.status || popData?.statusName || ''
     if (name) {
-      const label = status ? `${name} (${status})` : String(name)
-      pushUnique(summary.listedSpecies, label)
+      const structured: IpacListedSpeciesSummary = {
+        commonName: String(name),
+        scientificName: getNestedString(popData, ['optionalScientificName', 'scientificName']),
+        group: getNestedString(popData, ['groupName', 'group']),
+        status: getStringValue(status),
+        speciesProfileUrl: getNestedString(popData, ['speciesProfileUrl', 'profileUrl', 'url']),
+        criticalHabitat: formatCriticalHabitatStatus(popData),
+      }
+      const duplicate = summary.listedSpecies.some((item) =>
+        typeof item === 'string'
+          ? item === (structured.status ? `${structured.commonName} (${structured.status})` : structured.commonName)
+          : item.commonName === structured.commonName && item.status === structured.status
+      )
+      if (!duplicate) {
+        summary.listedSpecies.push(structured)
+      }
     }
   }
 
@@ -459,7 +614,24 @@ export function summarizeIpac(data: unknown): IpacSummary {
   for (const item of migratoryList) {
     const birdName = item?.phenologySpecies?.commonName || item?.commonName || item?.name || undefined
     if (birdName) {
-      pushUnique(summary.migratoryBirds, birdName)
+      const populationKey = getPopulationKey(item)
+      const population: any = populationKey ? (populations as Record<string, unknown>)[populationKey] : undefined
+      const bird: IpacMigratoryBirdSummary = {
+        commonName: String(birdName),
+        scientificName: getNestedString(item?.phenologySpecies, ['scientificName']) ?? getNestedString(population, ['optionalScientificName', 'scientificName']),
+        status: getNestedString(item?.level, ['displayName', 'label', 'name']) ?? (item?.bcc ? 'Bird of Conservation Concern' : undefined),
+        speciesProfileUrl: getNestedString(population, ['speciesProfileUrl', 'profileUrl', 'url']),
+        breedingSeason: formatBreedingSeason(item?.optionalBreedsFrom, item?.optionalBreedsTo),
+        optionalBreedsFrom: getStringValue(item?.optionalBreedsFrom),
+        optionalBreedsTo: getStringValue(item?.optionalBreedsTo),
+        weeklyData: summarizeWeeklyData(item?.phenologySpecies?.weeklyData),
+      }
+      const duplicate = summary.migratoryBirds.some((existing) =>
+        typeof existing === 'string' ? existing === bird.commonName : existing.commonName === bird.commonName
+      )
+      if (!duplicate) {
+        summary.migratoryBirds.push(bird)
+      }
     }
   }
 
@@ -471,16 +643,26 @@ export function summarizeIpac(data: unknown): IpacSummary {
     wetlandItems = wetlands.items
   }
   for (const wetland of wetlandItems) {
-    const wetlandName = wetland?.wetlandType || wetland?.name || wetland?.wetland || undefined
+    const wetlandName = wetland?.wetlandType || wetland?.type || wetland?.name || wetland?.wetland || undefined
     const acres = formatAcres(wetland?.acres ?? wetland?.wetlandAcres)
     if (wetlandName) {
       const entry: IpacWetlandSummary = { name: String(wetlandName) }
+      const code = getNestedString(wetland, ['code', 'wetlandCode', 'attribute'])
+      if (code) {
+        entry.code = code
+      }
       if (acres) {
         entry.acres = acres
       }
       summary.wetlands.push(entry)
     }
   }
+
+  summary.refuges = summarizeFacilityItems(resources.refuges ?? resources.nationalWildlifeRefugeLands)
+  summary.fishHatcheries = summarizeFacilityItems(resources.fishHatcheries ?? resources.hatcheries)
+  summary.coastalBarriers = summarizeCoastalBarriers(
+    resources.coastalBarriers ?? resources.cbra ?? resources.coastalBarrierResources
+  )
 
   return summary
 }
@@ -547,13 +729,19 @@ function formatIpacSummary(summary: IpacSummary | undefined): string[] {
     lines.push(`Location: ${summary.locationDescription}`)
   }
   if (summary.listedSpecies.length > 0) {
-    lines.push(`Listed species: ${summary.listedSpecies.join('; ')}`)
+    const species = summary.listedSpecies.map((item) =>
+      typeof item === 'string' ? item : item.status ? `${item.commonName} (${item.status})` : item.commonName
+    )
+    lines.push(`Listed species: ${species.join('; ')}`)
   }
   if (summary.criticalHabitats.length > 0) {
     lines.push(`Critical habitats: ${summary.criticalHabitats.join('; ')}`)
   }
   if (summary.migratoryBirds.length > 0) {
-    lines.push(`Migratory birds: ${summary.migratoryBirds.join('; ')}`)
+    const birds = summary.migratoryBirds.map((item) =>
+      typeof item === 'string' ? item : item.status ? `${item.commonName} (${item.status})` : item.commonName
+    )
+    lines.push(`Migratory birds: ${birds.join('; ')}`)
   }
   if (summary.wetlands.length > 0) {
     const wetlands = summary.wetlands.map((wetland) =>

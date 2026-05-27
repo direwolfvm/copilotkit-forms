@@ -9,7 +9,7 @@ import "./copilot-overrides.css"
 import "./App.css"
 
 import { ArcgisSketchMap } from "./components/ArcgisSketchMap"
-import { EnvironmentalMapResult } from "./components/LocationSection"
+import { GeospatialResultsPanel } from "./components/LocationSection"
 import type { GeometryChange, UploadedGisFile } from "./types/gis"
 import type { GeospatialResultsState, NepassistSummaryItem } from "./types/geospatial"
 import {
@@ -64,6 +64,12 @@ function countHighPriorityFindings(items: NepassistSummaryItem[] | undefined) {
 function buildImplicationLines(results: GeospatialResultsState | undefined | null): string[] {
   const safeResults = ensureGeospatialResults(results)
   const lines: string[] = []
+  const speciesName = (item: unknown) =>
+    typeof item === "string"
+      ? item
+      : item && typeof item === "object" && "commonName" in item
+        ? String((item as { commonName?: unknown }).commonName ?? "")
+        : ""
 
   if (!safeResults.lastRunAt) {
     return lines
@@ -92,7 +98,7 @@ function buildImplicationLines(results: GeospatialResultsState | undefined | nul
   const ipac = safeResults.ipac
   if (ipac.status === "success" && ipac.summary) {
     if (ipac.summary.listedSpecies.length > 0 || ipac.summary.criticalHabitats.length > 0) {
-      const species = ipac.summary.listedSpecies.slice(0, 5).join(", ")
+      const species = ipac.summary.listedSpecies.slice(0, 5).map(speciesName).filter(Boolean).join(", ")
       const habitats = ipac.summary.criticalHabitats.slice(0, 5).join(", ")
       const speciesText = species ? `listed species (${species})` : "listed species"
       const habitatText = habitats ? `critical habitats (${habitats})` : "critical habitats"
@@ -196,7 +202,6 @@ export function ResourceCheckContent() {
   )
 
   const hasGeometry = Boolean(geometry)
-  const lastRunLabel = formatTimestamp(geospatialResults.lastRunAt)
   const implicationLines = useMemo(() => buildImplicationLines(geospatialResults), [geospatialResults])
 
   useCopilotReadable(
@@ -535,130 +540,12 @@ export function ResourceCheckContent() {
                 </p>
               </div>
               <div className="form-panel__body">
-                <div className="geospatial-results">
-                  <div className="geospatial-results__header">
-                    <h3>Geospatial services</h3>
-                    <span className="geospatial-results__timestamp" aria-live="polite">
-                      {lastRunLabel ? `Last run ${lastRunLabel}` : "Not yet run"}
-                    </span>
-                  </div>
-                  {geospatialResults.messages && geospatialResults.messages.length > 0 ? (
-                    <ul className="geospatial-results__messages">
-                      {geospatialResults.messages.map((message, index) => (
-                        <li key={`resource-message-${index}`}>{message}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <EnvironmentalMapResult result={geospatialResults.environmentalMap} />
-                  <div className="geospatial-results__cards">
-                    <div className="geospatial-results__card" aria-live="polite">
-                      <h4>NEPA Assist</h4>
-                      {geospatialResults.nepassist.status === "loading" ? (
-                        <p className="geospatial-results__status">Running geospatial query…</p>
-                      ) : geospatialResults.nepassist.status === "error" ? (
-                        <p className="geospatial-results__status error">
-                          {geospatialResults.nepassist.error ?? "The screening request failed."}
-                        </p>
-                      ) : geospatialResults.nepassist.status === "success" &&
-                        geospatialResults.nepassist.summary ? (
-                        <div className="geospatial-results__table-wrapper">
-                          <table className="geospatial-results__table">
-                            <thead>
-                              <tr>
-                                <th scope="col">Question</th>
-                                <th scope="col">Result</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {geospatialResults.nepassist.summary.map((item, index) => (
-                                <tr key={`${item.question}-${index}`}>
-                                  <td>{item.question}</td>
-                                  <td>{item.displayAnswer}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <p className="geospatial-results__status muted">
-                          Run the geospatial screen to request NEPA Assist data.
-                        </p>
-                      )}
-                    </div>
-                    <div className="geospatial-results__card" aria-live="polite">
-                      <h4>IPaC</h4>
-                      {geospatialResults.ipac.status === "loading" ? (
-                        <p className="geospatial-results__status">Running geospatial query…</p>
-                      ) : geospatialResults.ipac.status === "error" ? (
-                        <p className="geospatial-results__status error">
-                          {geospatialResults.ipac.error ?? "The screening request failed."}
-                        </p>
-                      ) : geospatialResults.ipac.status === "success" && geospatialResults.ipac.summary ? (
-                        <div className="geospatial-results__ipac">
-                          <ul>
-                            <li>
-                              <strong>Location</strong>: {geospatialResults.ipac.summary.locationDescription || "Not provided"}
-                            </li>
-                            <li>
-                              <strong>Listed species</strong>:
-                              {geospatialResults.ipac.summary.listedSpecies.length ? (
-                                <ul>
-                                  {geospatialResults.ipac.summary.listedSpecies.map((item, index) => (
-                                    <li key={`${item}-${index}`}>{item}</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <span className="geospatial-results__status muted">None returned</span>
-                              )}
-                            </li>
-                            <li>
-                              <strong>Critical habitat</strong>:
-                              {geospatialResults.ipac.summary.criticalHabitats.length ? (
-                                <ul>
-                                  {geospatialResults.ipac.summary.criticalHabitats.map((item, index) => (
-                                    <li key={`${item}-${index}`}>{item}</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <span className="geospatial-results__status muted">None returned</span>
-                              )}
-                            </li>
-                            <li>
-                              <strong>Migratory birds of concern</strong>:
-                              {geospatialResults.ipac.summary.migratoryBirds.length ? (
-                                <ul>
-                                  {geospatialResults.ipac.summary.migratoryBirds.map((item, index) => (
-                                    <li key={`${item}-${index}`}>{item}</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <span className="geospatial-results__status muted">None returned</span>
-                              )}
-                            </li>
-                            <li>
-                              <strong>Wetlands</strong>:
-                              {geospatialResults.ipac.summary.wetlands.length ? (
-                                <ul>
-                                  {geospatialResults.ipac.summary.wetlands.map((wetland, index) => (
-                                    <li key={`${wetland.name}-${index}`}>
-                                      {wetland.name}
-                                      {wetland.acres ? ` – ${wetland.acres} ac` : null}
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <span className="geospatial-results__status muted">None returned</span>
-                              )}
-                            </li>
-                          </ul>
-                        </div>
-                      ) : (
-                        <p className="geospatial-results__status muted">
-                          Run the geospatial screen to request IPaC data.
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                <>
+                  <GeospatialResultsPanel
+                    geospatialResults={geospatialResults}
+                    showNotRun
+                    description="Review system messages and summaries, then check the resource implications below to inform next steps."
+                  />
                   <div className="resource-implications" aria-live="polite">
                     <h4>Resource implications</h4>
                     {implicationLines.length > 0 ? (
@@ -673,7 +560,7 @@ export function ResourceCheckContent() {
                       </p>
                     )}
                   </div>
-                </div>
+                </>
               </div>
             </div>
           </section>
