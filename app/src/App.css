@@ -2372,12 +2372,14 @@
   animation-iteration-count: infinite, infinite;
 }
 
-/* Unicorn sparkles shimmer in pink/purple as they float down. */
+/* Unicorn sparkles shimmer in pink/purple as they continuously drift down.
+   Fall and sway are combined into one keyframe so the two transforms don't
+   override each other (separate animations on `transform` would conflict). */
 .snowfall--unicorn .snowfall__flake {
   filter: drop-shadow(0 0 6px rgba(236, 72, 153, 0.6)) drop-shadow(0 0 12px rgba(168, 85, 247, 0.5));
-  animation-name: snowfall-fall, seasonal-sway;
-  animation-timing-function: linear, ease-in-out;
-  animation-iteration-count: infinite, infinite;
+  animation-name: unicorn-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
 
 @keyframes seasonal-twinkle {
@@ -2391,14 +2393,25 @@
   }
 }
 
-@keyframes seasonal-sway {
-  0%,
-  100% {
-    transform: translateX(-1.2rem) rotate(-12deg);
+@keyframes unicorn-drift {
+  0% {
+    transform: translateY(-12vh) translateX(-1.2rem) rotate(-12deg);
+  }
+
+  25% {
+    transform: translateY(18vh) translateX(1.2rem) rotate(12deg);
   }
 
   50% {
-    transform: translateX(1.2rem) rotate(12deg);
+    transform: translateY(48vh) translateX(-1.2rem) rotate(-12deg);
+  }
+
+  75% {
+    transform: translateY(78vh) translateX(1.2rem) rotate(12deg);
+  }
+
+  100% {
+    transform: translateY(110vh) translateX(-1.2rem) rotate(-12deg);
   }
 }
 
