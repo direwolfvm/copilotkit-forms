@@ -24,7 +24,13 @@ import DashboardHubPage from "./DashboardHubPage"
 import ProjectExplorerPage from "./ProjectExplorerPage"
 import ProjectDetailPage from "./ProjectDetailPage"
 import { useHolidayTheme } from "./holidayThemeContext"
-import Snowfall from "./components/Snowfall"
+import SeasonalOverlay from "./components/SeasonalOverlay"
+
+const SEASONAL_NAV_GLYPHS = {
+  christmas: "❄️ 🎄 🎅 🎁 ❄️",
+  july4: "🎆 🇺🇸 🦅 ⭐ 🎇",
+  unicorn: "🦄 ✨ 🌈 💖 ✨"
+} as const
 
 function Layout() {
   const bannerRef = useRef<HTMLElement | null>(null)
@@ -34,7 +40,7 @@ function Layout() {
   const [isNavOpen, setIsNavOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<"resources" | "portal" | "dashboard" | null>(null)
   const location = useLocation()
-  const { isChristmasThemeEnabled } = useHolidayTheme()
+  const { seasonalTheme } = useHolidayTheme()
   const isResourcesSection =
     location.pathname.startsWith("/resources") || location.pathname.startsWith("/resource-check") || location.pathname.startsWith("/nepa-info")
   const isPortalSection =
@@ -197,7 +203,7 @@ function Layout() {
 
   return (
     <div className="site-shell">
-      {isChristmasThemeEnabled ? <Snowfall /> : null}
+      {seasonalTheme !== "none" ? <SeasonalOverlay theme={seasonalTheme} /> : null}
       <section ref={bannerRef} className="site-banner" aria-label="Website disclaimer">
         <div className="site-banner__inner">
           <div className="site-banner__bar">
@@ -271,9 +277,9 @@ function Layout() {
             className={`site-nav${isNavOpen ? " site-nav--open" : ""}`}
             aria-label="Primary"
           >
-            {isChristmasThemeEnabled ? (
-              <span className="site-nav__holiday" aria-hidden="true" role="img">
-                ❄️ 🎄 🎅 🎁 ❄️
+            {seasonalTheme !== "none" ? (
+              <span className={`site-nav__holiday site-nav__holiday--${seasonalTheme}`} aria-hidden="true" role="img">
+                {SEASONAL_NAV_GLYPHS[seasonalTheme]}
               </span>
             ) : null}
             <NavLink

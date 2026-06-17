@@ -1624,26 +1624,29 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     ],
     []
   )
+  const projectSummaryForNepa = useMemo(() => formatProjectSummary(formData), [formData])
+  const geospatialSummaryForNepa = useMemo(
+    () => formatGeospatialResultsSummary(geospatialResults),
+    [geospatialResults]
+  )
 
   useCopilotReadable(
     {
       description: "Human-readable project summary",
-      value: formatProjectSummary(formData)
+      value: projectSummaryForNepa
     },
-    [formData]
+    [projectSummaryForNepa]
   )
 
   useCopilotReadable(
     {
       description: "Latest geospatial screening results including NEPA Assist and IPaC findings",
-      value: geospatialResults,
-      convert: (_, value) =>
-        limitCopilotReadableText(
-          formatGeospatialResultsSummary(value),
-          "Geospatial screening summary"
-        )
+      value: limitCopilotReadableText(
+        geospatialSummaryForNepa,
+        "Geospatial screening summary"
+      )
     },
-    [geospatialResults]
+    [geospatialSummaryForNepa]
   )
 
   useCopilotReadable(
@@ -1693,11 +1696,6 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     [permittingChecklist]
   )
 
-  const projectSummaryForNepa = useMemo(() => formatProjectSummary(formData), [formData])
-  const geospatialSummaryForNepa = useMemo(
-    () => formatGeospatialResultsSummary(geospatialResults),
-    [geospatialResults]
-  )
   const checklistSummaryForNepa = useMemo(
     () =>
       permittingChecklist.length

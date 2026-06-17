@@ -7,7 +7,7 @@ import {
   fetchProjectHierarchy,
   type ProjectHierarchy
 } from "./utils/projectPersistence"
-import { useHolidayTheme } from "./holidayThemeContext"
+import { useHolidayTheme, type SeasonalTheme } from "./holidayThemeContext"
 import { useDesignTheme, type DesignTheme } from "./designThemeContext"
 
 import "./App.css"
@@ -195,7 +195,7 @@ export default function SettingsPage() {
   const [projectLoadError, setProjectLoadError] = useState<string | null>(null)
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const { isChristmasThemeEnabled, setChristmasThemeEnabled } = useHolidayTheme()
+  const { seasonalTheme, setSeasonalTheme } = useHolidayTheme()
   const { designTheme, setDesignTheme } = useDesignTheme()
 
   useEffect(() => {
@@ -261,21 +261,27 @@ export default function SettingsPage() {
         <section className="settings__section" aria-labelledby="settings-theme-heading">
           <h2 id="settings-theme-heading">Seasonal theme</h2>
           <p className="settings__description">
-            Add a festive touch to HelpPermitMe with falling snowflakes and holiday cheer in the navigation.
+            Add a festive touch to HelpPermitMe with floating decorations, themed colors, and cheer in the navigation.
           </p>
-          <label className="settings__switch" htmlFor="settings-christmas-toggle">
-            <div className="settings__switch-text">
-              <span className="settings__label">Christmas theme</span>
-              <span className="settings__hint">Show falling snow and holiday emojis in the header.</span>
-            </div>
-            <input
-              id="settings-christmas-toggle"
-              className="settings__switch-input"
-              type="checkbox"
-              checked={isChristmasThemeEnabled}
-              onChange={(event) => setChristmasThemeEnabled(event.target.checked)}
-            />
-          </label>
+          <div className="settings__control">
+            <label className="settings__field" htmlFor="settings-seasonal-theme-select">
+              <span className="settings__label">Seasonal theme</span>
+              <select
+                id="settings-seasonal-theme-select"
+                className="settings__select"
+                value={seasonalTheme}
+                onChange={(event) => setSeasonalTheme(event.target.value as SeasonalTheme)}
+              >
+                <option value="none">None</option>
+                <option value="christmas">❄️ Christmas — falling snow &amp; holiday cheer</option>
+                <option value="july4">🎆 Fourth of July — fireworks, red, white &amp; blue</option>
+                <option value="unicorn">🦄 Unicorn — sparkles, pink &amp; purple magic</option>
+              </select>
+              <span className="settings__hint">
+                Floating decorations and themed colors appear across the site. Saved to this device.
+              </span>
+            </label>
+          </div>
         </section>
 
         <section className="settings__section" aria-labelledby="settings-design-theme-heading">

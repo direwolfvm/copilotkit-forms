@@ -170,6 +170,47 @@ function formatImplicationsForCopilot(results: GeospatialResultsState | undefine
   ].join("\n")
 }
 
+function formatGeometryForCopilot(geometry: string | undefined) {
+  if (!geometry) {
+    return "No project geometry has been drawn or uploaded."
+  }
+
+  try {
+    const parsed = JSON.parse(geometry) as { type?: unknown; coordinates?: unknown }
+    const geometryType = typeof parsed.type === "string" ? parsed.type : "unknown geometry"
+    const coordinateText = JSON.stringify(parsed.coordinates)
+    const coordinateCount = coordinateText ? (coordinateText.match(/-?\d+(?:\.\d+)?/g)?.length ?? 0) / 2 : 0
+
+    return [
+      `Geometry type: ${geometryType}.`,
+      `Approximate coordinate pairs: ${Math.max(0, Math.floor(coordinateCount))}.`,
+      `GeoJSON size: ${geometry.length} characters.`
+    ].join(" ")
+  } catch {
+    return `Project geometry is present but could not be parsed as GeoJSON. Geometry size: ${geometry.length} characters.`
+  }
+}
+
+function formatScreeningInputsForCopilot({
+  geometry,
+  bufferMiles,
+  locationNotes,
+  uploadedGisFile
+}: {
+  geometry: string | undefined
+  bufferMiles: number
+  locationNotes: string
+  uploadedGisFile: UploadedGisFile | null
+}) {
+  return [
+    "Current Resource Check inputs:",
+    formatGeometryForCopilot(geometry),
+    `Analysis buffer: ${bufferMiles} miles.`,
+    uploadedGisFile ? `Uploaded GIS file: ${uploadedGisFile.fileName}.` : "No uploaded GIS file is active.",
+    locationNotes.trim() ? `Location notes: ${locationNotes.trim()}` : "Location notes: none provided."
+  ].join("\n")
+}
+
 const defaultRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
 
@@ -203,32 +244,47 @@ export function ResourceCheckContent() {
 
   const hasGeometry = Boolean(geometry)
   const implicationLines = useMemo(() => buildImplicationLines(geospatialResults), [geospatialResults])
+  const geospatialContextForCopilot = useMemo(
+    () => formatGeospatialResultsSummary(geospatialResults),
+    [geospatialResults]
+  )
+  const implicationsContextForCopilot = useMemo(
+    () => formatImplicationsForCopilot(geospatialResults),
+    [geospatialResults]
+  )
+  const screeningInputsForCopilot = useMemo(
+    () =>
+      formatScreeningInputsForCopilot({
+        geometry,
+        bufferMiles,
+        locationNotes,
+        uploadedGisFile
+      }),
+    [bufferMiles, geometry, locationNotes, uploadedGisFile]
+  )
 
   useCopilotReadable(
     {
       description: "Latest geospatial screening results for Resource Check",
-      value: geospatialResults,
-      convert: (_, value) => formatGeospatialResultsSummary(value)
+      value: geospatialContextForCopilot
     },
-    [geospatialResults]
+    [geospatialContextForCopilot]
   )
 
   useCopilotReadable(
     {
       description: "Resource implications derived from the current screening",
-      value: geospatialResults,
-      convert: (_, value) => formatImplicationsForCopilot(value)
+      value: implicationsContextForCopilot
     },
-    [geospatialResults]
+    [implicationsContextForCopilot]
   )
 
   useCopilotReadable(
     {
-      description: "Field notes captured during the Resource Check session",
-      value: locationNotes,
-      convert: (_, value) => value || "No notes provided."
+      description: "Current Resource Check screening inputs",
+      value: screeningInputsForCopilot
     },
-    [locationNotes]
+    [screeningInputsForCopilot]
   )
 
   const handleGeometryChange = useCallback((change: GeometryChange) => {

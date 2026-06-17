@@ -2364,6 +2364,75 @@
   }
 }
 
+/* Fourth of July particles drift down with a subtle red/blue sparkle glow. */
+.snowfall--july4 .snowfall__flake {
+  filter: drop-shadow(0 0 6px rgba(178, 34, 52, 0.55)) drop-shadow(0 0 10px rgba(60, 59, 110, 0.45));
+  animation-name: snowfall-fall, seasonal-twinkle;
+  animation-timing-function: linear, ease-in-out;
+  animation-iteration-count: infinite, infinite;
+}
+
+/* Unicorn sparkles shimmer in pink/purple as they float down. */
+.snowfall--unicorn .snowfall__flake {
+  filter: drop-shadow(0 0 6px rgba(236, 72, 153, 0.6)) drop-shadow(0 0 12px rgba(168, 85, 247, 0.5));
+  animation-name: snowfall-fall, seasonal-sway;
+  animation-timing-function: linear, ease-in-out;
+  animation-iteration-count: infinite, infinite;
+}
+
+@keyframes seasonal-twinkle {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes seasonal-sway {
+  0%,
+  100% {
+    transform: translateX(-1.2rem) rotate(-12deg);
+  }
+
+  50% {
+    transform: translateX(1.2rem) rotate(12deg);
+  }
+}
+
+/* Seasonal accent tinting applied site-wide via the root data attribute. */
+:root[data-seasonal-theme="july4"] {
+  --accent: #b22234;
+  --accent-dark: #7f1626;
+  --accent-strong: #3c3b6e;
+  --accent-contrast: #ffffff;
+  --accent-foreground: #ffffff;
+}
+
+:root[data-seasonal-theme="unicorn"] {
+  --accent: #d6409f;
+  --accent-dark: #9333ea;
+  --accent-strong: #7c3aed;
+  --accent-contrast: #ffffff;
+  --accent-foreground: #ffffff;
+}
+
+:root[data-seasonal-theme="july4"] body {
+  background-image:
+    radial-gradient(circle at 12% -10%, rgba(178, 34, 52, 0.12), transparent 45%),
+    radial-gradient(circle at 88% -5%, rgba(60, 59, 110, 0.14), transparent 45%);
+  background-attachment: fixed;
+}
+
+:root[data-seasonal-theme="unicorn"] body {
+  background-image:
+    radial-gradient(circle at 10% -10%, rgba(236, 72, 153, 0.16), transparent 45%),
+    radial-gradient(circle at 90% -5%, rgba(168, 85, 247, 0.16), transparent 45%);
+  background-attachment: fixed;
+}
+
 .site-banner {
   background: color-mix(in srgb, var(--surface) 92%, white 8%);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
@@ -2677,6 +2746,22 @@
   font-weight: 650;
   text-decoration: none;
   letter-spacing: 0.02em;
+}
+
+.site-nav__holiday--july4 {
+  background: linear-gradient(
+    90deg,
+    rgba(178, 34, 52, 0.16),
+    rgba(255, 255, 255, 0.28),
+    rgba(60, 59, 110, 0.18)
+  );
+  border: 1px dashed rgba(60, 59, 110, 0.55);
+}
+
+.site-nav__holiday--unicorn {
+  background: linear-gradient(90deg, rgba(236, 72, 153, 0.18), rgba(168, 85, 247, 0.18));
+  border: 1px dashed rgba(168, 85, 247, 0.6);
+  box-shadow: 0 0 12px -4px rgba(236, 72, 153, 0.5);
 }
 
 .site-nav__link {
