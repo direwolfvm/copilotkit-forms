@@ -31,6 +31,7 @@ import {
 } from "./schema/projectSchema"
 import { loadProjectPortalState } from "./utils/projectPersistence"
 import { ProjectPersistenceError, type ProcessInformation } from "./utils/projectPersistence"
+import type { GeospatialResultsState } from "./types/geospatial"
 
 const ROW_AUTHORIZATION_SF299_TITLE = `${ROW_AUTHORIZATION_LABEL} (SF-299)`
 
@@ -41,7 +42,7 @@ type ProcessInformationState =
 
 type ProjectInformationState =
   | { status: "idle" | "loading" }
-  | { status: "success"; formData: ProjectFormData }
+  | { status: "success"; formData: ProjectFormData; geospatialResults?: GeospatialResultsState }
   | { status: "error"; message: string }
 
 type PermitflowAuthState =
@@ -179,7 +180,11 @@ export default function PermitStartPage() {
         if (isCancelled) {
           return
         }
-        setProjectState({ status: "success", formData: result.formData })
+        setProjectState({
+          status: "success",
+          formData: result.formData,
+          geospatialResults: result.geospatialResults
+        })
       })
       .catch((error) => {
         if (isCancelled) {
@@ -428,7 +433,8 @@ export default function PermitStartPage() {
         await submitPermitflowProject({
           formData: projectState.formData,
           accessToken: authState.accessToken,
-          userId: authState.userId
+          userId: authState.userId,
+          geospatialResults: projectState.geospatialResults
         })
       }
       setSubmitState({
