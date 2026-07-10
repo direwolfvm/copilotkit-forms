@@ -22,7 +22,10 @@ function buildEntry(
 }
 
 describe("projectStatus", () => {
-  it("treats Basic Permit, Complex Review, and IPaC consultation as workflow-backed checklist items", () => {
+  it("treats Right of Way Authorization, Complex Review, and IPaC consultation as workflow-backed checklist items", () => {
+    expect(isWorkflowBackedChecklistItem({ label: "Right of Way Authorization" })).toBe(true)
+    expect(isWorkflowBackedChecklistItem({ label: "Right of Way Authorization (SF-299)" })).toBe(true)
+    // Checklists saved before the SF-299 transition still use the legacy label.
     expect(isWorkflowBackedChecklistItem({ label: "Basic Permit" })).toBe(true)
     expect(isWorkflowBackedChecklistItem({ label: "Complex Review" })).toBe(true)
     expect(
@@ -33,14 +36,14 @@ describe("projectStatus", () => {
 
   it("computes checklist completion using only non-workflow-backed items", () => {
     const completeEntry = buildEntry([
-      { label: "Basic Permit", completed: false },
+      { label: "Right of Way Authorization", completed: false },
       { label: "Complex Review", completed: false },
       { label: "Endangered Species Act Consultation (DOI / FWS)", completed: false },
       { label: "Clean Water Act Section 404 Permit", completed: true }
     ])
 
     const incompleteEntry = buildEntry([
-      { label: "Basic Permit", completed: false },
+      { label: "Right of Way Authorization", completed: false },
       { label: "Clean Water Act Section 404 Permit", completed: false }
     ])
 

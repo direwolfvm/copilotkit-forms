@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react"
-import type { FormEvent, ReactNode } from "react"
+import type { ChangeEvent, FormEvent, ReactNode } from "react"
 import { useSearchParams } from "react-router-dom"
 import Form from "@rjsf/core"
 import type { IChangeEvent } from "@rjsf/core"
+import type { WidgetProps } from "@rjsf/utils"
 import validator from "@rjsf/validator-ajv8"
 
 import "./App.css"
 import { ProcessInformationDetails } from "./components/ProcessInformationDetails"
 import {
+  ROW_AUTHORIZATION_LABEL,
   authenticatePermitflowUser,
   loadPermitflowCustomFormState,
   loadPermitflowProjectStatus,
@@ -16,8 +18,10 @@ import {
   submitPermitflowCustomFormForApproval,
   submitPermitflowProject,
   updatePermitflowProject,
+  uploadPermitflowDocument,
   type PermitflowCustomFormState,
-  type PermitflowProjectStatus
+  type PermitflowProjectStatus,
+  type PermitflowSectionFormState
 } from "./utils/permitflow"
 import {
   formatProjectSummary,
@@ -28,7 +32,7 @@ import {
 import { loadProjectPortalState } from "./utils/projectPersistence"
 import { ProjectPersistenceError, type ProcessInformation } from "./utils/projectPersistence"
 
-const BASIC_PERMIT_PROCESS_MODEL_ID = 1
+const ROW_AUTHORIZATION_SF299_TITLE = `${ROW_AUTHORIZATION_LABEL} (SF-299)`
 
 type ProcessInformationState =
   | { status: "idle" | "loading" }
@@ -72,13 +76,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
-function isSf299DecisionElement(candidate: { title: string | null; other: unknown }): boolean {
-  const title = candidate.title?.toLowerCase()
-  const otherRecord = isRecord(candidate.other) ? candidate.other : undefined
-  const formType = typeof otherRecord?.form_type === "string" ? otherRecord.form_type.toLowerCase() : undefined
-  return Boolean(title?.includes("sf-299")) || formType === "sf299"
-}
-
 function hasSchema(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value)) {
     return false
@@ -110,7 +107,9 @@ export default function PermitStartPage() {
   const [searchParams] = useSearchParams()
   const [isCustomFormModalOpen, setCustomFormModalOpen] = useState(false)
   const [customFormState, setCustomFormState] = useState<CustomFormModalState>({ status: "idle" })
-  const [customFormDraft, setCustomFormDraft] = useState<Record<string, unknown>>({})
+  const [customFormDrafts, setCustomFormDrafts] = useState<Record<number, Record<string, unknown>>>({})
+  const [dirtySectionIds, setDirtySectionIds] = useState<ReadonlySet<number>>(new Set())
+  const [activeSectionId, setActiveSectionId] = useState<number | undefined>(undefined)
   const [customFormSaveState, setCustomFormSaveState] = useState<CustomFormActionState>({
     status: "idle"
   })
@@ -122,7 +121,7 @@ export default function PermitStartPage() {
     let isCancelled = false
     setProcessState({ status: "loading" })
 
-    loadPermitflowProcessInformation(BASIC_PERMIT_PROCESS_MODEL_ID)
+    loadPermitflowProcessInformation()
       .then((info) => {
         if (isCancelled) {
           return
@@ -296,31 +295,27 @@ export default function PermitStartPage() {
     authState.status === "authenticated" &&
     submitState.status !== "submitting"
 
-  const customFormIndicator = useMemo(() => {
+  const sectionFormCount = useMemo(() => {
     if (processState.status !== "success") {
-      return undefined
+      return 0
     }
-    const withSchema = processState.info.decisionElements.filter((entry) => hasSchema(entry.formData))
-    if (withSchema.length === 0) {
-      return undefined
-    }
-    const selected = withSchema.find((entry) => isSf299DecisionElement(entry)) ?? withSchema[2] ?? withSchema[0]
-    return {
-      title: selected.title ?? "Custom form",
-      decisionElementId: selected.id
-    }
+    return processState.info.decisionElements.filter((entry) => hasSchema(entry.formData)).length
   }, [processState])
 
   useEffect(() => {
     if (projectState.status !== "success") {
       setCustomFormState({ status: "idle" })
-      setCustomFormDraft({})
+      setCustomFormDrafts({})
+      setDirtySectionIds(new Set())
+      setActiveSectionId(undefined)
       return
     }
 
     if (permitflowStatus.status !== "success" || !permitflowStatus.info.exists) {
       setCustomFormState({ status: "idle" })
-      setCustomFormDraft({})
+      setCustomFormDrafts({})
+      setDirtySectionIds(new Set())
+      setActiveSectionId(undefined)
       return
     }
 
@@ -339,7 +334,19 @@ export default function PermitStartPage() {
           return
         }
         setCustomFormState({ status: "success", info })
-        setCustomFormDraft(info.evaluationData ?? {})
+        const formSections = info.sections.filter((section) => section.hasForm)
+        setCustomFormDrafts(
+          Object.fromEntries(
+            formSections.map((section) => [section.decisionElementId, section.evaluationData ?? {}])
+          )
+        )
+        setDirtySectionIds(new Set())
+        setActiveSectionId((current) =>
+          typeof current === "number" &&
+          formSections.some((section) => section.decisionElementId === current)
+            ? current
+            : formSections[0]?.decisionElementId
+        )
       })
       .catch((error) => {
         if (isCancelled) {
@@ -350,7 +357,7 @@ export default function PermitStartPage() {
             ? error.message
             : error instanceof Error
               ? error.message
-              : "Unable to load PermitFast custom form."
+              : "Unable to load the PermitFast SF-299 application."
         setCustomFormState({ status: "error", message })
       })
     return () => {
@@ -421,8 +428,7 @@ export default function PermitStartPage() {
         await submitPermitflowProject({
           formData: projectState.formData,
           accessToken: authState.accessToken,
-          userId: authState.userId,
-          userEmail: authState.userEmail
+          userId: authState.userId
         })
       }
       setSubmitState({
@@ -452,7 +458,19 @@ export default function PermitStartPage() {
     }
   }
 
-  const handleSaveCustomForm = async () => {
+  const handleSectionDraftChange = (decisionElementId: number, draft: Record<string, unknown>) => {
+    setCustomFormDrafts((previous) => ({ ...previous, [decisionElementId]: draft }))
+    setDirtySectionIds((previous) => {
+      if (previous.has(decisionElementId)) {
+        return previous
+      }
+      const next = new Set(previous)
+      next.add(decisionElementId)
+      return next
+    })
+  }
+
+  const handleSaveCustomForm = async (decisionElementId: number) => {
     if (projectState.status !== "success") {
       setCustomFormSaveState({ status: "error", message: "Project details are not available yet." })
       return
@@ -460,7 +478,7 @@ export default function PermitStartPage() {
     if (authState.status !== "authenticated") {
       setCustomFormSaveState({
         status: "error",
-        message: "Authenticate with PermitFast before saving the custom form."
+        message: "Authenticate with PermitFast before saving this section."
       })
       return
     }
@@ -476,16 +494,25 @@ export default function PermitStartPage() {
       await savePermitflowCustomForm({
         portalProjectId: projectId,
         accessToken: authState.accessToken,
-        evaluationData: customFormDraft
+        decisionElementId,
+        evaluationData: customFormDrafts[decisionElementId] ?? {}
       })
-      setCustomFormSaveState({ status: "success", message: "Custom form saved." })
+      setDirtySectionIds((previous) => {
+        if (!previous.has(decisionElementId)) {
+          return previous
+        }
+        const next = new Set(previous)
+        next.delete(decisionElementId)
+        return next
+      })
+      setCustomFormSaveState({ status: "success", message: "Section saved." })
     } catch (error) {
       const message =
         error instanceof ProjectPersistenceError
           ? error.message
           : error instanceof Error
             ? error.message
-            : "Unable to save the custom form."
+            : "Unable to save this section."
       setCustomFormSaveState({ status: "error", message })
     }
   }
@@ -517,17 +544,21 @@ export default function PermitStartPage() {
       await submitPermitflowCustomFormForApproval({
         portalProjectId: projectId,
         accessToken: authState.accessToken,
-        evaluationData: customFormDraft
+        sections: Array.from(dirtySectionIds).map((decisionElementId) => ({
+          decisionElementId,
+          evaluationData: customFormDrafts[decisionElementId] ?? {}
+        }))
       })
+      setDirtySectionIds(new Set())
       setCustomFormSubmitState({
         status: "success",
-        message: "Custom form submitted for approval."
+        message: "Application submitted for approval."
       })
       try {
         const info = await loadPermitflowProjectStatus(projectId)
         setPermitflowStatus({ status: "success", info })
       } catch (statusError) {
-        console.warn("Failed to refresh PermitFast status after custom form submission.", statusError)
+        console.warn("Failed to refresh PermitFast status after submission.", statusError)
       }
     } catch (error) {
       const message =
@@ -535,7 +566,7 @@ export default function PermitStartPage() {
           ? error.message
           : error instanceof Error
             ? error.message
-            : "Unable to submit custom form for approval."
+            : "Unable to submit the application for approval."
       setCustomFormSubmitState({ status: "error", message })
     }
   }
@@ -557,7 +588,9 @@ export default function PermitStartPage() {
     content = (
       <details className="permit-start-page__details" open>
         <summary className="permit-start-page__details-summary">
-          <span className="permit-start-page__details-title">Basic permit information</span>
+          <span className="permit-start-page__details-title">
+            {ROW_AUTHORIZATION_SF299_TITLE} information
+          </span>
           <span className="permit-start-page__details-icon" aria-hidden="true">
             <svg viewBox="0 0 12 12" focusable="false">
               <path
@@ -582,11 +615,12 @@ export default function PermitStartPage() {
     <article className="app permit-start-page">
       <div className="app__inner">
         <header className="permit-start-page__header">
-          <p className="permit-start-page__eyebrow">Basic permit</p>
+          <p className="permit-start-page__eyebrow">{ROW_AUTHORIZATION_SF299_TITLE}</p>
           <h1>Start this permit.</h1>
           <p>
-            Use this checklist item to kick off the PermitFast workflow. Review the process
-            model and decision elements below before advancing the application.
+            Use this checklist item to kick off the PermitFast {ROW_AUTHORIZATION_LABEL}{" "}
+            workflow, a phased digitization of Standard Form 299. Review the process model and
+            form sections below before advancing the application.
           </p>
         </header>
         <section className="permit-start-page__content">
@@ -637,11 +671,20 @@ export default function PermitStartPage() {
                       ) : (
                         <p>No PermitFast submission found for this project yet.</p>
                       )}
-                      {permitflowStatus.info.basicPermitProcess ? (
+                      {permitflowStatus.info.rowAuthorizationProcess ? (
                         <p>
-                          A Basic Permit process is already underway. Update details to keep it
-                          current.
+                          A {ROW_AUTHORIZATION_SF299_TITLE} process is already underway. Update
+                          details to keep it current.
                         </p>
+                      ) : null}
+                      {permitflowStatus.info.currentStatus?.toLowerCase() === "returned" ? (
+                        <div className="permit-start-page__warning" role="alert">
+                          <p>
+                            A reviewer returned this application for revision. Open the SF-299
+                            form sections below to review the feedback, make corrections, and
+                            resubmit for approval.
+                          </p>
+                        </div>
                       ) : null}
                     </div>
                   ) : null}
@@ -660,13 +703,13 @@ export default function PermitStartPage() {
                     Project information is complete. Ready to authenticate.
                   </p>
                 )}
-                {customFormIndicator && isProjectInformationSubmitted ? (
+                {sectionFormCount > 0 && isProjectInformationSubmitted ? (
                   <div className="permit-start-page__custom-form-status" role="status" aria-live="polite">
                     <p>
-                      This process includes a custom form ({customFormIndicator.title}, decision element{" "}
-                      {customFormIndicator.decisionElementId}).
+                      This process digitizes Standard Form 299 as {sectionFormCount} phased form
+                      section{sectionFormCount === 1 ? "" : "s"}.
                     </p>
-                    <p>Complete it after you initiate the PermitFast project.</p>
+                    <p>Complete them after you initiate the PermitFast project.</p>
                   </div>
                 ) : null}
               </div>
@@ -738,14 +781,14 @@ export default function PermitStartPage() {
                 </span>
               ) : null}
             </div>
-            {customFormIndicator && isProjectInformationSubmitted ? (
+            {sectionFormCount > 0 && isProjectInformationSubmitted ? (
               <div className="permit-start-page__custom-form-actions">
                 <button
                   type="button"
                   className="usa-button usa-button--outline"
                   onClick={() => setCustomFormModalOpen(true)}
                 >
-                  Complete Additional Steps
+                  Complete SF-299 Form Sections
                 </button>
               </div>
             ) : null}
@@ -754,10 +797,17 @@ export default function PermitStartPage() {
         </section>
       </div>
       {isCustomFormModalOpen ? (
-        <PermitflowCustomFormModal
+        <PermitflowSf299FormModal
           state={customFormState}
-          formData={customFormDraft}
-          isAuthenticated={authState.status === "authenticated"}
+          drafts={customFormDrafts}
+          dirtySectionIds={dirtySectionIds}
+          activeSectionId={activeSectionId}
+          onSelectSection={setActiveSectionId}
+          auth={
+            authState.status === "authenticated"
+              ? { accessToken: authState.accessToken, userId: authState.userId }
+              : undefined
+          }
           saveState={customFormSaveState}
           submitState={customFormSubmitState}
           onDismiss={() => {
@@ -765,9 +815,7 @@ export default function PermitStartPage() {
             setCustomFormSaveState({ status: "idle" })
             setCustomFormSubmitState({ status: "idle" })
           }}
-          onChange={(event) => {
-            setCustomFormDraft((event.formData as Record<string, unknown>) ?? {})
-          }}
+          onChange={handleSectionDraftChange}
           onSave={handleSaveCustomForm}
           onSubmit={handleSubmitCustomForm}
         />
@@ -776,29 +824,155 @@ export default function PermitStartPage() {
   )
 }
 
-type PermitflowCustomFormModalProps = {
+type Sf299UploadContext = {
+  auth?: { accessToken: string; userId: string }
+  processInstanceId?: number
+  permitflowProjectId?: number
+  decisionElementId: number
+}
+
+function parseDocumentReference(value: unknown): { originalFilename?: string } | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return undefined
+  }
+  try {
+    const parsed = JSON.parse(value)
+    return isRecord(parsed)
+      ? { originalFilename: typeof parsed.originalFilename === "string" ? parsed.originalFilename : undefined }
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * RJSF widget for SF-299 `*_file` fields: uploads the picked file to the PermitFast
+ * `permit-documents` bucket and stores the JSON-string document reference as the value.
+ */
+function DocumentUploadWidget(props: WidgetProps) {
+  const [isUploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | undefined>(undefined)
+  const context = props.formContext as Sf299UploadContext | undefined
+  const reference = parseDocumentReference(props.value)
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target
+    const file = input.files?.[0]
+    if (!file) {
+      return
+    }
+    if (
+      !context?.auth ||
+      typeof context.processInstanceId !== "number" ||
+      typeof context.permitflowProjectId !== "number"
+    ) {
+      setUploadError("Authenticate with PermitFast before uploading documents.")
+      input.value = ""
+      return
+    }
+
+    setUploading(true)
+    setUploadError(undefined)
+    try {
+      const { encodedValue } = await uploadPermitflowDocument({
+        accessToken: context.auth.accessToken,
+        userId: context.auth.userId,
+        processInstanceId: context.processInstanceId,
+        permitflowProjectId: context.permitflowProjectId,
+        decisionElementId: context.decisionElementId,
+        fieldName: props.name,
+        file
+      })
+      props.onChange(encodedValue)
+    } catch (error) {
+      const message =
+        error instanceof ProjectPersistenceError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Unable to upload the document."
+      setUploadError(message)
+    } finally {
+      setUploading(false)
+      input.value = ""
+    }
+  }
+
+  return (
+    <div className="permit-start-page__file-widget">
+      <input
+        id={props.id}
+        type="file"
+        disabled={props.disabled || props.readonly || isUploading}
+        onChange={handleFileChange}
+      />
+      {isUploading ? (
+        <p className="permit-start-page__status" role="status" aria-live="polite">
+          Uploading…
+        </p>
+      ) : null}
+      {reference?.originalFilename ? (
+        <p className="permit-start-page__status">
+          Attached: <strong>{reference.originalFilename}</strong>
+        </p>
+      ) : null}
+      {uploadError ? (
+        <p className="permit-start-page__submit-error" role="alert">
+          {uploadError}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+const SF299_FORM_WIDGETS = { permitfastDocumentUpload: DocumentUploadWidget }
+
+function buildSectionUiSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const baseUiSchema = isRecord(schema.uiSchema) ? { ...schema.uiSchema } : {}
+  const properties = isRecord(schema.properties) ? schema.properties : {}
+  for (const key of Object.keys(properties)) {
+    if (!key.endsWith("_file")) {
+      continue
+    }
+    const existing = isRecord(baseUiSchema[key]) ? baseUiSchema[key] : {}
+    baseUiSchema[key] = { ...existing, "ui:widget": "permitfastDocumentUpload" }
+  }
+  return baseUiSchema
+}
+
+function sectionDisplayTitle(section: PermitflowSectionFormState, index: number): string {
+  return section.title ?? section.referenceId ?? `Section ${index + 1}`
+}
+
+type PermitflowSf299FormModalProps = {
   state: CustomFormModalState
-  formData: Record<string, unknown>
-  isAuthenticated: boolean
+  drafts: Record<number, Record<string, unknown>>
+  dirtySectionIds: ReadonlySet<number>
+  activeSectionId?: number
+  onSelectSection: (decisionElementId: number) => void
+  auth?: { accessToken: string; userId: string }
   saveState: CustomFormActionState
   submitState: CustomFormActionState
   onDismiss: () => void
-  onChange: (event: IChangeEvent) => void
-  onSave: () => void
+  onChange: (decisionElementId: number, draft: Record<string, unknown>) => void
+  onSave: (decisionElementId: number) => void
   onSubmit: () => void
 }
 
-function PermitflowCustomFormModal({
+function PermitflowSf299FormModal({
   state,
-  formData,
-  isAuthenticated,
+  drafts,
+  dirtySectionIds,
+  activeSectionId,
+  onSelectSection,
+  auth,
   saveState,
   submitState,
   onDismiss,
   onChange,
   onSave,
   onSubmit
-}: PermitflowCustomFormModalProps) {
+}: PermitflowSf299FormModalProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -821,18 +995,30 @@ function PermitflowCustomFormModal({
     }
   }, [])
 
-  const customFormSchema =
-    state.status === "success" && hasSchema(state.info.formSchema)
-      ? state.info.formSchema
-      : undefined
-  const uiSchema =
-    customFormSchema && isRecord(customFormSchema.uiSchema)
-      ? (customFormSchema.uiSchema as Record<string, unknown>)
-      : undefined
-  const schemaForRjsf = customFormSchema
-    ? Object.fromEntries(
-        Object.entries(customFormSchema).filter(([key]) => key !== "uiSchema")
-      )
+  const isAuthenticated = Boolean(auth)
+  const info = state.status === "success" ? state.info : undefined
+  const formSections = useMemo(
+    () => (info?.sections ?? []).filter((section) => section.hasForm),
+    [info]
+  )
+  const activeSection =
+    formSections.find((section) => section.decisionElementId === activeSectionId) ??
+    formSections[0]
+  const wasReturned = info?.projectCurrentStatus?.toLowerCase() === "returned"
+
+  const activeSchema =
+    activeSection && hasSchema(activeSection.formSchema) ? activeSection.formSchema : undefined
+  const activeUiSchema = activeSchema ? buildSectionUiSchema(activeSchema) : undefined
+  const activeSchemaForRjsf = activeSchema
+    ? Object.fromEntries(Object.entries(activeSchema).filter(([key]) => key !== "uiSchema"))
+    : undefined
+  const uploadContext: Sf299UploadContext | undefined = activeSection
+    ? {
+        auth,
+        processInstanceId: info?.processInstanceId,
+        permitflowProjectId: info?.projectId,
+        decisionElementId: activeSection.decisionElementId
+      }
     : undefined
 
   return (
@@ -846,14 +1032,14 @@ function PermitflowCustomFormModal({
       >
         <header className="process-info-modal__header">
           <div>
-            <p className="process-info-modal__eyebrow">Basic permit</p>
-            <h2 id="permitflow-custom-form-modal-title">Custom form</h2>
+            <p className="process-info-modal__eyebrow">{ROW_AUTHORIZATION_SF299_TITLE}</p>
+            <h2 id="permitflow-custom-form-modal-title">SF-299 application</h2>
           </div>
           <button
             type="button"
             className="process-info-modal__close"
             onClick={onDismiss}
-            aria-label="Close custom form dialog"
+            aria-label="Close SF-299 application dialog"
           >
             ×
           </button>
@@ -861,7 +1047,7 @@ function PermitflowCustomFormModal({
         <div className="process-info-modal__body">
           {state.status === "loading" || state.status === "idle" ? (
             <p className="permit-start-page__status" role="status" aria-live="polite">
-              Loading custom form…
+              Loading SF-299 application…
             </p>
           ) : null}
           {state.status === "error" ? (
@@ -869,72 +1055,150 @@ function PermitflowCustomFormModal({
               <p>{state.message}</p>
             </div>
           ) : null}
-          {state.status === "success" && state.info.exists && schemaForRjsf ? (
+          {info && info.exists && formSections.length > 0 ? (
             <>
-              {state.info.decisionElementTitle ? (
-                <p className="permit-start-page__status">
-                  Decision element: {state.info.decisionElementTitle}
-                </p>
+              {wasReturned ? (
+                <div className="permit-start-page__warning" role="alert">
+                  <p>
+                    A reviewer returned this application for revision. Sections with feedback are
+                    flagged below — update them and resubmit for approval.
+                  </p>
+                </div>
               ) : null}
               {!isAuthenticated ? (
                 <div className="permit-start-page__warning" role="status">
                   Authenticate with PermitFast on the start page to save or submit this form.
                 </div>
               ) : null}
-              <div className="permit-start-page__custom-form-shell">
-                <Form
-                  schema={schemaForRjsf}
-                  uiSchema={uiSchema}
-                  formData={formData}
-                  validator={validator}
-                  onChange={onChange}
-                >
-                  <div />
-                </Form>
-              </div>
-              <div className="permit-start-page__custom-form-footer">
-                <button
-                  type="button"
-                  className="usa-button usa-button--outline"
-                  disabled={!isAuthenticated || saveState.status === "saving" || submitState.status === "submitting"}
-                  onClick={onSave}
-                >
-                  {saveState.status === "saving" ? "Saving…" : "Save form"}
-                </button>
-                <button
-                  type="button"
-                  className="usa-button"
-                  disabled={!isAuthenticated || submitState.status === "submitting" || saveState.status === "saving"}
-                  onClick={onSubmit}
-                >
-                  {submitState.status === "submitting" ? "Submitting…" : "Submit for approval"}
-                </button>
-                {saveState.status === "error" ? (
-                  <span className="permit-start-page__submit-error" role="alert">
-                    {saveState.message}
-                  </span>
-                ) : null}
-                {saveState.status === "success" ? (
-                  <span className="permit-start-page__submit-success" role="status">
-                    {saveState.message}
-                  </span>
-                ) : null}
-                {submitState.status === "error" ? (
-                  <span className="permit-start-page__submit-error" role="alert">
-                    {submitState.message}
-                  </span>
-                ) : null}
-                {submitState.status === "success" ? (
-                  <span className="permit-start-page__submit-success" role="status">
-                    {submitState.message}
-                  </span>
-                ) : null}
+              <div className="permit-start-page__sf299">
+                <nav className="permit-start-page__sf299-nav" aria-label="SF-299 form sections">
+                  <ul>
+                    {formSections.map((section, index) => {
+                      const isActive =
+                        activeSection?.decisionElementId === section.decisionElementId
+                      const needsRevision = section.resultBool === false && section.resultNotes
+                      return (
+                        <li key={section.decisionElementId}>
+                          <button
+                            type="button"
+                            className={`permit-start-page__sf299-nav-item${
+                              isActive ? " permit-start-page__sf299-nav-item--active" : ""
+                            }`}
+                            aria-current={isActive ? "true" : undefined}
+                            onClick={() => onSelectSection(section.decisionElementId)}
+                          >
+                            <span>
+                              {index + 1}. {sectionDisplayTitle(section, index)}
+                            </span>
+                            {needsRevision ? (
+                              <span className="permit-start-page__sf299-flag">Revision requested</span>
+                            ) : null}
+                            {dirtySectionIds.has(section.decisionElementId) ? (
+                              <span className="permit-start-page__sf299-flag permit-start-page__sf299-flag--dirty">
+                                Unsaved changes
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </nav>
+                <div className="permit-start-page__sf299-panel">
+                  {activeSection && activeSchemaForRjsf ? (
+                    <>
+                      {activeSection.description ? (
+                        <p className="permit-start-page__status">{activeSection.description}</p>
+                      ) : null}
+                      {activeSection.resultBool === false && activeSection.resultNotes ? (
+                        <div className="permit-start-page__warning" role="alert">
+                          <p>
+                            <strong>Reviewer feedback:</strong> {activeSection.resultNotes}
+                          </p>
+                        </div>
+                      ) : null}
+                      <div className="permit-start-page__custom-form-shell">
+                        <Form
+                          key={activeSection.decisionElementId}
+                          schema={activeSchemaForRjsf}
+                          uiSchema={activeUiSchema}
+                          formData={drafts[activeSection.decisionElementId] ?? {}}
+                          validator={validator}
+                          widgets={SF299_FORM_WIDGETS}
+                          formContext={uploadContext}
+                          onChange={(event: IChangeEvent) => {
+                            onChange(
+                              activeSection.decisionElementId,
+                              (event.formData as Record<string, unknown>) ?? {}
+                            )
+                          }}
+                        >
+                          <div />
+                        </Form>
+                      </div>
+                      <div className="permit-start-page__custom-form-footer">
+                        <button
+                          type="button"
+                          className="usa-button usa-button--outline"
+                          disabled={
+                            !isAuthenticated ||
+                            saveState.status === "saving" ||
+                            submitState.status === "submitting"
+                          }
+                          onClick={() => onSave(activeSection.decisionElementId)}
+                        >
+                          {saveState.status === "saving" ? "Saving…" : "Save section"}
+                        </button>
+                        <button
+                          type="button"
+                          className="usa-button"
+                          disabled={
+                            !isAuthenticated ||
+                            submitState.status === "submitting" ||
+                            saveState.status === "saving"
+                          }
+                          onClick={onSubmit}
+                        >
+                          {submitState.status === "submitting"
+                            ? "Submitting…"
+                            : wasReturned
+                              ? "Resubmit for approval"
+                              : "Submit for approval"}
+                        </button>
+                        {saveState.status === "error" ? (
+                          <span className="permit-start-page__submit-error" role="alert">
+                            {saveState.message}
+                          </span>
+                        ) : null}
+                        {saveState.status === "success" ? (
+                          <span className="permit-start-page__submit-success" role="status">
+                            {saveState.message}
+                          </span>
+                        ) : null}
+                        {submitState.status === "error" ? (
+                          <span className="permit-start-page__submit-error" role="alert">
+                            {submitState.message}
+                          </span>
+                        ) : null}
+                        {submitState.status === "success" ? (
+                          <span className="permit-start-page__submit-success" role="status">
+                            {submitState.message}
+                          </span>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="permit-start-page__status">
+                      Select a section to review its form.
+                    </p>
+                  )}
+                </div>
               </div>
             </>
           ) : null}
-          {state.status === "success" && (!state.info.exists || !schemaForRjsf) ? (
+          {info && (!info.exists || formSections.length === 0) ? (
             <p className="permit-start-page__status">
-              No custom form schema is currently available for this process.
+              No SF-299 form sections are currently available for this process.
             </p>
           ) : null}
         </div>

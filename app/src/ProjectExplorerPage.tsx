@@ -5,7 +5,7 @@ import {
   fetchProjectHierarchy,
   type ProjectHierarchy
 } from "./utils/projectPersistence"
-import { loadBasicPermitProcessesForProjects } from "./utils/permitflow"
+import { loadRowAuthorizationProcessesForProjects } from "./utils/permitflow"
 import { loadComplexReviewProcessesForProjects } from "./utils/reviewworks"
 import {
   compareByTimestampDesc,
@@ -70,7 +70,7 @@ export default function ProjectExplorerPage() {
         if (!isMounted) return
         const projectList = hierarchy.map((entry) => entry.project)
         const [permitflowProcessesByProject, reviewworksProcessesByProject] = await Promise.all([
-          loadBasicPermitProcessesForProjects(projectList),
+          loadRowAuthorizationProcessesForProjects(projectList),
           loadComplexReviewProcessesForProjects(projectList)
         ])
         if (!isMounted) return

@@ -28,14 +28,14 @@ import {
   PRE_SCREENING_PROCESS_MODEL_ID,
   type PreScreeningAnalyticsPoint
 } from "./utils/projectPersistence"
-import { loadBasicPermitAnalytics } from "./utils/permitflow"
+import { loadRowAuthorizationAnalytics } from "./utils/permitflow"
 import { loadComplexReviewAnalytics } from "./utils/reviewworks"
 
 const defaultRuntimeUrl = getRuntimeUrl() ?? "/api/copilotkit-runtime"
 const CUSTOM_ADK_PROXY_URL = "/api/custom-adk/agent"
 
 const ANALYTICS_INSTRUCTIONS = [
-  "You are an analytics copilot for the HelpPermitMe pre-screening, Basic Permit, and Complex Review workflows.",
+  "You are an analytics copilot for the HelpPermitMe pre-screening, Right of Way Authorization, and Complex Review workflows.",
   "Interpret completion volumes and average completion times to surface notable trends and anomalies across all processes.",
   "Reference missing data explicitly when gaps appear in the series."
 ].join("\n")
@@ -45,11 +45,11 @@ const COMPLETIONS_ACCENT_COLOR = "#0f2f66"
 const AVERAGE_COLOR = "#f08a24"
 const AVERAGE_ACCENT_COLOR = "#f4c95f"
 
-// Basic Permit chart colors
-const BASIC_PERMIT_COMPLETIONS_COLOR = "#0f7d43"
-const BASIC_PERMIT_COMPLETIONS_ACCENT_COLOR = "#0a5c32"
-const BASIC_PERMIT_AVERAGE_COLOR = "#9333ea"
-const BASIC_PERMIT_AVERAGE_ACCENT_COLOR = "#c084fc"
+// Right of Way Authorization chart colors
+const ROW_AUTHORIZATION_COMPLETIONS_COLOR = "#0f7d43"
+const ROW_AUTHORIZATION_COMPLETIONS_ACCENT_COLOR = "#0a5c32"
+const ROW_AUTHORIZATION_AVERAGE_COLOR = "#9333ea"
+const ROW_AUTHORIZATION_AVERAGE_ACCENT_COLOR = "#c084fc"
 
 // Complex Review chart colors
 const COMPLEX_REVIEW_COMPLETIONS_COLOR = "#dc2626"
@@ -185,9 +185,9 @@ function AnalyticsContent() {
   const [points, setPoints] = useState<PreScreeningAnalyticsPoint[]>([])
   const [status, setStatus] = useState<LoadState>("loading")
   const [error, setError] = useState<string | null>(null)
-  const [basicPermitPoints, setBasicPermitPoints] = useState<PreScreeningAnalyticsPoint[]>([])
-  const [basicPermitStatus, setBasicPermitStatus] = useState<LoadState>("loading")
-  const [basicPermitError, setBasicPermitError] = useState<string | null>(null)
+  const [rowAuthorizationPoints, setRowAuthorizationPoints] = useState<PreScreeningAnalyticsPoint[]>([])
+  const [rowAuthorizationStatus, setRowAuthorizationStatus] = useState<LoadState>("loading")
+  const [rowAuthorizationError, setRowAuthorizationError] = useState<string | null>(null)
   const [complexReviewPoints, setComplexReviewPoints] = useState<PreScreeningAnalyticsPoint[]>([])
   const [complexReviewStatus, setComplexReviewStatus] = useState<LoadState>("loading")
   const [complexReviewError, setComplexReviewError] = useState<string | null>(null)
@@ -227,15 +227,15 @@ function AnalyticsContent() {
     let isMounted = true
 
     ;(async () => {
-      setBasicPermitStatus("loading")
-      setBasicPermitError(null)
+      setRowAuthorizationStatus("loading")
+      setRowAuthorizationError(null)
       try {
-        const analytics = await loadBasicPermitAnalytics()
+        const analytics = await loadRowAuthorizationAnalytics()
         if (!isMounted) {
           return
         }
-        setBasicPermitPoints(analytics)
-        setBasicPermitStatus("success")
+        setRowAuthorizationPoints(analytics)
+        setRowAuthorizationStatus("success")
       } catch (caught) {
         if (!isMounted) {
           return
@@ -243,9 +243,9 @@ function AnalyticsContent() {
         const message =
           caught instanceof Error
             ? caught.message
-            : "Failed to load Basic Permit analytics data."
-        setBasicPermitError(message)
-        setBasicPermitStatus("error")
+            : "Failed to load Right of Way Authorization analytics data."
+        setRowAuthorizationError(message)
+        setRowAuthorizationStatus("error")
       }
     })()
 
@@ -298,11 +298,11 @@ function AnalyticsContent() {
   useCopilotReadable(
     {
       description:
-        "Daily counts of completed Basic Permit processes and the corresponding average completion time in days.",
-      value: basicPermitPoints,
-      convert: (_, value) => formatSummaryForCopilot(value, "Basic Permit")
+        "Daily counts of completed Right of Way Authorization processes and the corresponding average completion time in days.",
+      value: rowAuthorizationPoints,
+      convert: (_, value) => formatSummaryForCopilot(value, "Right of Way Authorization")
     },
-    [basicPermitPoints]
+    [rowAuthorizationPoints]
   )
 
   useCopilotReadable(
@@ -326,15 +326,15 @@ function AnalyticsContent() {
     [points]
   )
 
-  const basicPermitChartData: ChartDatum[] = useMemo(
+  const rowAuthorizationChartData: ChartDatum[] = useMemo(
     () =>
-      basicPermitPoints.map((point) => ({
+      rowAuthorizationPoints.map((point) => ({
         date: point.date,
         completions: point.completionCount,
         averageDays: point.averageCompletionDays,
         durationSampleSize: point.durationSampleSize
       })),
-    [basicPermitPoints]
+    [rowAuthorizationPoints]
   )
 
   const hasCompletions = useMemo(
@@ -342,9 +342,9 @@ function AnalyticsContent() {
     [points]
   )
 
-  const hasBasicPermitCompletions = useMemo(
-    () => basicPermitPoints.some((point) => typeof point.completionCount === "number"),
-    [basicPermitPoints]
+  const hasRowAuthorizationCompletions = useMemo(
+    () => rowAuthorizationPoints.some((point) => typeof point.completionCount === "number"),
+    [rowAuthorizationPoints]
   )
 
   const complexReviewChartData: ChartDatum[] = useMemo(
@@ -391,16 +391,16 @@ function AnalyticsContent() {
     }
   }, [points])
 
-  const basicPermitSummary = useMemo(() => {
-    const totalCompletions = basicPermitPoints.reduce(
+  const rowAuthorizationSummary = useMemo(() => {
+    const totalCompletions = rowAuthorizationPoints.reduce(
       (sum, point) => sum + (point.completionCount ?? 0),
       0
     )
-    const durationSampleSize = basicPermitPoints.reduce(
+    const durationSampleSize = rowAuthorizationPoints.reduce(
       (sum, point) => sum + point.durationSampleSize,
       0
     )
-    const durationTotal = basicPermitPoints.reduce(
+    const durationTotal = rowAuthorizationPoints.reduce(
       (sum, point) => sum + (point.durationTotalDays ?? 0),
       0
     )
@@ -408,10 +408,10 @@ function AnalyticsContent() {
       durationSampleSize > 0
         ? Math.round((durationTotal / durationSampleSize) * 100) / 100
         : null
-    const firstCompletion = basicPermitPoints.find(
+    const firstCompletion = rowAuthorizationPoints.find(
       (point) => typeof point.completionCount === "number"
     )
-    const lastCompletion = [...basicPermitPoints]
+    const lastCompletion = [...rowAuthorizationPoints]
       .reverse()
       .find((point) => typeof point.completionCount === "number")
 
@@ -422,7 +422,7 @@ function AnalyticsContent() {
       latestCompletionDate: lastCompletion?.date,
       durationSampleSize
     }
-  }, [basicPermitPoints])
+  }, [rowAuthorizationPoints])
 
   const complexReviewSummary = useMemo(() => {
     const totalCompletions = complexReviewPoints.reduce(
@@ -470,7 +470,7 @@ function AnalyticsContent() {
             <div>
               <h1>Analytics</h1>
               <p>
-                Track daily pre-screening and Basic Permit completions along with how long it takes to
+                Track daily pre-screening and Right of Way Authorization completions along with how long it takes to
                 finish each review. Use the Copilot to interpret trends or spot gaps in the workflow.
               </p>
             </div>
@@ -539,64 +539,64 @@ function AnalyticsContent() {
             <article className="analytics-card">
               <header className="analytics-card__header">
                 <div>
-                  <h2 className="analytics-card__title">Basic Permit overview</h2>
+                  <h2 className="analytics-card__title">Right of Way Authorization overview</h2>
                   <p className="analytics-card__subtitle">
-                    Totals and timing for all captured Basic Permit completions.
+                    Totals and timing for all captured Right of Way Authorization completions.
                   </p>
                 </div>
               </header>
               <div className="analytics-card__body">
-                {basicPermitStatus === "loading" ? (
-                  <p className="analytics-status">Loading Basic Permit analytics…</p>
+                {rowAuthorizationStatus === "loading" ? (
+                  <p className="analytics-status">Loading Right of Way Authorization analytics…</p>
                 ) : null}
-                {basicPermitStatus === "error" ? (
+                {rowAuthorizationStatus === "error" ? (
                   <p className="analytics-status analytics-status--error">
-                    {basicPermitError ?? "Unable to load Basic Permit analytics."}
+                    {rowAuthorizationError ?? "Unable to load Right of Way Authorization analytics."}
                   </p>
                 ) : null}
-                {basicPermitStatus === "success" ? (
+                {rowAuthorizationStatus === "success" ? (
                   <dl className="analytics-summary">
                     <div className="analytics-summary__item">
                       <dt className="analytics-summary__label">Total completed</dt>
                       <dd className="analytics-summary__value">
-                        {basicPermitSummary.totalCompletions}
+                        {rowAuthorizationSummary.totalCompletions}
                       </dd>
                     </div>
                     <div className="analytics-summary__item">
                       <dt className="analytics-summary__label">Overall average</dt>
                       <dd className="analytics-summary__value">
-                        {basicPermitSummary.overallAverage !== null
-                          ? `${basicPermitSummary.overallAverage} days`
+                        {rowAuthorizationSummary.overallAverage !== null
+                          ? `${rowAuthorizationSummary.overallAverage} days`
                           : "—"}
                       </dd>
-                      {basicPermitSummary.overallAverage !== null ? (
+                      {rowAuthorizationSummary.overallAverage !== null ? (
                         <dd className="analytics-summary__hint">
-                          Based on {basicPermitSummary.durationSampleSize} processes.
+                          Based on {rowAuthorizationSummary.durationSampleSize} processes.
                         </dd>
                       ) : null}
                     </div>
                     <div className="analytics-summary__item">
                       <dt className="analytics-summary__label">Latest completion</dt>
                       <dd className="analytics-summary__value">
-                        {basicPermitSummary.latestCompletionDate
-                          ? formatDisplayDate(basicPermitSummary.latestCompletionDate, {
+                        {rowAuthorizationSummary.latestCompletionDate
+                          ? formatDisplayDate(rowAuthorizationSummary.latestCompletionDate, {
                               month: "short",
                               day: "numeric",
                               year: "numeric"
                             })
                           : "—"}
                       </dd>
-                      {basicPermitSummary.firstCompletionDate &&
-                      basicPermitSummary.latestCompletionDate ? (
+                      {rowAuthorizationSummary.firstCompletionDate &&
+                      rowAuthorizationSummary.latestCompletionDate ? (
                         <dd className="analytics-summary__hint">
                           Range{" "}
-                          {formatDisplayDate(basicPermitSummary.firstCompletionDate, {
+                          {formatDisplayDate(rowAuthorizationSummary.firstCompletionDate, {
                             month: "short",
                             day: "numeric",
                             year: "numeric"
                           })}{" "}
                           –{" "}
-                          {formatDisplayDate(basicPermitSummary.latestCompletionDate, {
+                          {formatDisplayDate(rowAuthorizationSummary.latestCompletionDate, {
                             month: "short",
                             day: "numeric",
                             year: "numeric"
@@ -780,26 +780,26 @@ function AnalyticsContent() {
             <article className="analytics-card analytics-card--chart">
               <header className="analytics-card__header">
                 <div>
-                  <h2 className="analytics-card__title">Daily Basic Permit outcomes</h2>
+                  <h2 className="analytics-card__title">Daily Right of Way Authorization outcomes</h2>
                   <p className="analytics-card__subtitle">
-                    A line chart with markers showing completed Basic Permit processes and the average
+                    A line chart with markers showing completed Right of Way Authorization processes and the average
                     completion time in days.
                   </p>
                 </div>
               </header>
               <div className="analytics-card__body">
-                {basicPermitStatus === "loading" ? (
-                  <p className="analytics-status">Loading Basic Permit analytics…</p>
+                {rowAuthorizationStatus === "loading" ? (
+                  <p className="analytics-status">Loading Right of Way Authorization analytics…</p>
                 ) : null}
-                {basicPermitStatus === "error" ? (
-                  <p className="analytics-status analytics-status--error">{basicPermitError}</p>
+                {rowAuthorizationStatus === "error" ? (
+                  <p className="analytics-status analytics-status--error">{rowAuthorizationError}</p>
                 ) : null}
-                {basicPermitStatus === "success" ? (
-                  hasBasicPermitCompletions ? (
+                {rowAuthorizationStatus === "success" ? (
+                  hasRowAuthorizationCompletions ? (
                     <div className="analytics-chart">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart
-                          data={basicPermitChartData}
+                          data={rowAuthorizationChartData}
                           margin={{ top: 16, right: 28, left: 12, bottom: 20 }}
                         >
                           <CartesianGrid stroke="rgba(7, 29, 66, 0.1)" strokeDasharray="3 3" />
@@ -811,30 +811,30 @@ function AnalyticsContent() {
                           <YAxis
                             yAxisId="left"
                             allowDecimals={false}
-                            tick={{ fontSize: 12, fill: BASIC_PERMIT_COMPLETIONS_COLOR, fontWeight: 600 }}
-                            axisLine={{ stroke: BASIC_PERMIT_COMPLETIONS_COLOR }}
-                            tickLine={{ stroke: BASIC_PERMIT_COMPLETIONS_COLOR }}
+                            tick={{ fontSize: 12, fill: ROW_AUTHORIZATION_COMPLETIONS_COLOR, fontWeight: 600 }}
+                            axisLine={{ stroke: ROW_AUTHORIZATION_COMPLETIONS_COLOR }}
+                            tickLine={{ stroke: ROW_AUTHORIZATION_COMPLETIONS_COLOR }}
                             label={{
                               value: "Completed permits",
                               angle: -90,
                               position: "insideLeft",
                               offset: 12,
-                              fill: BASIC_PERMIT_COMPLETIONS_COLOR,
+                              fill: ROW_AUTHORIZATION_COMPLETIONS_COLOR,
                               fontWeight: 600
                             }}
                           />
                           <YAxis
                             yAxisId="right"
                             orientation="right"
-                            tick={{ fontSize: 12, fill: BASIC_PERMIT_AVERAGE_COLOR, fontWeight: 600 }}
-                            axisLine={{ stroke: BASIC_PERMIT_AVERAGE_COLOR }}
-                            tickLine={{ stroke: BASIC_PERMIT_AVERAGE_COLOR }}
+                            tick={{ fontSize: 12, fill: ROW_AUTHORIZATION_AVERAGE_COLOR, fontWeight: 600 }}
+                            axisLine={{ stroke: ROW_AUTHORIZATION_AVERAGE_COLOR }}
+                            tickLine={{ stroke: ROW_AUTHORIZATION_AVERAGE_COLOR }}
                             label={{
                               value: "Avg completion (days)",
                               angle: 90,
                               position: "insideRight",
                               offset: 12,
-                              fill: BASIC_PERMIT_AVERAGE_COLOR,
+                              fill: ROW_AUTHORIZATION_AVERAGE_COLOR,
                               fontWeight: 600
                             }}
                           />
@@ -844,13 +844,13 @@ function AnalyticsContent() {
                             type="monotone"
                             dataKey="completions"
                             name="Completed permits"
-                            stroke={BASIC_PERMIT_COMPLETIONS_COLOR}
+                            stroke={ROW_AUTHORIZATION_COMPLETIONS_COLOR}
                             strokeWidth={2}
                             connectNulls
                             dot={{
                               r: 4,
-                              fill: BASIC_PERMIT_COMPLETIONS_COLOR,
-                              stroke: BASIC_PERMIT_COMPLETIONS_ACCENT_COLOR,
+                              fill: ROW_AUTHORIZATION_COMPLETIONS_COLOR,
+                              stroke: ROW_AUTHORIZATION_COMPLETIONS_ACCENT_COLOR,
                               strokeWidth: 2
                             }}
                             yAxisId="left"
@@ -859,13 +859,13 @@ function AnalyticsContent() {
                             type="monotone"
                             dataKey="averageDays"
                             name="Average completion time"
-                            stroke={BASIC_PERMIT_AVERAGE_COLOR}
+                            stroke={ROW_AUTHORIZATION_AVERAGE_COLOR}
                             strokeWidth={2}
                             connectNulls
                             dot={{
                               r: 4,
-                              fill: BASIC_PERMIT_AVERAGE_ACCENT_COLOR,
-                              stroke: BASIC_PERMIT_AVERAGE_COLOR,
+                              fill: ROW_AUTHORIZATION_AVERAGE_ACCENT_COLOR,
+                              stroke: ROW_AUTHORIZATION_AVERAGE_COLOR,
                               strokeWidth: 2
                             }}
                             yAxisId="right"
@@ -875,7 +875,7 @@ function AnalyticsContent() {
                     </div>
                   ) : (
                     <p className="analytics-status analytics-status--muted">
-                      No Basic Permit completions have been recorded yet.
+                      No Right of Way Authorization completions have been recorded yet.
                     </p>
                   )
                 ) : null}

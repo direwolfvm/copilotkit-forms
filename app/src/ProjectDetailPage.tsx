@@ -17,7 +17,7 @@ import {
   type ProjectHierarchy,
   type ProjectProcessSummary
 } from "./utils/projectPersistence"
-import { loadBasicPermitProcessesForProjects } from "./utils/permitflow"
+import { loadRowAuthorizationProcessesForProjects } from "./utils/permitflow"
 import { loadComplexReviewProcessesForProjects } from "./utils/reviewworks"
 import {
   StatusIndicator,
@@ -25,7 +25,7 @@ import {
   compareByTimestampDesc,
   determineProjectStatus,
   determinePreScreeningStatus,
-  determineBasicPermitStatus,
+  determineRowAuthorizationStatus,
   determineComplexReviewStatus
 } from "./utils/projectStatus"
 import { ArcgisGeometryViewer } from "./components/ArcgisGeometryViewer"
@@ -162,9 +162,9 @@ function ProcessRow({ process }: { process: ProjectProcessSummary }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const hasMilestones = process.caseEvents.length > 0
   const preScreeningStatus = determinePreScreeningStatus(process)
-  const basicPermitStatus = determineBasicPermitStatus(process)
+  const rowAuthorizationStatus = determineRowAuthorizationStatus(process)
   const complexReviewStatus = determineComplexReviewStatus(process)
-  const processStatus = preScreeningStatus ?? basicPermitStatus ?? complexReviewStatus
+  const processStatus = preScreeningStatus ?? rowAuthorizationStatus ?? complexReviewStatus
 
   const chronologicalEvents = useMemo(
     () => [...process.caseEvents].reverse(),
@@ -274,7 +274,7 @@ export default function ProjectDetailPage() {
 
         const projectList = [match.project]
         const [permitflowProcesses, reviewworksProcesses] = await Promise.all([
-          loadBasicPermitProcessesForProjects(projectList),
+          loadRowAuthorizationProcessesForProjects(projectList),
           loadComplexReviewProcessesForProjects(projectList)
         ])
         if (!isMounted) return

@@ -8,7 +8,7 @@ import {
   type ProjectHierarchy,
   type ProjectProcessSummary
 } from "./utils/projectPersistence"
-import { loadBasicPermitProcessesForProjects } from "./utils/permitflow"
+import { loadRowAuthorizationProcessesForProjects } from "./utils/permitflow"
 import { loadComplexReviewProcessesForProjects } from "./utils/reviewworks"
 import { ArcgisSketchMap, type GeometryChange } from "./components/ArcgisSketchMap"
 import {
@@ -16,12 +16,12 @@ import {
   formatTimestamp,
   compareByTimestampDesc,
   determinePreScreeningStatus,
-  determineBasicPermitStatus,
+  determineRowAuthorizationStatus,
   determineComplexReviewStatus,
   determineIpacStatus,
   determineProjectStatus,
   getLatestCaseEvent,
-  isBasicPermitProcess,
+  isRowAuthorizationProcess,
   isComplexReviewProcess,
   isIpacChecklistItem,
   isIpacShadowProcess,
@@ -38,7 +38,7 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
   )
   const latestCaseEvent = process.caseEvents[0]
   const preScreeningStatus = determinePreScreeningStatus(process)
-  const basicPermitStatus = determineBasicPermitStatus(process)
+  const rowAuthorizationStatus = determineRowAuthorizationStatus(process)
   const complexReviewStatus = determineComplexReviewStatus(process)
   const ipacStatus = determineIpacStatus(process)
   const latestEventLabel = latestCaseEvent?.name || latestCaseEvent?.eventType
@@ -64,8 +64,8 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
             {preScreeningStatus ? (
               <StatusIndicator variant={preScreeningStatus.variant} label={preScreeningStatus.label} />
             ) : null}
-            {basicPermitStatus ? (
-              <StatusIndicator variant={basicPermitStatus.variant} label={basicPermitStatus.label} />
+            {rowAuthorizationStatus ? (
+              <StatusIndicator variant={rowAuthorizationStatus.variant} label={rowAuthorizationStatus.label} />
             ) : null}
             {complexReviewStatus ? (
               <StatusIndicator variant={complexReviewStatus.variant} label={complexReviewStatus.label} />
@@ -172,8 +172,8 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
     () => entry.processes.filter((process) => isPreScreeningProcess(process)),
     [entry.processes]
   )
-  const basicPermitProcess = useMemo(
-    () => entry.processes.find((process) => isBasicPermitProcess(process)),
+  const rowAuthorizationProcess = useMemo(
+    () => entry.processes.find((process) => isRowAuthorizationProcess(process)),
     [entry.processes]
   )
   const complexReviewProcess = useMemo(
@@ -189,7 +189,7 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
       entry.processes.filter(
         (process) =>
           !isPreScreeningProcess(process) &&
-          !isBasicPermitProcess(process) &&
+          !isRowAuthorizationProcess(process) &&
           !isComplexReviewProcess(process) &&
           !isIpacShadowProcess(process)
       ),
@@ -218,8 +218,12 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
   const getWorkflowProcessForItem = useCallback(
     (label: string) => {
       const normalized = label.toLowerCase().trim()
-      if (normalized === "basic permit") {
-        return basicPermitProcess
+      if (
+        normalized === "right of way authorization" ||
+        normalized === "right of way authorization (sf-299)" ||
+        normalized === "basic permit"
+      ) {
+        return rowAuthorizationProcess
       }
       if (normalized === "complex review") {
         return complexReviewProcess
@@ -229,7 +233,7 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
       }
       return undefined
     },
-    [basicPermitProcess, complexReviewProcess, ipacProcess]
+    [rowAuthorizationProcess, complexReviewProcess, ipacProcess]
   )
 
   return (
@@ -385,7 +389,7 @@ export function ProjectsPage() {
         }
         const projectList = hierarchy.map((entry) => entry.project)
         const [permitflowProcessesByProject, reviewworksProcessesByProject] = await Promise.all([
-          loadBasicPermitProcessesForProjects(projectList),
+          loadRowAuthorizationProcessesForProjects(projectList),
           loadComplexReviewProcessesForProjects(projectList)
         ])
         if (!isMounted) {
