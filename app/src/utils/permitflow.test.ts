@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { sanitizeEvaluationDataForSchema } from "./permitflow"
+import {
+  buildLocationMapFeature,
+  buildLocationMapScreening,
+  sanitizeEvaluationDataForSchema
+} from "./permitflow"
+import type { GeospatialResultsState } from "../types/geospatial"
 
 const applicantInfoSchema = {
   type: "object",
@@ -80,5 +85,123 @@ describe("sanitizeEvaluationDataForSchema", () => {
     })
     expect(result.screening).toEqual({ source: "ipac" })
     expect(result).not.toHaveProperty("applicant_name")
+  })
+})
+
+function buildScreeningResults(): GeospatialResultsState {
+  return {
+    lastRunAt: "2026-07-10T12:00:00.000Z",
+    nepassist: {
+      status: "success",
+      summary: [
+        { question: "Wild and scenic river?", displayAnswer: "Yes", severity: "yes" }
+      ],
+      raw: { huge: "payload" }
+    },
+    ipac: {
+      status: "success",
+      summary: {
+        listedSpecies: [{ commonName: "Mexican Spotted Owl", status: "Threatened" }],
+        criticalHabitats: [],
+        migratoryBirds: [],
+        wetlands: []
+      },
+      raw: { huge: "payload" },
+      meta: { endpoint: "ipac" }
+    },
+    environmentalMap: {
+      status: "success",
+      summary: { url: "https://example.com/map.png", latitude: 38.5, longitude: -109.5, bufferMiles: 0.5 }
+    },
+    messages: ["ran fine"]
+  }
+}
+
+describe("buildLocationMapScreening", () => {
+  it("keeps only per-service status and summary plus lastRunAt", () => {
+    const screening = buildLocationMapScreening(buildScreeningResults())
+    expect(screening).toEqual({
+      lastRunAt: "2026-07-10T12:00:00.000Z",
+      ipac: {
+        status: "success",
+        summary: {
+          listedSpecies: [{ commonName: "Mexican Spotted Owl", status: "Threatened" }],
+          criticalHabitats: [],
+          migratoryBirds: [],
+          wetlands: []
+        }
+      },
+      nepassist: {
+        status: "success",
+        summary: [
+          { question: "Wild and scenic river?", displayAnswer: "Yes", severity: "yes" }
+        ]
+      }
+    })
+  })
+
+  it("returns undefined when no summaries exist", () => {
+    expect(
+      buildLocationMapScreening({
+        nepassist: { status: "idle" },
+        ipac: { status: "error", error: "boom" }
+      })
+    ).toBeUndefined()
+    expect(buildLocationMapScreening(undefined)).toBeUndefined()
+  })
+})
+
+describe("buildLocationMapFeature", () => {
+  it("builds a Feature from the portal's bare GeoJSON geometry with screening attached", () => {
+    const encoded = buildLocationMapFeature(
+      {
+        location_object: JSON.stringify({
+          type: "LineString",
+          coordinates: [
+            [-109.549, 38.573],
+            [-109.489, 38.612]
+          ]
+        })
+      },
+      buildScreeningResults()
+    )
+    const feature = JSON.parse(encoded ?? "{}")
+    expect(feature.type).toBe("Feature")
+    expect(feature.geometry.type).toBe("LineString")
+    expect(feature.geometry.coordinates[0]).toEqual([-109.549, 38.573])
+    expect(feature.properties.zoom).toBe(12)
+    expect(feature.properties.screening.ipac.summary.listedSpecies).toHaveLength(1)
+    expect(feature.properties.screening).not.toHaveProperty("environmentalMap")
+  })
+
+  it("unwraps Feature and FeatureCollection wrappers", () => {
+    const wrapped = buildLocationMapFeature({
+      location_object: JSON.stringify({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [-109.55, 38.57] },
+            properties: {}
+          }
+        ]
+      })
+    })
+    expect(JSON.parse(wrapped ?? "{}").geometry).toEqual({
+      type: "Point",
+      coordinates: [-109.55, 38.57]
+    })
+  })
+
+  it("falls back to a lon/lat Point from the coordinate fields", () => {
+    const encoded = buildLocationMapFeature({ location_lat: 38.57, location_lon: -109.55 })
+    const feature = JSON.parse(encoded ?? "{}")
+    expect(feature.geometry).toEqual({ type: "Point", coordinates: [-109.55, 38.57] })
+  })
+
+  it("returns undefined without geometry and omits screening when absent", () => {
+    expect(buildLocationMapFeature({ title: "No location" })).toBeUndefined()
+    const noScreening = buildLocationMapFeature({ location_lat: 1, location_lon: 2 })
+    expect(JSON.parse(noScreening ?? "{}").properties).not.toHaveProperty("screening")
   })
 })

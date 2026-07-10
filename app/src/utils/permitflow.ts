@@ -1,4 +1,5 @@
 import type { ProjectContact, ProjectFormData } from "../schema/projectSchema"
+import type { GeospatialResultsState } from "../types/geospatial"
 import { getPermitflowAnonKey, getPermitflowTenantId, getPermitflowUrl } from "../runtimeConfig"
 import {
   ProjectPersistenceError,
@@ -407,6 +408,98 @@ export function sanitizeEvaluationDataForSchema(
   return sanitized
 }
 
+const GEOJSON_GEOMETRY_TYPES = new Set([
+  "Point",
+  "MultiPoint",
+  "LineString",
+  "MultiLineString",
+  "Polygon",
+  "MultiPolygon"
+])
+
+function extractGeoJsonGeometry(value: unknown): Record<string, unknown> | undefined {
+  const record = normalizeObjectRecord(value)
+  if (!record) {
+    return undefined
+  }
+  if (record.type === "Feature") {
+    return extractGeoJsonGeometry(record.geometry)
+  }
+  if (record.type === "FeatureCollection" && Array.isArray(record.features)) {
+    return extractGeoJsonGeometry(record.features[0])
+  }
+  if (
+    typeof record.type === "string" &&
+    GEOJSON_GEOMETRY_TYPES.has(record.type) &&
+    Array.isArray(record.coordinates)
+  ) {
+    return record
+  }
+  return undefined
+}
+
+/**
+ * Project the portal's screening state onto PermitFast's `properties.screening` shape:
+ * per-service status + summary only. Raw payloads, meta, the environmental map, and
+ * messages are deliberately omitted — PermitFast ignores them and the raw responses run
+ * to hundreds of KB.
+ */
+export function buildLocationMapScreening(
+  results?: GeospatialResultsState
+): Record<string, unknown> | undefined {
+  if (!results) {
+    return undefined
+  }
+  const ipacSummary = results.ipac?.summary
+  const nepassistSummary = results.nepassist?.summary
+  if (!ipacSummary && !nepassistSummary) {
+    return undefined
+  }
+  return stripUndefined({
+    lastRunAt: normalizeString(results.lastRunAt),
+    ipac: ipacSummary ? { status: results.ipac.status, summary: ipacSummary } : undefined,
+    nepassist: nepassistSummary
+      ? { status: results.nepassist.status, summary: nepassistSummary }
+      : undefined
+  })
+}
+
+/**
+ * Build the SF-299 `location_map` value: a JSON-stringified GeoJSON Feature. The geometry
+ * comes from the portal's stored GeoJSON (`location_object`; Feature/FeatureCollection
+ * wrappers unwrapped), falling back to a Point from `location_lat`/`location_lon`.
+ * Screening summaries travel in `properties.screening`.
+ */
+export function buildLocationMapFeature(
+  formData: ProjectFormData,
+  geospatialResults?: GeospatialResultsState
+): string | undefined {
+  let geometry: Record<string, unknown> | undefined
+  const locationObject = normalizeString(formData.location_object)
+  if (locationObject) {
+    geometry = extractGeoJsonGeometry(safeJsonParse(locationObject))
+  }
+  if (!geometry) {
+    const lat = normalizeNumber(formData.location_lat)
+    const lon = normalizeNumber(formData.location_lon)
+    if (typeof lat === "number" && typeof lon === "number") {
+      geometry = { type: "Point", coordinates: [lon, lat] }
+    }
+  }
+  if (!geometry) {
+    return undefined
+  }
+
+  return JSON.stringify({
+    type: "Feature",
+    geometry,
+    properties: stripUndefined({
+      zoom: 12,
+      screening: buildLocationMapScreening(geospatialResults)
+    })
+  })
+}
+
 /**
  * Seed a section's initial `evaluation_data` from the portal project profile. Only fields
  * that the section's `form_data` schema actually declares are written — the schema is the
@@ -414,7 +507,8 @@ export function sanitizeEvaluationDataForSchema(
  */
 function seedSf299SectionEvaluationData(
   element: DecisionElementRecord,
-  formData: ProjectFormData
+  formData: ProjectFormData,
+  geospatialResults?: GeospatialResultsState
 ): Record<string, unknown> {
   const referenceId = normalizeString(element.processModelInternalReferenceId)
   const properties = getSchemaProperties(element.formData)
@@ -435,17 +529,7 @@ function seedSf299SectionEvaluationData(
       location_description: normalizeString(formData.location_text)
     })
   } else if (referenceId === SF299_LOCATION_SURVEY_REFERENCE_ID) {
-    const lat = normalizeNumber(formData.location_lat)
-    const lon = normalizeNumber(formData.location_lon)
-    if (typeof lat === "number" && typeof lon === "number") {
-      candidates.location_map = JSON.stringify({
-        mode: "marker",
-        lat,
-        lon,
-        zoom: 12,
-        coordinates: [[lat, lon]]
-      })
-    }
+    candidates.location_map = buildLocationMapFeature(formData, geospatialResults)
   }
 
   const seeded: Record<string, unknown> = {}
@@ -1092,11 +1176,13 @@ async function createPermitflowRecordsBatch<T>(
 export async function submitPermitflowProject({
   formData,
   accessToken,
-  userId
+  userId,
+  geospatialResults
 }: {
   formData: ProjectFormData
   accessToken: string
   userId: string
+  geospatialResults?: GeospatialResultsState
 }): Promise<PermitflowSubmitResult> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
@@ -1198,7 +1284,7 @@ export async function submitPermitflowProject({
   // PATCHed as the applicant completes each phase.
   const seededSections = sectionElements.map((element) => ({
     element,
-    evaluationData: seedSf299SectionEvaluationData(element, formData)
+    evaluationData: seedSf299SectionEvaluationData(element, formData, geospatialResults)
   }))
   const decisionPayloads = seededSections.map(({ element, evaluationData }) => ({
     process_decision_element: element.id,
