@@ -1,5 +1,13 @@
 # External System API Integration Guide
 
+> **⚠️ Superseded for the Right of Way Authorization (SF-299) permit.** PermitFast replaced
+> the old 3-element "Basic Permit" (process model 1) with **"Basic Permit (SF-299)"** — a
+> phased digitization of Standard Form 299 with 11 form sections, no auth decision element,
+> required `tenant_id` scoping, and file uploads via the `permit-documents` bucket. See
+> [`PERMITFAST_HANDOFF.md`](../PERMITFAST_HANDOFF.md) at the repo root and the in-app
+> developer docs at `https://permitfast.app.cloud.gov/developers` for the current contract.
+> The steps below describe the legacy flow and are kept for historical reference.
+
 This document describes how an external system can create permit applications through the Supabase API, matching the workflow implemented in the PermitFlow web application.
 
 ## Overview

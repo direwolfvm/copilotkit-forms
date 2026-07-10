@@ -8,8 +8,10 @@ export type { ProcessStatusVariant, StatusIndicatorProps } from "../components/S
 const PRE_SCREENING_COMPLETE_EVENT = "Pre-screening complete"
 const PRE_SCREENING_INITIATED_EVENT = "Pre-screening initiated"
 const PRE_SCREENING_ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
-const BASIC_PERMIT_LABEL = "Basic Permit"
-const BASIC_PERMIT_APPROVED_EVENT = "project_approved"
+const ROW_AUTHORIZATION_LABEL = "Right of Way Authorization"
+// Data recorded before the SF-299 transition still uses the old process/checklist label.
+const LEGACY_BASIC_PERMIT_LABEL = "Basic Permit"
+const ROW_AUTHORIZATION_APPROVED_EVENT = "project_approved"
 const COMPLEX_REVIEW_LABEL = "Complex Review"
 const COMPLEX_REVIEW_APPROVED_EVENT = "project_approved"
 const IPAC_CONSULTATION_COMPLETE_EVENT = "IPaC consultation complete"
@@ -100,23 +102,27 @@ export function determinePreScreeningStatus(
   return undefined
 }
 
-export function isBasicPermitProcess(process: ProjectProcessSummary): boolean {
+export function isRowAuthorizationProcess(process: ProjectProcessSummary): boolean {
   const haystack = `${process.title ?? ""} ${process.description ?? ""}`.toLowerCase()
-  return haystack.includes("basic permit")
+  return (
+    haystack.includes("right of way authorization") ||
+    haystack.includes("sf-299") ||
+    haystack.includes(LEGACY_BASIC_PERMIT_LABEL.toLowerCase())
+  )
 }
 
-export function determineBasicPermitStatus(
+export function determineRowAuthorizationStatus(
   process: ProjectProcessSummary
 ): { variant: PreScreeningStatus; label: string } | undefined {
-  if (!isBasicPermitProcess(process)) {
+  if (!isRowAuthorizationProcess(process)) {
     return undefined
   }
 
   const hasApproval = process.caseEvents.some(
-    (event) => event.eventType?.toLowerCase() === BASIC_PERMIT_APPROVED_EVENT
+    (event) => event.eventType?.toLowerCase() === ROW_AUTHORIZATION_APPROVED_EVENT
   )
   if (hasApproval) {
-    return { variant: "complete", label: `${BASIC_PERMIT_LABEL} complete` }
+    return { variant: "complete", label: `${ROW_AUTHORIZATION_LABEL} complete` }
   }
 
   const latestEvent = process.caseEvents[0]
@@ -127,15 +133,15 @@ export function determineBasicPermitStatus(
   const eventStatus = latestEvent.status?.toLowerCase()
 
   if (eventStatus === "late" || eventStatus === "overdue" || eventStatus === "delayed") {
-    return { variant: "caution", label: `${BASIC_PERMIT_LABEL} delayed` }
+    return { variant: "caution", label: `${ROW_AUTHORIZATION_LABEL} delayed` }
   }
 
   const latestTimestamp = parseTimestampMillis(latestEvent.lastUpdated)
   if (latestTimestamp && Date.now() - latestTimestamp > PRE_SCREENING_ONE_WEEK_MS) {
-    return { variant: "caution", label: `${BASIC_PERMIT_LABEL} pending for over 7 days` }
+    return { variant: "caution", label: `${ROW_AUTHORIZATION_LABEL} pending for over 7 days` }
   }
 
-  return { variant: "pending", label: `${BASIC_PERMIT_LABEL} in progress` }
+  return { variant: "pending", label: `${ROW_AUTHORIZATION_LABEL} in progress` }
 }
 
 export function isComplexReviewProcess(process: ProjectProcessSummary): boolean {
@@ -221,9 +227,9 @@ export function isProcessComplete(process: ProjectProcessSummary): boolean {
     return process.caseEvents.some((event) => event.eventType === PRE_SCREENING_COMPLETE_EVENT)
   }
 
-  if (isBasicPermitProcess(process)) {
+  if (isRowAuthorizationProcess(process)) {
     return process.caseEvents.some(
-      (event) => event.eventType?.toLowerCase() === BASIC_PERMIT_APPROVED_EVENT
+      (event) => event.eventType?.toLowerCase() === ROW_AUTHORIZATION_APPROVED_EVENT
     )
   }
 
@@ -253,7 +259,7 @@ export function isProcessDelayed(process: ProjectProcessSummary): boolean {
     return true
   }
 
-  if (determineBasicPermitStatus(process)?.variant === "caution") {
+  if (determineRowAuthorizationStatus(process)?.variant === "caution") {
     return true
   }
 
@@ -272,7 +278,9 @@ export function isProcessDelayed(process: ProjectProcessSummary): boolean {
 }
 
 const AUTO_POPULATED_CHECKLIST_LABELS = new Set([
-  BASIC_PERMIT_LABEL.toLowerCase(),
+  ROW_AUTHORIZATION_LABEL.toLowerCase(),
+  `${ROW_AUTHORIZATION_LABEL.toLowerCase()} (sf-299)`,
+  LEGACY_BASIC_PERMIT_LABEL.toLowerCase(),
   COMPLEX_REVIEW_LABEL.toLowerCase(),
 ])
 

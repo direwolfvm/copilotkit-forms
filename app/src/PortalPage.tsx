@@ -94,10 +94,22 @@ function limitCopilotReadableText(text: string, label: string): string {
   return `${text.slice(0, COPILOT_READABLE_MAX_CHARS)}\n\n[${label} truncated for Copilot context]`
 }
 
-const BASIC_PERMIT_LABEL = "Basic Permit"
-const BASIC_PERMIT_LINK = { href: "/permits/basic", label: "Start this permit." }
-const BASIC_PERMIT_PROJECT_PARAM = "projectId"
-const BASIC_PERMIT_CHECKLIST_KEY = toChecklistKey(BASIC_PERMIT_LABEL)
+const ROW_AUTHORIZATION_LABEL = "Right of Way Authorization"
+// Checklists saved before the SF-299 transition still carry the old label; keep matching it.
+const LEGACY_BASIC_PERMIT_LABEL = "Basic Permit"
+// The route is unchanged so links persisted with saved checklists keep working.
+const ROW_AUTHORIZATION_LINK = { href: "/permits/basic", label: "Start this permit." }
+const ROW_AUTHORIZATION_PROJECT_PARAM = "projectId"
+const ROW_AUTHORIZATION_CHECKLIST_KEY = toChecklistKey(ROW_AUTHORIZATION_LABEL)
+const ROW_AUTHORIZATION_CHECKLIST_KEYS = new Set([
+  ROW_AUTHORIZATION_CHECKLIST_KEY,
+  toChecklistKey(`${ROW_AUTHORIZATION_LABEL} (SF-299)`),
+  toChecklistKey(LEGACY_BASIC_PERMIT_LABEL)
+])
+
+function isRowAuthorizationChecklistKey(key: string): boolean {
+  return ROW_AUTHORIZATION_CHECKLIST_KEYS.has(key)
+}
 
 const IPAC_CONSULTATION_LINK = { href: "/permits/ipac-consultation", label: "Start this permit." }
 const IPAC_CONSULTATION_PROJECT_PARAM = "projectId"
@@ -129,8 +141,8 @@ function getChecklistIntegrationLink(
   permitId?: string
 ): PermittingChecklistItem["link"] | undefined {
   const key = toChecklistKey(label)
-  if (key === BASIC_PERMIT_CHECKLIST_KEY) {
-    return BASIC_PERMIT_LINK
+  if (isRowAuthorizationChecklistKey(key)) {
+    return ROW_AUTHORIZATION_LINK
   }
   if (key === COMPLEX_REVIEW_CHECKLIST_KEY) {
     return COMPLEX_REVIEW_LINK
@@ -283,13 +295,13 @@ function normalizeChecklistLabel(label: string) {
   return label.trim().replace(/\s+/g, " ")
 }
 
-function createBasicPermitChecklistItem(): PermittingChecklistItem {
+function createRowAuthorizationChecklistItem(): PermittingChecklistItem {
   return {
     id: generateChecklistItemId(),
-    label: BASIC_PERMIT_LABEL,
+    label: ROW_AUTHORIZATION_LABEL,
     completed: false,
     source: "seed",
-    link: BASIC_PERMIT_LINK
+    link: ROW_AUTHORIZATION_LINK
   }
 }
 
@@ -308,7 +320,7 @@ function appendProjectIdToPermitLink(link: PermittingChecklistItem["link"], proj
     return link
   }
   const routeParams: Array<{ href: string; param: string }> = [
-    { href: BASIC_PERMIT_LINK.href, param: BASIC_PERMIT_PROJECT_PARAM },
+    { href: ROW_AUTHORIZATION_LINK.href, param: ROW_AUTHORIZATION_PROJECT_PARAM },
     { href: COMPLEX_REVIEW_LINK.href, param: COMPLEX_REVIEW_PROJECT_PARAM },
     { href: IPAC_CONSULTATION_LINK.href, param: IPAC_CONSULTATION_PROJECT_PARAM }
   ]
@@ -330,7 +342,7 @@ function appendProjectIdToPermitLink(link: PermittingChecklistItem["link"], proj
 }
 
 function createDefaultPermittingChecklist(): PermittingChecklistItem[] {
-  return [createBasicPermitChecklistItem(), createComplexReviewChecklistItem()]
+  return [createRowAuthorizationChecklistItem(), createComplexReviewChecklistItem()]
 }
 
 function toChecklistKey(label: string) {
@@ -338,17 +350,22 @@ function toChecklistKey(label: string) {
 }
 
 function ensureDefaultChecklistItems(items: PermittingChecklistItem[]): PermittingChecklistItem[] {
-  let hasBasicPermit = false
+  let hasRowAuthorization = false
   let hasComplexReview = false
   let updated = false
 
   const next = items.map((item) => {
     const key = toChecklistKey(item.label)
-    if (key === BASIC_PERMIT_CHECKLIST_KEY) {
-      hasBasicPermit = true
-      if (!item.link) {
+    if (isRowAuthorizationChecklistKey(key)) {
+      hasRowAuthorization = true
+      const needsRelabel = key !== ROW_AUTHORIZATION_CHECKLIST_KEY
+      if (needsRelabel || !item.link) {
         updated = true
-        return { ...item, link: BASIC_PERMIT_LINK }
+        return {
+          ...item,
+          label: needsRelabel ? ROW_AUTHORIZATION_LABEL : item.label,
+          link: item.link ?? ROW_AUTHORIZATION_LINK
+        }
       }
     }
     if (key === COMPLEX_REVIEW_CHECKLIST_KEY) {
@@ -366,8 +383,8 @@ function ensureDefaultChecklistItems(items: PermittingChecklistItem[]): Permitti
   })
 
   const toAdd: PermittingChecklistItem[] = []
-  if (!hasBasicPermit) {
-    toAdd.push(createBasicPermitChecklistItem())
+  if (!hasRowAuthorization) {
+    toAdd.push(createRowAuthorizationChecklistItem())
   }
   if (!hasComplexReview) {
     toAdd.push(createComplexReviewChecklistItem())
@@ -378,11 +395,6 @@ function ensureDefaultChecklistItems(items: PermittingChecklistItem[]): Permitti
   }
 
   return updated ? next : items
-}
-
-// Alias for backward compatibility
-function ensureBasicPermitChecklistItem(items: PermittingChecklistItem[]): PermittingChecklistItem[] {
-  return ensureDefaultChecklistItems(items)
 }
 
 type ChecklistUpsertInput = {
@@ -1063,7 +1075,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
   )
   const [permittingChecklist, setPermittingChecklist] = useState<PermittingChecklistItem[]>(() =>
     projectId && persistedProjectFormState
-      ? ensureBasicPermitChecklistItem(cloneValue(persistedProjectFormState.permittingChecklist))
+      ? ensureDefaultChecklistItems(cloneValue(persistedProjectFormState.permittingChecklist))
       : createDefaultPermittingChecklist()
   )
   const [preScreeningProcessId, setPreScreeningProcessId] = useState<number | undefined>(() =>
@@ -1118,8 +1130,8 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     status: "idle" | "loading" | "error"
     message?: string
   }>({ status: "idle" })
-  const hasBasicPermitChecklistItem = useMemo(
-    () => permittingChecklist.some((item) => toChecklistKey(item.label) === BASIC_PERMIT_CHECKLIST_KEY),
+  const hasRowAuthorizationChecklistItem = useMemo(
+    () => permittingChecklist.some((item) => isRowAuthorizationChecklistKey(toChecklistKey(item.label))),
     [permittingChecklist]
   )
   const isNewProject = !projectId
@@ -1308,7 +1320,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             id: generateChecklistItemId()
           })
         )
-        setPermittingChecklist(ensureBasicPermitChecklistItem(checklistWithIds))
+        setPermittingChecklist(ensureDefaultChecklistItems(checklistWithIds))
         setProjectGisUpload(cloneValue(loaded.gisUpload ?? {}))
         setPortalProgress(cloneValue(loaded.portalProgress))
         setPreScreeningProcessId(loaded.preScreeningProcessId)
@@ -1843,8 +1855,8 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     setPermittingChecklist((previous) => previous.filter((item) => item.id !== id))
   }, [])
 
-  const handleAddBasicPermit = useCallback(() => {
-    upsertPermittingChecklistItems([{ label: BASIC_PERMIT_LABEL, source: "seed" }])
+  const handleAddRowAuthorization = useCallback(() => {
+    upsertPermittingChecklistItems([{ label: ROW_AUTHORIZATION_LABEL, source: "seed" }])
   }, [upsertPermittingChecklistItems])
 
   const ensureProjectIdentifier = useCallback((): ProjectFormData => {
@@ -3330,8 +3342,8 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                 onToggleItem={handleToggleChecklistItem}
                 onRemoveItem={handleRemoveChecklistItem}
                 onBulkAddFromSeed={handleBulkAddFromSeed}
-                hasBasicPermit={hasBasicPermitChecklistItem}
-                onAddBasicPermit={handleAddBasicPermit}
+                hasRowAuthorization={hasRowAuthorizationChecklistItem}
+                onAddRowAuthorization={handleAddRowAuthorization}
               />
             ) : (
               <CollapsibleCard

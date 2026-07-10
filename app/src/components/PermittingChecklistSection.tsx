@@ -31,8 +31,8 @@ type PermittingChecklistSectionProps = {
   onToggleItem: (id: string) => void
   onRemoveItem: (id: string) => void
   onBulkAddFromSeed: (labels: string[]) => void
-  hasBasicPermit: boolean
-  onAddBasicPermit: () => void
+  hasRowAuthorization: boolean
+  onAddRowAuthorization: () => void
 }
 
 export function PermittingChecklistSection({
@@ -44,8 +44,8 @@ export function PermittingChecklistSection({
   onToggleItem,
   onRemoveItem,
   onBulkAddFromSeed,
-  hasBasicPermit,
-  onAddBasicPermit
+  hasRowAuthorization,
+  onAddRowAuthorization
 }: PermittingChecklistSectionProps) {
   const [draftLabel, setDraftLabel] = useState("")
   const [selectedPermitId, setSelectedPermitId] = useState<string | undefined>()
@@ -174,11 +174,11 @@ export function PermittingChecklistSection({
           ))}
         </div>
       ) : null}
-      {!hasBasicPermit ? (
+      {!hasRowAuthorization ? (
         <div className="checklist-panel__basic-permit">
-          <p>Need to track the Basic Permit workflow?</p>
-          <button type="button" className="secondary" onClick={onAddBasicPermit}>
-            Add Basic Permit item
+          <p>Need to track the Right of Way Authorization (SF-299) workflow?</p>
+          <button type="button" className="secondary" onClick={onAddRowAuthorization}>
+            Add Right of Way Authorization item
           </button>
         </div>
       ) : null}

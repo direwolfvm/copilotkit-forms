@@ -27,6 +27,7 @@ type PermitflowProjectRow = {
   id?: number | string | null
   title?: string | null
   last_updated?: string | null
+  current_status?: string | null
   other?: unknown
 }
 
@@ -61,14 +62,35 @@ type PermitflowDecisionPayloadRow = {
   process?: number | null
   project?: number | null
   evaluation_data?: unknown
+  result_notes?: string | null
+  result_bool?: boolean | null
 }
 
-const BASIC_PERMIT_LABEL = "Basic Permit"
-export const BASIC_PERMIT_PROCESS_MODEL_ID = 1
-const BASIC_PERMIT_PROCESS_MODEL_TITLE = "Basic Permit"
+export const ROW_AUTHORIZATION_LABEL = "Right of Way Authorization"
+// PermitFast's title for this process model — the phased digitization of Standard Form 299.
+// Resolve by title at runtime; numeric process model IDs are not stable across environments.
+const SF299_PROCESS_MODEL_TITLE = "Basic Permit (SF-299)"
+const SF299_PROCESS_MODEL_FALLBACK_ID = 3
+// SF-299 section ordering, keyed by decision_element.process_model_internal_reference_id.
+export const SF299_SECTION_REFERENCE_IDS = [
+  "sf299-v2-project-info",
+  "sf299-v2-applicant-info",
+  "sf299-v2-row-description",
+  "sf299-v2-location-survey",
+  "sf299-v2-agency-context",
+  "sf299-v2-tech-financial",
+  "sf299-v2-alternatives",
+  "sf299-v2-population-social",
+  "sf299-v2-environmental",
+  "sf299-v2-fish-wildlife-hazmat",
+  "sf299-v2-certification"
+] as const
+const SF299_PROJECT_INFO_REFERENCE_ID = "sf299-v2-project-info"
+const SF299_LOCATION_SURVEY_REFERENCE_ID = "sf299-v2-location-survey"
+const PERMIT_DOCUMENTS_BUCKET = "permit-documents"
 const TENANT_ID_COLUMN = "tenant_id"
 const permitflowProcessModelIdCache = new Map<string, number>()
-const permitflowDecisionElementIdCache = new Map<string, { auth: number; projectInfo: number; sf299: number }>()
+const permitflowSectionElementsCache = new Map<string, DecisionElementRecord[]>()
 const PORTAL_SOURCE_KEY = "_project_portal"
 const PORTAL_SOURCE_ID_KEY = "source_project_id"
 
@@ -189,11 +211,14 @@ function quotePostgrestValue(value: string): string {
   return `"${value.replace(/"/g, "\"\"")}"`
 }
 
-function isBasicPermitProcess(row: PermitflowProcessInstanceRow, processModelId: number): boolean {
+function isRowAuthorizationProcessRow(
+  row: PermitflowProcessInstanceRow,
+  processModelId: number
+): boolean {
   return row.process_model === processModelId
 }
 
-async function resolveBasicPermitProcessModelId(options: PermitflowFetchOptions): Promise<number> {
+async function resolveSf299ProcessModelId(options: PermitflowFetchOptions): Promise<number> {
   const cacheKey = `${options.supabaseUrl}::${options.tenantId}`
   const cached = permitflowProcessModelIdCache.get(cacheKey)
   if (typeof cached === "number") {
@@ -205,15 +230,31 @@ async function resolveBasicPermitProcessModelId(options: PermitflowFetchOptions)
     "/rest/v1/process_model",
     (endpoint) => {
       endpoint.searchParams.set("select", "id,title")
-      endpoint.searchParams.set("title", `eq.${BASIC_PERMIT_PROCESS_MODEL_TITLE}`)
+      endpoint.searchParams.set("title", `eq.${SF299_PROCESS_MODEL_TITLE}`)
       endpoint.searchParams.set("limit", "1")
     }
   )
 
-  const resolvedId = parseNumericId(rows[0]?.id)
+  let resolvedId = parseNumericId(rows[0]?.id)
+
+  if (typeof resolvedId !== "number") {
+    // Numeric IDs are not stable across environments; use the known live-tenant ID only as
+    // a fallback when the title lookup finds nothing.
+    const fallbackRows = await fetchPermitflowList<{ id?: number | string | null }>(
+      options,
+      "/rest/v1/process_model",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "id,title")
+        endpoint.searchParams.set("id", `eq.${SF299_PROCESS_MODEL_FALLBACK_ID}`)
+        endpoint.searchParams.set("limit", "1")
+      }
+    )
+    resolvedId = parseNumericId(fallbackRows[0]?.id)
+  }
+
   if (typeof resolvedId !== "number") {
     throw new ProjectPersistenceError(
-      `PermitFast process model \"${BASIC_PERMIT_PROCESS_MODEL_TITLE}\" was not found.`
+      `PermitFast process model "${SF299_PROCESS_MODEL_TITLE}" was not found.`
     )
   }
 
@@ -258,42 +299,162 @@ function extractPortalSourceProjectId(other: unknown): number | undefined {
   return undefined
 }
 
-async function resolveBasicPermitDecisionElementIds(
+function sf299SectionOrder(element: DecisionElementRecord): number {
+  const referenceId = normalizeString(element.processModelInternalReferenceId)
+  const index = referenceId
+    ? (SF299_SECTION_REFERENCE_IDS as readonly string[]).indexOf(referenceId)
+    : -1
+  return index === -1 ? SF299_SECTION_REFERENCE_IDS.length : index
+}
+
+function sortSf299SectionElements(elements: DecisionElementRecord[]): DecisionElementRecord[] {
+  return [...elements].sort((a, b) => {
+    const orderDelta = sf299SectionOrder(a) - sf299SectionOrder(b)
+    return orderDelta !== 0 ? orderDelta : a.id - b.id
+  })
+}
+
+async function resolveSf299SectionElements(
   options: PermitflowFetchOptions,
   processModelId: number
-): Promise<{ auth: number; projectInfo: number; sf299: number }> {
+): Promise<DecisionElementRecord[]> {
   const cacheKey = `${options.supabaseUrl}::${options.tenantId}::${processModelId}`
-  const cached = permitflowDecisionElementIdCache.get(cacheKey)
+  const cached = permitflowSectionElementsCache.get(cacheKey)
   if (cached) {
     return cached
   }
 
-  const elements = await fetchDecisionElements(options, processModelId)
-  const byTitle = new Map<string, number>()
-  for (const element of elements) {
-    const title = normalizeTitle(element.title)?.toLowerCase()
-    if (title) {
-      byTitle.set(title, element.id)
-    }
-  }
-
-  const auth = byTitle.get("user id")
-  const projectInfo = byTitle.get("project information")
-  const sf299 = byTitle.get("sf-299 application") ?? byTitle.get("permit requirements")
-
-  if (
-    typeof auth !== "number" ||
-    typeof projectInfo !== "number" ||
-    typeof sf299 !== "number"
-  ) {
+  const elements = sortSf299SectionElements(await fetchDecisionElements(options, processModelId))
+  if (elements.length === 0) {
     throw new ProjectPersistenceError(
-      "PermitFast decision elements for the Basic Permit process could not be resolved."
+      "PermitFast returned no decision elements for the SF-299 process model."
     )
   }
 
-  const resolved = { auth, projectInfo, sf299 }
-  permitflowDecisionElementIdCache.set(cacheKey, resolved)
-  return resolved
+  permitflowSectionElementsCache.set(cacheKey, elements)
+  return elements
+}
+
+function getSchemaProperties(schema: unknown): Record<string, unknown> | undefined {
+  const schemaRecord = normalizeObjectRecord(schema)
+  return schemaRecord ? normalizeObjectRecord(schemaRecord.properties) : undefined
+}
+
+function getOneOfConstValues(property: unknown): unknown[] | undefined {
+  const propertyRecord = normalizeObjectRecord(property)
+  const oneOf = propertyRecord?.oneOf
+  if (!Array.isArray(oneOf) || oneOf.length === 0) {
+    return undefined
+  }
+  const values = oneOf
+    .map((option) => normalizeObjectRecord(option)?.const)
+    .filter((value) => value !== undefined)
+  return values.length > 0 ? values : undefined
+}
+
+function isBooleanProperty(property: unknown): boolean {
+  return normalizeObjectRecord(property)?.type === "boolean"
+}
+
+const SUPPLEMENTAL_ENTITY_TYPES = new Set(["corporation", "partnership"])
+
+/**
+ * Enforce the SF-299 `evaluation_data` encodings before writing a section payload:
+ * - `oneOf`/`const` selects must store a valid `const` value; empty strings and unknown
+ *   values are omitted (an empty string fails PermitFast's `oneOf` validation).
+ * - boolean fields must be real booleans.
+ * - `suppl_*` supplemental fields only apply when `entity_type` is corporation/partnership.
+ * Keys not described by the schema pass through untouched.
+ */
+export function sanitizeEvaluationDataForSchema(
+  schema: unknown,
+  data: Record<string, unknown>
+): Record<string, unknown> {
+  const properties = getSchemaProperties(schema)
+  const entityTypeValue = typeof data.entity_type === "string" ? data.entity_type : undefined
+  const supplementalApplies =
+    !properties?.entity_type ||
+    (typeof entityTypeValue === "string" && SUPPLEMENTAL_ENTITY_TYPES.has(entityTypeValue))
+
+  const sanitized: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      continue
+    }
+    if (key.startsWith("suppl_") && !supplementalApplies) {
+      continue
+    }
+    const property = properties?.[key]
+    if (!property) {
+      sanitized[key] = value
+      continue
+    }
+    const constValues = getOneOfConstValues(property)
+    if (constValues) {
+      if (constValues.includes(value)) {
+        sanitized[key] = value
+      }
+      continue
+    }
+    if (isBooleanProperty(property)) {
+      if (typeof value === "boolean") {
+        sanitized[key] = value
+      }
+      continue
+    }
+    sanitized[key] = value
+  }
+  return sanitized
+}
+
+/**
+ * Seed a section's initial `evaluation_data` from the portal project profile. Only fields
+ * that the section's `form_data` schema actually declares are written — the schema is the
+ * contract and its field names can change over time.
+ */
+function seedSf299SectionEvaluationData(
+  element: DecisionElementRecord,
+  formData: ProjectFormData
+): Record<string, unknown> {
+  const referenceId = normalizeString(element.processModelInternalReferenceId)
+  const properties = getSchemaProperties(element.formData)
+  if (!properties) {
+    return {}
+  }
+
+  const candidates: Record<string, unknown> = {}
+  if (referenceId === SF299_PROJECT_INFO_REFERENCE_ID) {
+    Object.assign(candidates, {
+      title: normalizeString(formData.title),
+      project_title: normalizeString(formData.title),
+      description: normalizeString(formData.description),
+      project_description: normalizeString(formData.description),
+      sector: normalizeString(formData.sector),
+      lead_agency: normalizeString(formData.lead_agency),
+      location_text: normalizeString(formData.location_text),
+      location_description: normalizeString(formData.location_text)
+    })
+  } else if (referenceId === SF299_LOCATION_SURVEY_REFERENCE_ID) {
+    const lat = normalizeNumber(formData.location_lat)
+    const lon = normalizeNumber(formData.location_lon)
+    if (typeof lat === "number" && typeof lon === "number") {
+      candidates.location_map = JSON.stringify({
+        mode: "marker",
+        lat,
+        lon,
+        zoom: 12,
+        coordinates: [[lat, lon]]
+      })
+    }
+  }
+
+  const seeded: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(candidates)) {
+    if (value !== undefined && properties[key]) {
+      seeded[key] = value
+    }
+  }
+  return sanitizeEvaluationDataForSchema(element.formData, seeded)
 }
 
 function buildPermitflowProjectPayload(
@@ -397,7 +558,7 @@ async function resolvePermitflowProjectByPortalProjectId(
     options,
     "/rest/v1/project",
     (endpoint) => {
-      endpoint.searchParams.set("select", "id,title,last_updated,other")
+      endpoint.searchParams.set("select", "id,title,last_updated,current_status,other")
       endpoint.searchParams.set(
         `other->${PORTAL_SOURCE_KEY}->>${PORTAL_SOURCE_ID_KEY}`,
         `eq.${portalProjectId}`
@@ -413,7 +574,7 @@ async function resolvePermitflowProjectByPortalProjectId(
     options,
     "/rest/v1/project",
     (endpoint) => {
-      endpoint.searchParams.set("select", "id,title,last_updated,other")
+      endpoint.searchParams.set("select", "id,title,last_updated,current_status,other")
       endpoint.searchParams.set("other->_permitflow_migration->>source_id", `eq.${portalProjectId}`)
       endpoint.searchParams.set("limit", "1")
     }
@@ -427,7 +588,7 @@ async function resolvePermitflowProjectByPortalProjectId(
     options,
     "/rest/v1/project",
     (endpoint) => {
-      endpoint.searchParams.set("select", "id,title,last_updated,other")
+      endpoint.searchParams.set("select", "id,title,last_updated,current_status,other")
       endpoint.searchParams.set("id", `eq.${portalProjectId}`)
       endpoint.searchParams.set("limit", "1")
     }
@@ -689,12 +850,8 @@ async function fetchDecisionElements(
 }
 
 export async function loadPermitflowProcessInformation(
-  processModelId: number
+  processModelId?: number
 ): Promise<ProcessInformation> {
-  if (!Number.isFinite(processModelId)) {
-    throw new ProjectPersistenceError("Process model identifier must be numeric.")
-  }
-
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
   const tenantId = getPermitflowTenantId()
@@ -705,9 +862,10 @@ export async function loadPermitflowProcessInformation(
   }
 
   const options = { supabaseUrl, supabaseAnonKey, tenantId }
-  const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
   const resolvedProcessModelId =
-    processModelId === BASIC_PERMIT_PROCESS_MODEL_ID ? basicPermitProcessModelId : processModelId
+    typeof processModelId === "number" && Number.isFinite(processModelId)
+      ? processModelId
+      : await resolveSf299ProcessModelId(options)
   const processModel = await fetchProcessModelRecord(options, resolvedProcessModelId)
 
   if (!processModel) {
@@ -719,8 +877,9 @@ export async function loadPermitflowProcessInformation(
     legalStructure = await fetchLegalStructureRecord(options, processModel.legalStructureId)
   }
 
-  const decisionElements = await fetchDecisionElements(options, resolvedProcessModelId)
-  decisionElements.sort((a, b) => a.id - b.id)
+  const decisionElements = sortSf299SectionElements(
+    await fetchDecisionElements(options, resolvedProcessModelId)
+  )
 
   return {
     processModel,
@@ -933,13 +1092,11 @@ async function createPermitflowRecordsBatch<T>(
 export async function submitPermitflowProject({
   formData,
   accessToken,
-  userId,
-  userEmail
+  userId
 }: {
   formData: ProjectFormData
   accessToken: string
   userId: string
-  userEmail: string
 }): Promise<PermitflowSubmitResult> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
@@ -952,11 +1109,8 @@ export async function submitPermitflowProject({
 
   const timestamp = new Date().toISOString()
   const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
-  const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
-  const decisionElementIds = await resolveBasicPermitDecisionElementIds(
-    options,
-    basicPermitProcessModelId
-  )
+  const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
+  const sectionElements = await resolveSf299SectionElements(options, sf299ProcessModelId)
   const portalProjectId = parseNumericId(formData.id)
   if (typeof portalProjectId !== "number") {
     throw new ProjectPersistenceError("A numeric portal project identifier is required.")
@@ -996,14 +1150,14 @@ export async function submitPermitflowProject({
     }
   }
 
-  // Check if a Basic Permit process_instance already exists for this project
+  // Check if an SF-299 process_instance already exists for this project
   const existingProcesses = await fetchPermitflowList<{ id: number }>(
     options,
     "/rest/v1/process_instance",
     (endpoint) => {
       endpoint.searchParams.set("select", "id")
       endpoint.searchParams.set("parent_project_id", `eq.${permitflowProjectId}`)
-      endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
+      endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
       endpoint.searchParams.set("limit", "1")
     }
   )
@@ -1019,7 +1173,7 @@ export async function submitPermitflowProject({
   // Step 3: Create process_instance record
   const processInstancePayload = {
     parent_project_id: permitflowProjectId,
-    process_model: basicPermitProcessModelId,
+    process_model: sf299ProcessModelId,
     status: "draft",
     start_date: timestamp.split("T")[0]
   }
@@ -1038,39 +1192,20 @@ export async function submitPermitflowProject({
     )
   }
 
-  // Step 4: Create 3 process_decision_payload records
-  const decisionPayloads = [
-    {
-      process_decision_element: decisionElementIds.auth,
-      process: processInstanceId,
-      project: permitflowProjectId,
-      evaluation_data: {
-        provider: "project-portal",
-        user_id: userId,
-        email: userEmail,
-        authenticated_at: timestamp,
-        external_system_name: "CEQ Project Portal"
-      }
-    },
-    {
-      process_decision_element: decisionElementIds.projectInfo,
-      process: processInstanceId,
-      project: permitflowProjectId,
-      evaluation_data: {
-        title: normalizeString(formData.title),
-        description: normalizeString(formData.description),
-        sector: normalizeString(formData.sector),
-        lead_agency: normalizeString(formData.lead_agency),
-        location_text: normalizeString(formData.location_text)
-      }
-    },
-    {
-      process_decision_element: decisionElementIds.sf299,
-      process: processInstanceId,
-      project: permitflowProjectId,
-      evaluation_data: {}
-    }
-  ]
+  // Step 4: Create one process_decision_payload per SF-299 section. There is no auth
+  // element — the applicant is linked via project.other.applicant_user_id. Sections the
+  // portal can pre-fill are seeded from the project profile; the rest start empty and are
+  // PATCHed as the applicant completes each phase.
+  const seededSections = sectionElements.map((element) => ({
+    element,
+    evaluationData: seedSf299SectionEvaluationData(element, formData)
+  }))
+  const decisionPayloads = seededSections.map(({ element, evaluationData }) => ({
+    process_decision_element: element.id,
+    process: processInstanceId,
+    project: permitflowProjectId,
+    evaluation_data: evaluationData
+  }))
   await createPermitflowRecordsBatch(
     supabaseUrl,
     supabaseAnonKey,
@@ -1091,24 +1226,17 @@ export async function submitPermitflowProject({
       source: "project-portal",
       datetime: timestamp
     },
-    {
-      parent_process_id: processInstanceId,
-      name: "Form Saved",
-      description: "User id form data saved",
-      type: "form_saved",
-      status: "completed",
-      source: "project-portal",
-      datetime: timestamp
-    },
-    {
-      parent_process_id: processInstanceId,
-      name: "Form Saved",
-      description: "Project Information form data saved",
-      type: "form_saved",
-      status: "completed",
-      source: "project-portal",
-      datetime: timestamp
-    }
+    ...seededSections
+      .filter(({ evaluationData }) => Object.keys(evaluationData).length > 0)
+      .map(({ element }) => ({
+        parent_process_id: processInstanceId,
+        name: "Form Saved",
+        description: `${normalizeTitle(element.title) ?? "Section"} form data saved`,
+        type: "form_saved",
+        status: "completed",
+        source: "project-portal",
+        datetime: timestamp
+      }))
   ]
   await createPermitflowRecordsBatch(
     supabaseUrl,
@@ -1127,18 +1255,32 @@ export type PermitflowProjectStatus = {
   projectId: number
   title?: string
   lastUpdated?: string
-  basicPermitProcess?: ProjectProcessSummary
+  /** project.current_status — "returned" means a reviewer sent the application back. */
+  currentStatus?: string
+  rowAuthorizationProcess?: ProjectProcessSummary
+}
+
+export type PermitflowSectionFormState = {
+  decisionElementId: number
+  referenceId?: string
+  title?: string
+  description?: string
+  formSchema?: unknown
+  hasForm: boolean
+  payloadId?: number
+  evaluationData?: Record<string, unknown>
+  /** Reviewer feedback for the returned/resubmit loop. */
+  resultNotes?: string
+  resultBool?: boolean
 }
 
 export type PermitflowCustomFormState = {
   exists: boolean
   projectId?: number
   processInstanceId?: number
-  decisionElementId?: number
-  decisionElementTitle?: string
-  formSchema?: unknown
-  payloadId?: number
-  evaluationData?: Record<string, unknown>
+  processStatus?: string
+  projectCurrentStatus?: string
+  sections: PermitflowSectionFormState[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1153,45 +1295,22 @@ function hasRenderableFormData(value: unknown): boolean {
   return isRecord(properties) && Object.keys(properties).length > 0
 }
 
-function isSf299DecisionElement(element: DecisionElementRecord): boolean {
-  const title = normalizeTitle(element.title)?.toLowerCase()
-  const other = normalizeObjectRecord(element.other)
-  const formType = normalizeString(
-    typeof other?.form_type === "string" ? other.form_type : undefined
-  )?.toLowerCase()
-  return Boolean(title?.includes("sf-299")) || formType === "sf299"
+type Sf299SectionContext = {
+  element: DecisionElementRecord
+  payload?: PermitflowDecisionPayloadRow
 }
 
-function resolveCustomFormDecisionElement(
-  decisionElements: DecisionElementRecord[]
-): DecisionElementRecord | undefined {
-  const withForms = decisionElements.filter((element) => hasRenderableFormData(element.formData))
-  if (withForms.length === 0) {
-    return undefined
-  }
-
-  const sf299 = withForms.find((element) => isSf299DecisionElement(element))
-  if (sf299) {
-    return sf299
-  }
-
-  if (withForms.length >= 3) {
-    return withForms[2]
-  }
-
-  return withForms[0]
-}
-
-async function resolvePermitflowCustomFormContext(
+async function resolveSf299FormContext(
   options: PermitflowFetchOptions,
   portalProjectId: number
 ): Promise<{
   permitflowProjectId: number
   processInstanceId: number
-  decisionElement: DecisionElementRecord
-  payload?: PermitflowDecisionPayloadRow
+  processStatus?: string
+  projectCurrentStatus?: string
+  sections: Sf299SectionContext[]
 }> {
-  const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
+  const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
   const permitflowProject = await resolvePermitflowProjectByPortalProjectId(options, portalProjectId)
   const permitflowProjectId = parseNumericId(permitflowProject?.id)
   if (typeof permitflowProjectId !== "number") {
@@ -1204,43 +1323,50 @@ async function resolvePermitflowCustomFormContext(
     options,
     "/rest/v1/process_instance",
     (endpoint) => {
-      endpoint.searchParams.set("select", "id,last_updated,created_at")
+      endpoint.searchParams.set("select", "id,status,last_updated,created_at")
       endpoint.searchParams.set("parent_project_id", `eq.${permitflowProjectId}`)
-      endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
+      endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
     }
   )
   processRows.sort((a, b) => compareByTimestampDesc(a.last_updated, b.last_updated))
   const processInstanceId = parseNumericId(processRows[0]?.id)
   if (typeof processInstanceId !== "number") {
     throw new ProjectPersistenceError(
-      `No Basic Permit process instance was found for portal project ${portalProjectId}.`
+      `No ${ROW_AUTHORIZATION_LABEL} process instance was found for portal project ${portalProjectId}.`
     )
   }
+  const processStatus = normalizeString(processRows[0]?.status)
 
-  const decisionElements = await fetchDecisionElements(options, basicPermitProcessModelId)
-  decisionElements.sort((a, b) => a.id - b.id)
-  const decisionElement = resolveCustomFormDecisionElement(decisionElements)
-  if (!decisionElement) {
-    throw new ProjectPersistenceError("No custom form decision element is configured in PermitFast.")
-  }
+  const elements = await resolveSf299SectionElements(options, sf299ProcessModelId)
 
   const payloadRows = await fetchPermitflowList<PermitflowDecisionPayloadRow>(
     options,
     "/rest/v1/process_decision_payload",
     (endpoint) => {
-      endpoint.searchParams.set("select", "id,process_decision_element,process,project,evaluation_data")
+      endpoint.searchParams.set(
+        "select",
+        "id,process_decision_element,process,project,evaluation_data,result_notes,result_bool"
+      )
       endpoint.searchParams.set("process", `eq.${processInstanceId}`)
-      endpoint.searchParams.set("process_decision_element", `eq.${decisionElement.id}`)
-      endpoint.searchParams.set("limit", "1")
     }
   )
-  const payload = payloadRows[0]
+  const payloadsByElementId = new Map<number, PermitflowDecisionPayloadRow>()
+  for (const row of payloadRows) {
+    const elementId = parseNumericId(row.process_decision_element)
+    if (typeof elementId === "number" && !payloadsByElementId.has(elementId)) {
+      payloadsByElementId.set(elementId, row)
+    }
+  }
 
   return {
     permitflowProjectId,
     processInstanceId,
-    decisionElement,
-    payload
+    processStatus,
+    projectCurrentStatus: normalizeString(permitflowProject?.current_status),
+    sections: elements.map((element) => ({
+      element,
+      payload: payloadsByElementId.get(element.id)
+    }))
   }
 }
 
@@ -1364,6 +1490,21 @@ async function createPermitflowCaseEvent({
   )
 }
 
+function toSectionFormState({ element, payload }: Sf299SectionContext): PermitflowSectionFormState {
+  return {
+    decisionElementId: element.id,
+    referenceId: normalizeString(element.processModelInternalReferenceId),
+    title: normalizeTitle(element.title),
+    description: normalizeString(element.description),
+    formSchema: element.formData,
+    hasForm: hasRenderableFormData(element.formData),
+    payloadId: parseNumericId(payload?.id),
+    evaluationData: isRecord(payload?.evaluation_data) ? payload.evaluation_data : undefined,
+    resultNotes: normalizeString(payload?.result_notes),
+    resultBool: typeof payload?.result_bool === "boolean" ? payload.result_bool : undefined
+  }
+}
+
 export async function loadPermitflowCustomFormState(
   portalProjectId: number
 ): Promise<PermitflowCustomFormState> {
@@ -1383,34 +1524,84 @@ export async function loadPermitflowCustomFormState(
   const permitflowProject = await resolvePermitflowProjectByPortalProjectId(options, portalProjectId)
   const permitflowProjectId = parseNumericId(permitflowProject?.id)
   if (typeof permitflowProjectId !== "number") {
-    return { exists: false }
+    return { exists: false, sections: [] }
   }
 
-  const context = await resolvePermitflowCustomFormContext(options, portalProjectId)
-  const payloadId = parseNumericId(context.payload?.id)
-  const evaluationData = isRecord(context.payload?.evaluation_data)
-    ? context.payload?.evaluation_data
-    : undefined
+  const context = await resolveSf299FormContext(options, portalProjectId)
 
   return {
     exists: true,
     projectId: context.permitflowProjectId,
     processInstanceId: context.processInstanceId,
-    decisionElementId: context.decisionElement.id,
-    decisionElementTitle: context.decisionElement.title ?? undefined,
-    formSchema: context.decisionElement.formData,
-    payloadId,
-    evaluationData
+    processStatus: context.processStatus,
+    projectCurrentStatus: context.projectCurrentStatus,
+    sections: context.sections.map(toSectionFormState)
   }
+}
+
+async function saveSf299SectionPayload({
+  supabaseUrl,
+  supabaseAnonKey,
+  tenantId,
+  accessToken,
+  context,
+  decisionElementId,
+  evaluationData
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  tenantId: string
+  accessToken: string
+  context: Awaited<ReturnType<typeof resolveSf299FormContext>>
+  decisionElementId: number
+  evaluationData: Record<string, unknown>
+}): Promise<DecisionElementRecord> {
+  const section = context.sections.find((entry) => entry.element.id === decisionElementId)
+  if (!section) {
+    throw new ProjectPersistenceError(
+      `Decision element ${decisionElementId} is not part of the SF-299 process model.`
+    )
+  }
+
+  const sanitized = sanitizeEvaluationDataForSchema(section.element.formData, evaluationData)
+  const payloadId = parseNumericId(section.payload?.id)
+  if (typeof payloadId === "number") {
+    await patchPermitflowDecisionPayloadById({
+      supabaseUrl,
+      supabaseAnonKey,
+      tenantId,
+      accessToken,
+      payloadId,
+      payload: { evaluation_data: sanitized }
+    })
+  } else {
+    await createPermitflowRecord(
+      supabaseUrl,
+      supabaseAnonKey,
+      accessToken,
+      tenantId,
+      "process_decision_payload",
+      {
+        process_decision_element: section.element.id,
+        process: context.processInstanceId,
+        project: context.permitflowProjectId,
+        evaluation_data: sanitized
+      }
+    )
+  }
+
+  return section.element
 }
 
 export async function savePermitflowCustomForm({
   portalProjectId,
   accessToken,
+  decisionElementId,
   evaluationData
 }: {
   portalProjectId: number
   accessToken: string
+  decisionElementId: number
   evaluationData: Record<string, unknown>
 }): Promise<void> {
   const supabaseUrl = getPermitflowUrl()
@@ -1422,34 +1613,18 @@ export async function savePermitflowCustomForm({
     )
   }
   const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
-  const context = await resolvePermitflowCustomFormContext(options, portalProjectId)
-  const payloadId = parseNumericId(context.payload?.id)
-  if (typeof payloadId === "number") {
-    await patchPermitflowDecisionPayloadById({
-      supabaseUrl,
-      supabaseAnonKey,
-      tenantId,
-      accessToken,
-      payloadId,
-      payload: { evaluation_data: evaluationData }
-    })
-  } else {
-    await createPermitflowRecord(
-      supabaseUrl,
-      supabaseAnonKey,
-      accessToken,
-      tenantId,
-      "process_decision_payload",
-      {
-        process_decision_element: context.decisionElement.id,
-        process: context.processInstanceId,
-        project: context.permitflowProjectId,
-        evaluation_data: evaluationData
-      }
-    )
-  }
+  const context = await resolveSf299FormContext(options, portalProjectId)
+  const element = await saveSf299SectionPayload({
+    supabaseUrl,
+    supabaseAnonKey,
+    tenantId,
+    accessToken,
+    context,
+    decisionElementId,
+    evaluationData
+  })
 
-  const formName = normalizeTitle(context.decisionElement.title) ?? "Custom"
+  const formName = normalizeTitle(element.title) ?? "Section"
   await createPermitflowCaseEvent({
     supabaseUrl,
     supabaseAnonKey,
@@ -1465,11 +1640,12 @@ export async function savePermitflowCustomForm({
 export async function submitPermitflowCustomFormForApproval({
   portalProjectId,
   accessToken,
-  evaluationData
+  sections
 }: {
   portalProjectId: number
   accessToken: string
-  evaluationData?: Record<string, unknown>
+  /** Section drafts to persist before submission, keyed by decision element. */
+  sections?: Array<{ decisionElementId: number; evaluationData: Record<string, unknown> }>
 }): Promise<void> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
@@ -1480,35 +1656,22 @@ export async function submitPermitflowCustomFormForApproval({
     )
   }
   const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
-  const context = await resolvePermitflowCustomFormContext(options, portalProjectId)
-  if (evaluationData) {
-    const payloadId = parseNumericId(context.payload?.id)
-    if (typeof payloadId === "number") {
-      await patchPermitflowDecisionPayloadById({
-        supabaseUrl,
-        supabaseAnonKey,
-        tenantId,
-        accessToken,
-        payloadId,
-        payload: { evaluation_data: evaluationData }
-      })
-    } else {
-      await createPermitflowRecord(
-        supabaseUrl,
-        supabaseAnonKey,
-        accessToken,
-        tenantId,
-        "process_decision_payload",
-        {
-          process_decision_element: context.decisionElement.id,
-          process: context.processInstanceId,
-          project: context.permitflowProjectId,
-          evaluation_data: evaluationData
-        }
-      )
-    }
+  const context = await resolveSf299FormContext(options, portalProjectId)
+  for (const sectionDraft of sections ?? []) {
+    await saveSf299SectionPayload({
+      supabaseUrl,
+      supabaseAnonKey,
+      tenantId,
+      accessToken,
+      context,
+      decisionElementId: sectionDraft.decisionElementId,
+      evaluationData: sectionDraft.evaluationData
+    })
   }
 
+  // Setting both statuses back to "submitted" also handles resubmission after a reviewer
+  // returned the application (project.current_status = "returned").
+  const wasReturned = context.projectCurrentStatus?.toLowerCase() === "returned"
   await patchPermitflowProcessInstanceById({
     supabaseUrl,
     supabaseAnonKey,
@@ -1534,10 +1697,118 @@ export async function submitPermitflowCustomFormForApproval({
     tenantId,
     accessToken,
     processInstanceId: context.processInstanceId,
-    name: "Submitted for Approval",
-    description: `Project "${projectTitle}" submitted for approval`,
+    name: wasReturned ? "Resubmitted for Approval" : "Submitted for Approval",
+    description: wasReturned
+      ? `Project "${projectTitle}" resubmitted after revision`
+      : `Project "${projectTitle}" submitted for approval`,
     type: "submitted_for_approval"
   })
+}
+
+export type PermitflowDocumentReference = {
+  documentId?: number
+  storagePath: string
+  originalFilename: string
+}
+
+function generateDocumentUuid(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function sanitizeStorageFilename(filename: string): string {
+  const trimmed = filename.trim()
+  const fallback = trimmed.length > 0 ? trimmed : "upload"
+  return fallback.replace(/[^A-Za-z0-9._-]+/g, "_")
+}
+
+/**
+ * Upload a document for an SF-299 `*_file` field: store the bytes in the
+ * `permit-documents` bucket, catalog the file in `permit_document`, and return the
+ * JSON-string reference to write into the owning section's `evaluation_data`.
+ */
+export async function uploadPermitflowDocument({
+  accessToken,
+  userId,
+  processInstanceId,
+  permitflowProjectId,
+  decisionElementId,
+  fieldName,
+  file
+}: {
+  accessToken: string
+  userId: string
+  processInstanceId: number
+  permitflowProjectId: number
+  decisionElementId: number
+  fieldName: string
+  file: File
+}): Promise<{ reference: PermitflowDocumentReference; encodedValue: string }> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
+    throw new ProjectPersistenceError(
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+    )
+  }
+
+  const originalFilename = file.name || "upload"
+  const storagePath = [
+    tenantId,
+    processInstanceId,
+    fieldName,
+    `${generateDocumentUuid()}-${sanitizeStorageFilename(originalFilename)}`
+  ].join("/")
+
+  const uploadResponse = await fetch(
+    `${supabaseUrl}/storage/v1/object/${PERMIT_DOCUMENTS_BUCKET}/${storagePath}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${accessToken}`,
+        "content-type": file.type || "application/octet-stream"
+      },
+      body: file
+    }
+  )
+  if (!uploadResponse.ok) {
+    const errorDetail = extractErrorDetail(await uploadResponse.text())
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFast document upload failed (${uploadResponse.status}): ${errorDetail}`
+        : `PermitFast document upload failed (${uploadResponse.status}).`
+    )
+  }
+
+  const documentRow = await createPermitflowRecord<{ id?: number | string | null }>(
+    supabaseUrl,
+    supabaseAnonKey,
+    accessToken,
+    tenantId,
+    "permit_document",
+    {
+      process_id: processInstanceId,
+      project_id: permitflowProjectId,
+      decision_element_id: decisionElementId,
+      field_name: fieldName,
+      storage_path: storagePath,
+      original_filename: originalFilename,
+      mime_type: file.type || "application/octet-stream",
+      file_size_bytes: file.size,
+      uploaded_by: userId
+    }
+  )
+
+  const reference: PermitflowDocumentReference = {
+    documentId: parseNumericId(documentRow.id),
+    storagePath,
+    originalFilename
+  }
+  return { reference, encodedValue: JSON.stringify(reference) }
 }
 
 export async function loadPermitflowProjectStatus(
@@ -1557,7 +1828,7 @@ export async function loadPermitflowProjectStatus(
   }
 
   const options = { supabaseUrl, supabaseAnonKey, tenantId }
-  const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
+  const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
   const resolvedProjectRow = await resolvePermitflowProjectByPortalProjectId(options, projectId)
   const resolvedPermitflowProjectId = parseNumericId(resolvedProjectRow?.id)
 
@@ -1574,24 +1845,24 @@ export async function loadPermitflowProjectStatus(
         "id,parent_project_id,description,last_updated,created_at,process_model,status"
       )
       endpoint.searchParams.set("parent_project_id", `eq.${resolvedPermitflowProjectId}`)
-      endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
+      endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
     }
   )
 
-  const basicPermitProcesses = processRows.filter((row) =>
-    isBasicPermitProcess(row, basicPermitProcessModelId)
+  const rowAuthorizationProcesses = processRows.filter((row) =>
+    isRowAuthorizationProcessRow(row, sf299ProcessModelId)
   )
-  let basicPermitProcess: ProjectProcessSummary | undefined
+  let rowAuthorizationProcess: ProjectProcessSummary | undefined
 
-  if (basicPermitProcesses.length > 0) {
-    basicPermitProcesses.sort((a, b) => compareByTimestampDesc(a.last_updated, b.last_updated))
-    const row = basicPermitProcesses[0]
+  if (rowAuthorizationProcesses.length > 0) {
+    rowAuthorizationProcesses.sort((a, b) => compareByTimestampDesc(a.last_updated, b.last_updated))
+    const row = rowAuthorizationProcesses[0]
     const id = parseNumericId(row.id)
     if (typeof id === "number") {
       const description = typeof row.description === "string" ? row.description : null
-      basicPermitProcess = {
+      rowAuthorizationProcess = {
         id,
-        title: BASIC_PERMIT_LABEL,
+        title: ROW_AUTHORIZATION_LABEL,
         description,
         lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
         createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
@@ -1608,7 +1879,8 @@ export async function loadPermitflowProjectStatus(
       typeof resolvedProjectRow.last_updated === "string"
         ? resolvedProjectRow.last_updated
         : undefined,
-    basicPermitProcess
+    currentStatus: normalizeString(resolvedProjectRow.current_status),
+    rowAuthorizationProcess
   }
 }
 
@@ -1662,7 +1934,7 @@ export async function updatePermitflowProject({
   })
 }
 
-export async function loadBasicPermitProcessesForProjects(
+export async function loadRowAuthorizationProcessesForProjects(
   projects: ProjectSummary[]
 ): Promise<Map<number, ProjectProcessSummary[]>> {
   const supabaseUrl = getPermitflowUrl()
@@ -1694,7 +1966,7 @@ export async function loadBasicPermitProcessesForProjects(
 
   try {
     const options = { supabaseUrl, supabaseAnonKey, tenantId }
-    const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
+    const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
     const titleFilters = uniqueTitles.map((title) => `title.ilike.${quotePostgrestValue(title)}`)
 
     const permitflowProjects = await fetchPermitflowList<PermitflowProjectRow>(
@@ -1778,14 +2050,14 @@ export async function loadBasicPermitProcessesForProjects(
           "id,parent_project_id,description,last_updated,created_at,process_model,status"
         )
         endpoint.searchParams.set("parent_project_id", `in.(${permitflowProjectIds.join(",")})`)
-        endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
+        endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
       }
     )
 
-    const basicPermitProcesses = processRows.filter((row) =>
-      isBasicPermitProcess(row, basicPermitProcessModelId)
+    const rowAuthorizationProcesses = processRows.filter((row) =>
+      isRowAuthorizationProcessRow(row, sf299ProcessModelId)
     )
-    const processIds = basicPermitProcesses
+    const processIds = rowAuthorizationProcesses
       .map((row) => parseNumericId(row.id))
       .filter((id): id is number => typeof id === "number")
 
@@ -1824,7 +2096,7 @@ export async function loadBasicPermitProcessesForProjects(
     }
 
     const processesByPermitflowProject = new Map<number, ProjectProcessSummary[]>()
-    for (const row of basicPermitProcesses) {
+    for (const row of rowAuthorizationProcesses) {
       const projectId = parseNumericId(row.parent_project_id)
       const id = parseNumericId(row.id)
       if (typeof projectId !== "number" || typeof id !== "number") {
@@ -1833,7 +2105,7 @@ export async function loadBasicPermitProcessesForProjects(
       const description = typeof row.description === "string" ? row.description : null
       const summary: ProjectProcessSummary = {
         id,
-        title: BASIC_PERMIT_LABEL,
+        title: ROW_AUTHORIZATION_LABEL,
         description,
         lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
         createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
@@ -1866,12 +2138,12 @@ export async function loadBasicPermitProcessesForProjects(
 
     return results
   } catch (error) {
-    console.warn("[projects] Failed to load PermitFast basic permit processes.", error)
+    console.warn("[projects] Failed to load PermitFast Right of Way Authorization processes.", error)
     return new Map()
   }
 }
 
-export type BasicPermitAnalyticsPoint = {
+export type RowAuthorizationAnalyticsPoint = {
   date: string
   completionCount: number | null
   averageCompletionDays: number | null
@@ -1897,7 +2169,7 @@ function dayKeyFromMillisLocal(millis: number): string {
   return date.toISOString().slice(0, 10)
 }
 
-export async function loadBasicPermitAnalytics(): Promise<BasicPermitAnalyticsPoint[]> {
+export async function loadRowAuthorizationAnalytics(): Promise<RowAuthorizationAnalyticsPoint[]> {
   const supabaseUrl = getPermitflowUrl()
   const supabaseAnonKey = getPermitflowAnonKey()
   const tenantId = getPermitflowTenantId()
@@ -1912,8 +2184,8 @@ export async function loadBasicPermitAnalytics(): Promise<BasicPermitAnalyticsPo
   const options = { supabaseUrl, supabaseAnonKey, tenantId }
 
   try {
-    const basicPermitProcessModelId = await resolveBasicPermitProcessModelId(options)
-    // Load all Basic Permit process instances
+    const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
+    // Load all Right of Way Authorization (SF-299) process instances
     const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
       options,
       "/rest/v1/process_instance",
@@ -1922,7 +2194,7 @@ export async function loadBasicPermitAnalytics(): Promise<BasicPermitAnalyticsPo
           "select",
           "id,created_at,last_updated,process_model,status"
         )
-        endpoint.searchParams.set("process_model", `eq.${basicPermitProcessModelId}`)
+        endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
       }
     )
 
@@ -2031,7 +2303,7 @@ export async function loadBasicPermitAnalytics(): Promise<BasicPermitAnalyticsPo
 
     // Generate continuous date range
     const sortedDateKeys = [...aggregatesByDate.keys()].sort()
-    const points: BasicPermitAnalyticsPoint[] = []
+    const points: RowAuthorizationAnalyticsPoint[] = []
 
     const firstDate = sortedDateKeys[0]
     const lastDate = sortedDateKeys[sortedDateKeys.length - 1]
@@ -2070,7 +2342,7 @@ export async function loadBasicPermitAnalytics(): Promise<BasicPermitAnalyticsPo
 
     return points
   } catch (error) {
-    console.warn("[analytics] Failed to load Basic Permit analytics.", error)
+    console.warn("[analytics] Failed to load Right of Way Authorization analytics.", error)
     return []
   }
 }
