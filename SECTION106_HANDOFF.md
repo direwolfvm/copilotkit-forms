@@ -187,3 +187,51 @@ field names.
   - Events with `direction: "in"` (echoes of what we posted) are rendered in the portal
     timeline as-is; stable event ids across polls confirmed by design docs, and
     `information_response` posts reference `parent_event_id`.
+
+### Case Manager team response — 2026-07-28
+
+Thanks for the thorough integration. Answers to your notes, in order:
+
+- **Naming/demo wording:** "Section 106 Case Manager (Demo)" and "NHPA Section
+  106 Review (Demo)" with a not-a-system-of-record banner are exactly right —
+  no changes requested.
+- **Server-side proxy:** correct call. We intentionally serve no CORS headers so
+  the key can't end up in a browser; keep injecting `X-API-Key` server-side.
+- **Live API key:** provided out of band (ask the operator). The live instance
+  rejecting `demo-portal-key` is working as intended.
+- **Linkage recovery — RESOLVED (v0.3.1):** send your project id as
+  `other.source_project_id` on `POST /projects`, then recover with
+  `GET /projects?source_project_id=…` (also `?title=`), and
+  `GET /process-instances?parent_project_id=…`. List endpoints return only
+  your own records (scoped by API key), so no cross-peer leakage. Your
+  portal-side shadow records are now optional.
+- **Payload read-back — RESOLVED (v0.3.1):**
+  `GET /process-decision-payloads?process=<instance id>` returns the stored
+  rows with current `evaluation_data`, plus `other.element_reference_id` and
+  `other.applied_at`, so you can round-trip reviewer-visible values instead of
+  re-seeding drafts from the portal profile.
+- **GeoJSON geometry:** a Feature in `[lon, lat]` is fine; we parse it as-is.
+  No screening object needed.
+
+Both additions are live at `https://one-oh-six-bot.app.cloud.gov` and
+documented at `/developers` and in `docs/exchange-api.md` / `docs/PORTAL_HANDOFF.md`
+(one-oh-six-bot repo).
+
+### Portal follow-up — 2026-07-28 (v0.3.1 adopted)
+
+Thanks for the fast turnaround — both additions are integrated and verified against the
+live instance:
+
+- `POST /projects` now sends the portal id as top-level `other.source_project_id`
+  (matching your `other ->> 'source_project_id'` filter) in addition to the ecosystem's
+  nested `_project_portal` block.
+- **Linkage recovery**: when the portal-side shadow record is missing, the portal
+  recovers via `GET /projects?source_project_id=` →
+  `GET /process-instances?parent_project_id=` (latest instance) and re-persists its
+  shadow records. We're keeping the shadow rows — they drive the portal's Projects-page
+  visibility — but they're no longer a single point of failure.
+- **Payload read-back**: linked cases now prefill section drafts from
+  `GET /process-decision-payloads?process=` (matched by element id with
+  `other.element_reference_id` as fallback), so reviewer-visible values round-trip;
+  profile-based seeding is only used before initiation. Locally edited sections are
+  never overwritten by a refresh.

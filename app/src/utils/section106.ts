@@ -446,7 +446,12 @@ export async function initiateSection106Review({
         lead_agency: normalizeString(formData.lead_agency),
         sponsor: normalizeString(formData.sponsor),
         location_text: normalizeString(formData.location_text),
-        other: { [PORTAL_SOURCE_KEY]: { [PORTAL_SOURCE_ID_KEY]: portalProjectId } }
+        other: {
+          // Top-level source_project_id powers GET /projects?source_project_id= recovery
+          // (v0.3.1); the nested block follows the wider ecosystem convention.
+          [PORTAL_SOURCE_ID_KEY]: portalProjectId,
+          [PORTAL_SOURCE_KEY]: { [PORTAL_SOURCE_ID_KEY]: portalProjectId }
+        }
       })
     )
   })
@@ -512,6 +517,81 @@ export async function saveSection106Section({
   })
   const single = Array.isArray(row) ? row[0] : row
   return isRecord(single) ? normalizeString(single.result_notes) : undefined
+}
+
+export type Section106RecoveredLinkage = {
+  exchangeProjectId: number
+  processInstanceId: number
+  caseNumber?: string
+}
+
+/**
+ * Recover a lost case linkage from the exchange API (v0.3.1): find our project by
+ * source_project_id, then its latest process instance. List endpoints only return the
+ * caller's own records, scoped by API key.
+ */
+export async function recoverSection106Linkage(
+  portalProjectId: number
+): Promise<Section106RecoveredLinkage | undefined> {
+  const projects = await exchangeFetch<unknown[]>(
+    `/projects?source_project_id=${encodeURIComponent(portalProjectId)}`
+  )
+  const projectRow = (Array.isArray(projects) ? projects : []).find(isRecord)
+  const exchangeProjectId = parseNumericId(projectRow?.id)
+  if (typeof exchangeProjectId !== "number") {
+    return undefined
+  }
+
+  const instanceRows = await exchangeFetch<unknown[]>(
+    `/process-instances?parent_project_id=${encodeURIComponent(exchangeProjectId)}`
+  )
+  const instances = (Array.isArray(instanceRows) ? instanceRows : [])
+    .map(parseInstanceRow)
+    .filter((instance): instance is Section106InstanceStatus => Boolean(instance))
+    .sort((a, b) => b.processInstanceId - a.processInstanceId)
+  const latest = instances[0]
+  if (!latest) {
+    return undefined
+  }
+
+  return {
+    exchangeProjectId,
+    processInstanceId: latest.processInstanceId,
+    caseNumber: latest.caseNumber
+  }
+}
+
+export type Section106StoredPayload = {
+  decisionElementId?: number
+  elementReferenceId?: string
+  evaluationData?: Record<string, unknown>
+  appliedAt?: string
+}
+
+/** Parse a stored payload row from GET /process-decision-payloads (exported for tests). */
+export function parseSection106StoredPayload(row: unknown): Section106StoredPayload | undefined {
+  if (!isRecord(row)) {
+    return undefined
+  }
+  const other = isRecord(row.other) ? row.other : undefined
+  return {
+    decisionElementId: parseNumericId(row.process_decision_element),
+    elementReferenceId: normalizeString(other?.element_reference_id),
+    evaluationData: isRecord(row.evaluation_data) ? row.evaluation_data : undefined,
+    appliedAt: normalizeString(other?.applied_at)
+  }
+}
+
+/** Read back the stored evaluation_data for every section of an instance (v0.3.1). */
+export async function loadSection106StoredPayloads(
+  processInstanceId: number
+): Promise<Section106StoredPayload[]> {
+  const rows = await exchangeFetch<unknown[]>(
+    `/process-decision-payloads?process=${encodeURIComponent(processInstanceId)}`
+  )
+  return (Array.isArray(rows) ? rows : [])
+    .map(parseSection106StoredPayload)
+    .filter((payload): payload is Section106StoredPayload => Boolean(payload))
 }
 
 /** Submit the case to the reviewers' queue. */
