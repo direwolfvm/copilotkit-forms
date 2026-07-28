@@ -13,6 +13,7 @@ import AnalyticsPage from "./AnalyticsPage"
 import ResourcesPage from "./ResourcesPage"
 import PermitStartPage from "./PermitStartPage"
 import ComplexReviewStartPage from "./ComplexReviewStartPage"
+import Section106StartPage from "./Section106StartPage"
 import IpacPermitStartPage from "./IpacPermitStartPage"
 import { PermitInfoPage } from "./PermitInfoPage"
 import ResourcesHubPage from "./ResourcesHubPage"
@@ -535,6 +536,7 @@ function App() {
         <Route path="permits/basic" element={<PermitStartPage />} />
         <Route path="permits/ipac-consultation" element={<IpacPermitStartPage />} />
         <Route path="reviews/complex" element={<ComplexReviewStartPage />} />
+        <Route path="reviews/section-106" element={<Section106StartPage />} />
         <Route path="permit-info/:permitId" element={<PermitInfoPage />} />
         <Route path="nepa-info/:agencyId" element={<NepaAgencyInfoPage />} />
         <Route path="developer-tools" element={<DeveloperToolsPage />} />

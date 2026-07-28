@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "url";
 
 import { callIpacProxy, callNepassistProxy, ProxyError } from "./server/geospatialProxy.js";
+import { createSection106ProxyMiddleware } from "./server/section106Proxy.js";
 
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1364,6 +1365,8 @@ async function callNepaMcpChat({ message, sessionId, areaContext }) {
 }
 
 app.use("/api/supabase", proxySupabaseRequest);
+
+app.use("/api/section106", createSection106ProxyMiddleware());
 
 app.use("/api/custom-adk", proxyCustomAdkRequest);
 

@@ -14,6 +14,9 @@ const LEGACY_BASIC_PERMIT_LABEL = "Basic Permit"
 const ROW_AUTHORIZATION_APPROVED_EVENT = "project_approved"
 const COMPLEX_REVIEW_LABEL = "Complex Review"
 const COMPLEX_REVIEW_APPROVED_EVENT = "project_approved"
+const SECTION106_LABEL = "NHPA Section 106 Review (Demo)"
+const SECTION106_SUBMITTED_EVENT = "section106_submitted"
+const SECTION106_FINDING_EVENT = "finding_approved"
 const IPAC_CONSULTATION_COMPLETE_EVENT = "IPaC consultation complete"
 const IPAC_CONSULTATION_LABEL = "IPaC consultation"
 
@@ -144,6 +147,39 @@ export function determineRowAuthorizationStatus(
   return { variant: "pending", label: `${ROW_AUTHORIZATION_LABEL} in progress` }
 }
 
+export function isSection106Process(process: ProjectProcessSummary): boolean {
+  const haystack = `${process.title ?? ""} ${process.description ?? ""}`.toLowerCase()
+  return haystack.includes("section 106")
+}
+
+export function determineSection106Status(
+  process: ProjectProcessSummary
+): { variant: PreScreeningStatus; label: string } | undefined {
+  if (!isSection106Process(process)) {
+    return undefined
+  }
+
+  const hasFinding = process.caseEvents.some(
+    (event) => event.eventType?.toLowerCase() === SECTION106_FINDING_EVENT
+  )
+  if (hasFinding) {
+    return { variant: "complete", label: `${SECTION106_LABEL} finding approved` }
+  }
+
+  const hasSubmission = process.caseEvents.some(
+    (event) => event.eventType?.toLowerCase() === SECTION106_SUBMITTED_EVENT
+  )
+  if (hasSubmission) {
+    return { variant: "pending", label: `${SECTION106_LABEL} under review` }
+  }
+
+  if (process.caseEvents.length === 0) {
+    return undefined
+  }
+
+  return { variant: "pending", label: `${SECTION106_LABEL} in progress` }
+}
+
 export function isComplexReviewProcess(process: ProjectProcessSummary): boolean {
   const haystack = `${process.title ?? ""} ${process.description ?? ""}`.toLowerCase()
   return haystack.includes("complex review")
@@ -239,6 +275,12 @@ export function isProcessComplete(process: ProjectProcessSummary): boolean {
     )
   }
 
+  if (isSection106Process(process)) {
+    return process.caseEvents.some(
+      (event) => event.eventType?.toLowerCase() === SECTION106_FINDING_EVENT
+    )
+  }
+
   if (isIpacShadowProcess(process)) {
     return process.caseEvents.some(
       (event) => event.eventType?.toLowerCase() === IPAC_CONSULTATION_COMPLETE_EVENT.toLowerCase()
@@ -282,6 +324,8 @@ const AUTO_POPULATED_CHECKLIST_LABELS = new Set([
   `${ROW_AUTHORIZATION_LABEL.toLowerCase()} (sf-299)`,
   LEGACY_BASIC_PERMIT_LABEL.toLowerCase(),
   COMPLEX_REVIEW_LABEL.toLowerCase(),
+  SECTION106_LABEL.toLowerCase(),
+  "nhpa section 106 review",
 ])
 
 export function isAutoPopulatedChecklistItem(item: { label: string }): boolean {

@@ -6134,3 +6134,261 @@ export async function loadSupportingDocumentsForProcess(
     parentProcessId
   })
 }
+
+// --- Section 106 Case Manager (Demo) shadow workflow -------------------------------------
+//
+// The Case Manager's exchange API has no search endpoints, so the portal persists the case
+// linkage itself: a portal-side process_instance row (the "shadow" process, mirroring the
+// IPaC shadow-workflow pattern) plus a case_event whose `other` carries the exchange ids.
+// The shadow row also makes the review visible in the portal's project views.
+
+export const SECTION106_SHADOW_TITLE_SUFFIX = "NHPA Section 106 Review (Demo)"
+const SECTION106_CASE_OPENED_EVENT_TYPE = "section106_case_opened"
+const SECTION106_SHADOW_SYSTEM = "section106_demo"
+
+export type Section106CaseLinkage = {
+  exchangeProjectId: number
+  exchangeProcessInstanceId: number
+  caseNumber?: string
+}
+
+export type Section106ShadowState = {
+  processInstanceId?: number
+  linkage?: Section106CaseLinkage
+}
+
+function isSection106ShadowDescription(description?: string | null): boolean {
+  return Boolean(description?.toLowerCase().includes("section 106"))
+}
+
+function requirePortalSupabaseCredentials(): { supabaseUrl: string; supabaseAnonKey: string } {
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+  return { supabaseUrl, supabaseAnonKey }
+}
+
+function parseSection106LinkageFromEventOther(other: unknown): Section106CaseLinkage | undefined {
+  if (!other || typeof other !== "object" || Array.isArray(other)) {
+    return undefined
+  }
+  const record = other as Record<string, unknown>
+  if (record.system !== SECTION106_SHADOW_SYSTEM) {
+    return undefined
+  }
+  const exchangeProjectId = parseNumericId(record.exchange_project_id)
+  const exchangeProcessInstanceId = parseNumericId(record.exchange_process_instance_id)
+  if (typeof exchangeProjectId !== "number" || typeof exchangeProcessInstanceId !== "number") {
+    return undefined
+  }
+  return {
+    exchangeProjectId,
+    exchangeProcessInstanceId,
+    caseNumber:
+      typeof record.case_number === "string" && record.case_number.trim().length > 0
+        ? record.case_number.trim()
+        : undefined
+  }
+}
+
+async function fetchSection106ShadowProcessRecord(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  projectId: number
+): Promise<ProcessInstanceRow | undefined> {
+  const rows = await fetchSupabaseList<ProcessInstanceRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_instance",
+    "Section 106 shadow process instance",
+    (endpoint) => {
+      endpoint.searchParams.set(
+        "select",
+        "id,parent_project_id,process_model,last_updated,created_at,description"
+      )
+      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+      endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
+      endpoint.searchParams.append("order", "last_updated.desc.nullslast")
+      endpoint.searchParams.append("order", "id.desc")
+      endpoint.searchParams.set("limit", "20")
+    }
+  )
+  return rows.find((row) => isSection106ShadowDescription(row.description))
+}
+
+export async function loadSection106ShadowState(projectId: number): Promise<Section106ShadowState> {
+  const { supabaseUrl, supabaseAnonKey } = requirePortalSupabaseCredentials()
+  if (!Number.isFinite(projectId)) {
+    throw new ProjectPersistenceError("Project identifiers must be numeric.")
+  }
+
+  const shadowProcess = await fetchSection106ShadowProcessRecord(
+    supabaseUrl,
+    supabaseAnonKey,
+    projectId
+  )
+  const processInstanceId = parseNumericId(shadowProcess?.id)
+  if (typeof processInstanceId !== "number") {
+    return {}
+  }
+
+  const eventRows = await fetchSupabaseList<CaseEventRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/case_event",
+    "Section 106 shadow case events",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,parent_process_id,type,last_updated,other")
+      endpoint.searchParams.set("parent_process_id", `eq.${processInstanceId}`)
+      endpoint.searchParams.set("type", `eq.${SECTION106_CASE_OPENED_EVENT_TYPE}`)
+      endpoint.searchParams.append("order", "last_updated.desc.nullslast")
+      endpoint.searchParams.set("limit", "5")
+    }
+  )
+
+  let linkage: Section106CaseLinkage | undefined
+  for (const row of eventRows) {
+    linkage = parseSection106LinkageFromEventOther(row.other)
+    if (linkage) {
+      break
+    }
+  }
+
+  return { processInstanceId, linkage }
+}
+
+export async function recordSection106ShadowEvent({
+  processInstanceId,
+  name,
+  description,
+  type,
+  data
+}: {
+  processInstanceId: number
+  name: string
+  description: string
+  type: string
+  data?: Record<string, unknown>
+}): Promise<void> {
+  const { supabaseUrl, supabaseAnonKey } = requirePortalSupabaseCredentials()
+  const timestamp = new Date().toISOString()
+  const endpoint = new URL("/rest/v1/case_event", supabaseUrl)
+  const payload = withPortalTenantId(
+    stripUndefined({
+      parent_process_id: processInstanceId,
+      name,
+      description,
+      type,
+      status: "completed",
+      data_source_system: DATA_SOURCE_SYSTEM,
+      last_updated: timestamp,
+      retrieved_timestamp: timestamp,
+      other: data
+    })
+  )
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(payload)
+  })
+  const response = await fetch(url, init)
+  const responseText = await response.text()
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to record Section 106 shadow event (${response.status}): ${errorDetail}`
+        : `Failed to record Section 106 shadow event (${response.status}).`
+    )
+  }
+}
+
+/**
+ * Find-or-create the portal-side shadow process for a Section 106 case and persist the
+ * exchange linkage as a case event. Idempotent: an existing shadow process is reused, and
+ * the linkage event is only written when missing.
+ */
+export async function ensureSection106ShadowProcess({
+  projectId,
+  projectTitle,
+  linkage
+}: {
+  projectId: number
+  projectTitle: string | null
+  linkage: Section106CaseLinkage
+}): Promise<number> {
+  const { supabaseUrl, supabaseAnonKey } = requirePortalSupabaseCredentials()
+
+  const existingState = await loadSection106ShadowState(projectId)
+  let processInstanceId = existingState.processInstanceId
+
+  if (typeof processInstanceId !== "number") {
+    const timestamp = new Date().toISOString()
+    const endpoint = new URL("/rest/v1/process_instance", supabaseUrl)
+    // process_model is deliberately omitted — the Section 106 review runs in the external
+    // Case Manager; this row only mirrors it for portal visibility and linkage storage.
+    const payload = withPortalTenantId(
+      stripUndefined({
+        description: buildShadowProcessInstanceDescription(
+          projectTitle,
+          SECTION106_SHADOW_TITLE_SUFFIX
+        ),
+        parent_project_id: projectId,
+        data_source_system: DATA_SOURCE_SYSTEM,
+        last_updated: timestamp,
+        retrieved_timestamp: timestamp
+      })
+    )
+    const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify(payload)
+    })
+    const response = await fetch(url, init)
+    const responseText = await response.text()
+    if (!response.ok) {
+      const errorDetail = extractErrorDetail(responseText)
+      throw new ProjectPersistenceError(
+        errorDetail
+          ? `Failed to create the Section 106 shadow process (${response.status}): ${errorDetail}`
+          : `Failed to create the Section 106 shadow process (${response.status}).`
+      )
+    }
+    const created = responseText ? safeJsonParse(responseText) : undefined
+    processInstanceId = extractNumericId(created)
+    if (typeof processInstanceId !== "number" || !Number.isFinite(processInstanceId)) {
+      throw new ProjectPersistenceError(
+        "Supabase did not return an id for the Section 106 shadow process."
+      )
+    }
+  }
+
+  if (!existingState.linkage) {
+    await recordSection106ShadowEvent({
+      processInstanceId,
+      name: "Section 106 case opened",
+      description: linkage.caseNumber
+        ? `Case ${linkage.caseNumber} opened in the Section 106 Case Manager (Demo).`
+        : "Case opened in the Section 106 Case Manager (Demo).",
+      type: SECTION106_CASE_OPENED_EVENT_TYPE,
+      data: stripUndefined({
+        system: SECTION106_SHADOW_SYSTEM,
+        exchange_project_id: linkage.exchangeProjectId,
+        exchange_process_instance_id: linkage.exchangeProcessInstanceId,
+        case_number: linkage.caseNumber
+      })
+    })
+  }
+
+  return processInstanceId
+}

@@ -119,6 +119,20 @@ const COMPLEX_REVIEW_LINK = { href: "/reviews/complex", label: "Start this revie
 const COMPLEX_REVIEW_PROJECT_PARAM = "projectId"
 const COMPLEX_REVIEW_CHECKLIST_KEY = toChecklistKey(COMPLEX_REVIEW_LABEL)
 
+// NHPA Section 106 review via the Section 106 Case Manager — a demonstration system, so
+// the label carries the (Demo) marker everywhere it appears.
+const SECTION106_LABEL = "NHPA Section 106 Review (Demo)"
+const SECTION106_LINK = { href: "/reviews/section-106", label: "Start this review." }
+const SECTION106_PROJECT_PARAM = "projectId"
+const SECTION106_CHECKLIST_KEYS = new Set([
+  toChecklistKey(SECTION106_LABEL),
+  toChecklistKey("NHPA Section 106 Review")
+])
+
+function isSection106ChecklistKey(key: string): boolean {
+  return SECTION106_CHECKLIST_KEYS.has(key)
+}
+
 function isIpacConsultationChecklistKey(key: string, permitId?: string) {
   if (permitId === FWS_ESA_CONSULTATION_PERMIT_ID) {
     return true
@@ -146,6 +160,9 @@ function getChecklistIntegrationLink(
   }
   if (key === COMPLEX_REVIEW_CHECKLIST_KEY) {
     return COMPLEX_REVIEW_LINK
+  }
+  if (isSection106ChecklistKey(key)) {
+    return SECTION106_LINK
   }
   if (isIpacConsultationChecklistKey(key, permitId)) {
     return IPAC_CONSULTATION_LINK
@@ -322,6 +339,7 @@ function appendProjectIdToPermitLink(link: PermittingChecklistItem["link"], proj
   const routeParams: Array<{ href: string; param: string }> = [
     { href: ROW_AUTHORIZATION_LINK.href, param: ROW_AUTHORIZATION_PROJECT_PARAM },
     { href: COMPLEX_REVIEW_LINK.href, param: COMPLEX_REVIEW_PROJECT_PARAM },
+    { href: SECTION106_LINK.href, param: SECTION106_PROJECT_PARAM },
     { href: IPAC_CONSULTATION_LINK.href, param: IPAC_CONSULTATION_PROJECT_PARAM }
   ]
 
@@ -374,6 +392,10 @@ function ensureDefaultChecklistItems(items: PermittingChecklistItem[]): Permitti
         updated = true
         return { ...item, link: COMPLEX_REVIEW_LINK }
       }
+    }
+    if (isSection106ChecklistKey(key) && !item.link) {
+      updated = true
+      return { ...item, link: SECTION106_LINK }
     }
     if (isIpacConsultationChecklistKey(key) && !item.link) {
       updated = true
