@@ -4,6 +4,7 @@ import {
   isOpenProponentTask,
   parseSection106CaseEvent,
   parseSection106ErrorEnvelope,
+  parseSection106StoredPayload,
   seedSection106SectionEvaluationData,
   type Section106Element
 } from "./section106"
@@ -74,6 +75,30 @@ describe("parseSection106CaseEvent / isOpenProponentTask", () => {
     })
     expect(statusChange?.followingSegmentName).toBe("Consultation")
     expect(statusChange && isOpenProponentTask(statusChange)).toBe(false)
+  })
+})
+
+describe("parseSection106StoredPayload", () => {
+  it("parses evaluation_data with the element reference id from other", () => {
+    const payload = parseSection106StoredPayload({
+      id: 7,
+      process_decision_element: 2,
+      process: 11,
+      evaluation_data: { description: "Replace deck panels", federal_involvement: "funding" },
+      other: { element_reference_id: "s106-v1-undertaking", applied_at: "2026-07-28T18:00:00Z" }
+    })
+    expect(payload).toEqual({
+      decisionElementId: 2,
+      elementReferenceId: "s106-v1-undertaking",
+      evaluationData: { description: "Replace deck panels", federal_involvement: "funding" },
+      appliedAt: "2026-07-28T18:00:00Z"
+    })
+  })
+
+  it("returns undefined evaluationData for empty or non-object payloads", () => {
+    expect(parseSection106StoredPayload({ process_decision_element: 3 })?.evaluationData)
+      .toBeUndefined()
+    expect(parseSection106StoredPayload("nope")).toBeUndefined()
   })
 })
 

@@ -16,6 +16,8 @@ import {
   loadSection106CaseEvents,
   loadSection106Instance,
   loadSection106ProcessInformation,
+  loadSection106StoredPayloads,
+  recoverSection106Linkage,
   respondSection106InformationRequest,
   saveSection106Section,
   seedSection106SectionEvaluationData,
@@ -23,7 +25,8 @@ import {
   type Section106CaseEvent,
   type Section106Element,
   type Section106InstanceStatus,
-  type Section106ProcessInformation
+  type Section106ProcessInformation,
+  type Section106StoredPayload
 } from "./utils/section106"
 import {
   ProjectPersistenceError,
@@ -54,6 +57,7 @@ type CaseState =
       shadowProcessInstanceId?: number
       instance?: Section106InstanceStatus
       events: Section106CaseEvent[]
+      storedPayloads: Section106StoredPayload[]
     }
   | { status: "error"; message: string }
 
@@ -96,6 +100,7 @@ export default function Section106StartPage() {
   const [caseState, setCaseState] = useState<CaseState>({ status: "idle" })
   const [initiateState, setInitiateState] = useState<ActionState>({ status: "idle" })
   const [sectionDrafts, setSectionDrafts] = useState<Record<number, Record<string, unknown>>>({})
+  const [dirtySectionIds, setDirtySectionIds] = useState<ReadonlySet<number>>(new Set())
   const [activeSectionId, setActiveSectionId] = useState<number | undefined>(undefined)
   const [sectionSaveState, setSectionSaveState] = useState<ActionState>({ status: "idle" })
   const [submitState, setSubmitState] = useState<ActionState>({ status: "idle" })
@@ -162,41 +167,73 @@ export default function Section106StartPage() {
     }
   }, [portalProjectId])
 
-  const refreshCaseState = useCallback(async () => {
-    if (typeof portalProjectId !== "number") {
-      return
-    }
-    setCaseState({ status: "loading" })
-    try {
-      const shadow = await loadSection106ShadowState(portalProjectId)
-      if (!shadow.linkage) {
-        setCaseState({ status: "none" })
+  const refreshCaseState = useCallback(
+    async (options?: { projectTitle?: string | null }) => {
+      if (typeof portalProjectId !== "number") {
         return
       }
-      const [instance, events] = await Promise.all([
-        loadSection106Instance(shadow.linkage.exchangeProcessInstanceId).catch(() => undefined),
-        loadSection106CaseEvents(shadow.linkage.exchangeProcessInstanceId).catch(
-          () => [] as Section106CaseEvent[]
-        )
-      ])
-      setCaseState({
-        status: "linked",
-        linkage: shadow.linkage,
-        shadowProcessInstanceId: shadow.processInstanceId,
-        instance,
-        events
-      })
-    } catch (error) {
-      setCaseState({
-        status: "error",
-        message: describeError(error, "Unable to check the Section 106 case status.")
-      })
-    }
-  }, [portalProjectId])
+      setCaseState({ status: "loading" })
+      try {
+        const shadow = await loadSection106ShadowState(portalProjectId)
+        let linkage = shadow.linkage
+        let shadowProcessInstanceId = shadow.processInstanceId
+
+        if (!linkage) {
+          // v0.3.1: recover a lost linkage from the exchange API by our own project id,
+          // then re-persist the portal-side shadow records for Projects-page visibility.
+          const recovered = await recoverSection106Linkage(portalProjectId).catch(() => undefined)
+          if (recovered) {
+            linkage = {
+              exchangeProjectId: recovered.exchangeProjectId,
+              exchangeProcessInstanceId: recovered.processInstanceId,
+              caseNumber: recovered.caseNumber
+            }
+            try {
+              shadowProcessInstanceId = await ensureSection106ShadowProcess({
+                projectId: portalProjectId,
+                projectTitle: options?.projectTitle ?? null,
+                linkage
+              })
+            } catch (shadowError) {
+              console.warn("Failed to re-persist the Section 106 shadow linkage.", shadowError)
+            }
+          }
+        }
+
+        if (!linkage) {
+          setCaseState({ status: "none" })
+          return
+        }
+        const [instance, events, storedPayloads] = await Promise.all([
+          loadSection106Instance(linkage.exchangeProcessInstanceId).catch(() => undefined),
+          loadSection106CaseEvents(linkage.exchangeProcessInstanceId).catch(
+            () => [] as Section106CaseEvent[]
+          ),
+          loadSection106StoredPayloads(linkage.exchangeProcessInstanceId).catch(
+            () => [] as Section106StoredPayload[]
+          )
+        ])
+        setCaseState({
+          status: "linked",
+          linkage,
+          shadowProcessInstanceId,
+          instance,
+          events,
+          storedPayloads
+        })
+      } catch (error) {
+        setCaseState({
+          status: "error",
+          message: describeError(error, "Unable to check the Section 106 case status.")
+        })
+      }
+    },
+    [portalProjectId]
+  )
 
   useEffect(() => {
     if (projectState.status === "success") {
-      void refreshCaseState()
+      void refreshCaseState({ projectTitle: projectState.formData.title ?? null })
     }
   }, [projectState, refreshCaseState])
 
@@ -213,9 +250,8 @@ export default function Section106StartPage() {
     [formSections, activeSectionId]
   )
 
-  // The exchange API has no payload read-back endpoint, so prefill each section draft
-  // from the same seeding logic used at initiation — saving an untouched section then
-  // re-posts the seeded values instead of blanking them.
+  // Prefill drafts before initiation from the portal project profile so the forms show
+  // what will be seeded into the case.
   useEffect(() => {
     if (projectState.status !== "success" || formSections.length === 0) {
       return
@@ -232,6 +268,37 @@ export default function Section106StartPage() {
       return changed ? next : previous
     })
   }, [projectState, formSections])
+
+  // Once a case is linked, round-trip the stored evaluation_data from the exchange API
+  // (v0.3.1 read-back) into every section the user has not edited locally.
+  useEffect(() => {
+    if (caseState.status !== "linked" || formSections.length === 0) {
+      return
+    }
+    const stored = caseState.storedPayloads
+    if (stored.length === 0) {
+      return
+    }
+    setSectionDrafts((previous) => {
+      const next = { ...previous }
+      let changed = false
+      for (const section of formSections) {
+        if (dirtySectionIds.has(section.id)) {
+          continue
+        }
+        const payload = stored.find(
+          (entry) =>
+            entry.decisionElementId === section.id ||
+            (entry.elementReferenceId && entry.elementReferenceId === section.referenceId)
+        )
+        if (payload?.evaluationData && Object.keys(payload.evaluationData).length > 0) {
+          next[section.id] = payload.evaluationData
+          changed = true
+        }
+      }
+      return changed ? next : previous
+    })
+  }, [caseState, formSections, dirtySectionIds])
 
   const linkage = caseState.status === "linked" ? caseState.linkage : undefined
   const caseInstance = caseState.status === "linked" ? caseState.instance : undefined
@@ -278,6 +345,14 @@ export default function Section106StartPage() {
 
   const handleSectionDraftChange = (decisionElementId: number, draft: Record<string, unknown>) => {
     setSectionDrafts((previous) => ({ ...previous, [decisionElementId]: draft }))
+    setDirtySectionIds((previous) => {
+      if (previous.has(decisionElementId)) {
+        return previous
+      }
+      const next = new Set(previous)
+      next.add(decisionElementId)
+      return next
+    })
   }
 
   const handleSaveSection = async (element: Section106Element) => {
@@ -292,6 +367,14 @@ export default function Section106StartPage() {
         exchangeProjectId: linkage.exchangeProjectId,
         element,
         evaluationData: sectionDrafts[element.id] ?? {}
+      })
+      setDirtySectionIds((previous) => {
+        if (!previous.has(element.id)) {
+          return previous
+        }
+        const next = new Set(previous)
+        next.delete(element.id)
+        return next
       })
       setSectionSaveState({
         status: "success",
@@ -647,6 +730,11 @@ export default function Section106StartPage() {
                             <span>
                               {index + 1}. {section.title ?? section.referenceId ?? `Section ${index + 1}`}
                             </span>
+                            {dirtySectionIds.has(section.id) ? (
+                              <span className="permit-start-page__sf299-flag permit-start-page__sf299-flag--dirty">
+                                Unsaved changes
+                              </span>
+                            ) : null}
                           </button>
                         </li>
                       )
