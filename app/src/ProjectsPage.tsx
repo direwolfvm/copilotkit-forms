@@ -20,12 +20,14 @@ import {
   determineComplexReviewStatus,
   determineIpacStatus,
   determineProjectStatus,
+  determineSection106Status,
   getLatestCaseEvent,
   isRowAuthorizationProcess,
   isComplexReviewProcess,
   isIpacChecklistItem,
   isIpacShadowProcess,
   isPreScreeningProcess,
+  isSection106Process,
   isWorkflowBackedChecklistItem
 } from "./utils/projectStatus"
 
@@ -40,6 +42,7 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
   const preScreeningStatus = determinePreScreeningStatus(process)
   const rowAuthorizationStatus = determineRowAuthorizationStatus(process)
   const complexReviewStatus = determineComplexReviewStatus(process)
+  const section106Status = determineSection106Status(process)
   const ipacStatus = determineIpacStatus(process)
   const latestEventLabel = latestCaseEvent?.name || latestCaseEvent?.eventType
 
@@ -69,6 +72,9 @@ function ProcessTree({ process }: { process: ProjectProcessSummary }) {
             ) : null}
             {complexReviewStatus ? (
               <StatusIndicator variant={complexReviewStatus.variant} label={complexReviewStatus.label} />
+            ) : null}
+            {section106Status ? (
+              <StatusIndicator variant={section106Status.variant} label={section106Status.label} />
             ) : null}
             {ipacStatus ? (
               <StatusIndicator variant={ipacStatus.variant} label={ipacStatus.label} />
@@ -180,6 +186,10 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
     () => entry.processes.find((process) => isComplexReviewProcess(process)),
     [entry.processes]
   )
+  const section106Process = useMemo(
+    () => entry.processes.find((process) => isSection106Process(process)),
+    [entry.processes]
+  )
   const ipacProcess = useMemo(
     () => entry.processes.find((process) => isIpacShadowProcess(process)),
     [entry.processes]
@@ -191,6 +201,7 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
           !isPreScreeningProcess(process) &&
           !isRowAuthorizationProcess(process) &&
           !isComplexReviewProcess(process) &&
+          !isSection106Process(process) &&
           !isIpacShadowProcess(process)
       ),
     [entry.processes]
@@ -228,12 +239,18 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
       if (normalized === "complex review") {
         return complexReviewProcess
       }
+      if (
+        normalized === "nhpa section 106 review (demo)" ||
+        normalized === "nhpa section 106 review"
+      ) {
+        return section106Process
+      }
       if (isIpacChecklistItem({ label })) {
         return ipacProcess
       }
       return undefined
     },
-    [rowAuthorizationProcess, complexReviewProcess, ipacProcess]
+    [rowAuthorizationProcess, complexReviewProcess, section106Process, ipacProcess]
   )
 
   return (

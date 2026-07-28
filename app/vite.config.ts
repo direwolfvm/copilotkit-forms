@@ -6,6 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'http'
 import { configDefaults } from 'vitest/config'
 
 import { callIpacProxy, callNepassistProxy, ProxyError } from './server/geospatialProxy.js'
+import { createSection106ProxyMiddleware } from './server/section106Proxy.js'
 
 type ProxyHandler = (body: any) => Promise<unknown>
 
@@ -80,6 +81,7 @@ function createProxyMiddleware(handler: ProxyHandler) {
 function attachGeospatialProxy(server: { middlewares: { use: (path: string, handler: any) => void } }) {
   server.middlewares.use('/api/geospatial/nepassist', createProxyMiddleware(callNepassistProxy))
   server.middlewares.use('/api/geospatial/ipac', createProxyMiddleware(callIpacProxy))
+  server.middlewares.use('/api/section106', createSection106ProxyMiddleware())
 }
 
 const defaultBenchmarkExclude = (configDefaults as { benchmark?: { exclude?: string[] } }).benchmark?.exclude ?? []
