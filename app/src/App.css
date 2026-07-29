@@ -3749,6 +3749,125 @@
   flex-wrap: wrap;
 }
 
+/* Delete project modal */
+.projects-tree__project-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.projects-tree__delete-button {
+  color: #b50909;
+  border-color: #b50909;
+}
+
+.delete-project-modal {
+  width: min(640px, 100%);
+}
+
+.delete-project-modal__options {
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.delete-project-modal__options legend {
+  font-weight: 600;
+  padding: 0 0.3rem;
+}
+
+.delete-project-modal__options label {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+}
+
+.delete-project-modal__options input[type="checkbox"] {
+  margin-top: 0.25rem;
+}
+
+.delete-project-modal__credentials {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.delete-project-modal__credentials label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.delete-project-modal__credentials input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  background: var(--surface);
+  color: var(--color-text);
+}
+
+.delete-project-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.delete-project-modal__confirm {
+  background: #b50909;
+}
+
+.delete-project-modal__confirm:hover {
+  background: #8f0707;
+}
+
+.delete-project-modal__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.delete-project-modal__step {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+}
+
+.delete-project-modal__step-status {
+  font-weight: 700;
+}
+
+.delete-project-modal__step--done .delete-project-modal__step-status {
+  color: #0f7d43;
+}
+
+.delete-project-modal__step--error .delete-project-modal__step-status {
+  color: #b50909;
+}
+
+.delete-project-modal__step--skipped .delete-project-modal__step-status,
+.delete-project-modal__step--pending .delete-project-modal__step-status {
+  color: var(--color-text-muted, #5c5c5c);
+}
+
+.delete-project-modal__step-message {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #5c5c5c);
+}
+
+.delete-project-modal__error {
+  color: #b50909;
+  font-weight: 600;
+}
+
 /* Permit info start-from-portal CTA */
 .permit-info__start {
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);

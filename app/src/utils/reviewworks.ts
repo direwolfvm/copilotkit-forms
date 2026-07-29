@@ -1419,3 +1419,116 @@ export async function loadComplexReviewProcessesForProjects(
     return new Map()
   }
 }
+
+// --- Application deletion ----------------------------------------------------------------
+
+async function deleteReviewworksRows(
+  {
+    supabaseUrl,
+    supabaseAnonKey,
+    tenantId,
+    accessToken
+  }: { supabaseUrl: string; supabaseAnonKey: string; tenantId: string; accessToken: string },
+  path: string,
+  resourceDescription: string,
+  configure: (endpoint: URL) => void
+): Promise<void> {
+  const endpoint = new URL(path, supabaseUrl)
+  configure(endpoint)
+  endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+  const response = await fetch(endpoint.toString(), {
+    method: "DELETE",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      Prefer: "return=minimal"
+    }
+  })
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(await response.text())
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `ReviewWorks ${resourceDescription} deletion failed (${response.status}): ${errorDetail}`
+        : `ReviewWorks ${resourceDescription} deletion failed (${response.status}).`
+    )
+  }
+}
+
+export type ReviewworksDeletionResult = {
+  deleted: boolean
+  reviewworksProjectId?: number
+}
+
+/**
+ * Delete the tenant-local ReviewWorks (Complex Review) application for a portal project.
+ * ReviewWorks reuses the portal's numeric project id, so resolution is direct. Requires an
+ * authenticated ReviewWorks session.
+ */
+export async function deleteReviewworksProject({
+  portalProjectId,
+  accessToken
+}: {
+  portalProjectId: number
+  accessToken: string
+}): Promise<ReviewworksDeletionResult> {
+  const supabaseUrl = getReviewworksUrl()
+  const supabaseAnonKey = getReviewworksAnonKey()
+  const tenantId = getReviewworksTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
+    throw new ProjectPersistenceError(
+      "ReviewWorks credentials are not configured. Set REVIEWWORKS_SUPABASE_URL, REVIEWWORKS_SUPABASE_ANON_KEY, and REVIEWWORKS_TENANT_ID."
+    )
+  }
+
+  const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
+  const projectRows = await fetchReviewworksList<{ id?: number | null }>(
+    options,
+    "/rest/v1/project",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id")
+      endpoint.searchParams.set("id", `eq.${portalProjectId}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+  const reviewworksProjectId = parseNumericId(projectRows[0]?.id)
+  if (typeof reviewworksProjectId !== "number") {
+    return { deleted: false }
+  }
+
+  const processRows = await fetchReviewworksList<{ id?: number | null }>(
+    options,
+    "/rest/v1/process_instance",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id")
+      endpoint.searchParams.set("parent_project_id", `eq.${reviewworksProjectId}`)
+      endpoint.searchParams.set("limit", "200")
+    }
+  )
+  const processIds = processRows
+    .map((row) => parseNumericId(row.id))
+    .filter((id): id is number => typeof id === "number")
+
+  if (processIds.length > 0) {
+    const inFilter = `in.(${processIds.join(",")})`
+    await deleteReviewworksRows(options, "/rest/v1/case_event", "case events", (endpoint) => {
+      endpoint.searchParams.set("parent_process_id", inFilter)
+    })
+    await deleteReviewworksRows(
+      options,
+      "/rest/v1/process_decision_payload",
+      "decision payloads",
+      (endpoint) => {
+        endpoint.searchParams.set("process", inFilter)
+      }
+    )
+  }
+
+  await deleteReviewworksRows(options, "/rest/v1/process_instance", "process instances", (endpoint) => {
+    endpoint.searchParams.set("parent_project_id", `eq.${reviewworksProjectId}`)
+  })
+  await deleteReviewworksRows(options, "/rest/v1/project", "project", (endpoint) => {
+    endpoint.searchParams.set("id", `eq.${reviewworksProjectId}`)
+  })
+
+  return { deleted: true, reviewworksProjectId }
+}

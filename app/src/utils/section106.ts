@@ -602,6 +602,31 @@ export async function submitSection106Review(processInstanceId: number): Promise
   })
 }
 
+/**
+ * Withdraw a Section 106 case. The exchange API has no delete endpoint, so this posts a
+ * `project_withdrawn` case event — stored, surfaced to case managers as a notification,
+ * and audited on their side. The case record itself remains in the Case Manager.
+ */
+export async function withdrawSection106Case({
+  processInstanceId,
+  reason
+}: {
+  processInstanceId: number
+  reason?: string
+}): Promise<void> {
+  await exchangeFetch<unknown>("/case-events", {
+    method: "POST",
+    body: JSON.stringify({
+      parent_process_id: processInstanceId,
+      name: "Application withdrawn",
+      description:
+        reason ??
+        "The proponent deleted this project in HelpPermitMe and withdraws the Section 106 initiation.",
+      type: "project_withdrawn"
+    })
+  })
+}
+
 /** Answer an information_request task; references the request via parent_event_id. */
 export async function respondSection106InformationRequest({
   processInstanceId,

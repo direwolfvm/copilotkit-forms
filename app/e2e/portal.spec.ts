@@ -114,6 +114,36 @@ test.describe("project portal", () => {
         }
       }
     }
+
+    // Delete the project from the Projects page (also keeps the demo data clean).
+    await page.goto("/projects")
+    const projectItem = page
+      .locator(".projects-tree__project")
+      .filter({ hasText: TEST_TITLE })
+      .first()
+    await expect(projectItem).toBeVisible({ timeout: 20_000 })
+    // Expand programmatically: the summary row hosts a navigation link and the list
+    // re-renders while external-system processes merge in, making pointer clicks flaky.
+    await projectItem.evaluate((element) => {
+      const details = element.querySelector("details")
+      if (details) {
+        details.open = true
+      }
+    })
+    await projectItem.getByRole("button", { name: "Delete project…" }).click()
+
+    const modal = page.locator(".delete-project-modal")
+    await expect(modal).toBeVisible()
+    // No external applications were started for this project; uncheck anything detected.
+    for (const checkbox of await modal.locator("input[type=checkbox]").all()) {
+      await checkbox.uncheck()
+    }
+    await modal.getByRole("button", { name: "Delete project", exact: true }).click()
+    await expect(modal.getByText("Project deleted.")).toBeVisible({ timeout: 30_000 })
+    await modal.getByRole("button", { name: "Close", exact: true }).click()
+    await expect(
+      page.locator(".projects-tree__project").filter({ hasText: TEST_TITLE })
+    ).toHaveCount(0, { timeout: 20_000 })
   })
 
   test("permit info page advertises the Section 106 demo integration", async ({ page }) => {
