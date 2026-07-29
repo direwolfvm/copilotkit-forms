@@ -1,149 +1,154 @@
-# Permitting demo project
+# HelpPermitMe
 
-This repository hosts a React application that demonstrates how CopilotKit can collaborate with a
-react-jsonschema-form (RJSF) experience to help users move through a permitting process. This is a
-community-built demo that is not a U.S. government project. It uses publicly available data
-standards and plans from the Council on Environmental Quality (CEQ), but it is neither sponsored
-by nor formally associated with CEQ.
+HelpPermitMe is an unofficial demonstration of a modern project intake, permitting, and
+environmental-review platform. It combines a React portal, CEQ-aligned project data, geospatial
+screening, Copilot-assisted workflows, and integrations with demonstration case-management
+systems.
 
-The interactive form lives in [`app/`](app/) and pairs structured data entry with a Copilot sidebar
-that can read the current form state, suggest updates, and apply changes directly through
-CopilotKit actions.
+> **Demonstration only:** This is not a U.S. government website, is not affiliated with the Council
+> on Environmental Quality (CEQ), and is not a system of record. Do not use it for official
+> submissions or sensitive information.
 
-## Getting started
+## What the app demonstrates
 
-> **Prerequisite:** Use Node.js 18 or newer. The refreshed Vite, ESLint, and TypeScript toolchain
-> relies on modern Node features and will refuse to install under older runtimes.
+- A guided project portal with CEQ-aligned structured data, location geometry, NEPA information,
+  and a permitting checklist
+- Copilot-assisted form updates, checklist suggestions, project-aware NEPA questions, resource
+  screening, and analytics
+- Map drawing and KML, KMZ, or GeoJSON upload, followed by NEPA Assist, IPaC, and environmental-map
+  requests
+- Supabase persistence for projects, process instances, decision payloads, case events, GIS data,
+  reports, and supporting documents
+- Tenant-aware exchange with PermitFast for Right of Way Authorization (SF-299) and ReviewWorks for
+  Complex Environmental Review
+- An IPaC ESA consultation handoff and a demonstration NHPA Section 106 case workflow
+- Project trees, project-detail views, workflow analytics, permit and authorization reference
+  data, NEPA agency guidance, and a shared-services directory
+- PDF project reports, supporting-document uploads, guided tours, visual themes, and project
+  cleanup tools
+
+See [the user guide](app/docs/user-guide.md) for a page-by-page tour and
+[the architecture guide](app/docs/architecture.md) for data flows and integration boundaries.
+
+## Quick start
+
+Prerequisites:
+
+- Node.js `^20.19.0` or `>=22.12.0`
+- npm
+- Optional: a Supabase project and integration credentials for persistence and connected workflows
 
 ```bash
 cd app
 npm install
-cp .env.example .env            # add your CopilotKit key and Supabase credentials
-npm run lint                    # optional but recommended to confirm a clean install
-npm run build                   # validates the type checker before starting dev mode
+cp .env.example .env
 npm run dev
 ```
 
-The dev server prints a URL (defaults to `http://localhost:5173`). If you are running in a remote
-container or Codespace, append Vite flags so the preview is reachable from your browser:
+Vite prints the local URL, normally `http://localhost:5173`. The public pages and static reference
+content work without backend credentials. Features that save data, use Copilot, or call configured
+external systems report a configuration error when their dependency is unavailable.
 
-```bash
-npm run dev -- --host 0.0.0.0 --port 4173 --clearScreen false
-```
-
-No Copilot API key is required to test the UI—the sidebar simply displays an in-app warning instead
-of streaming AI responses. Supabase credentials are required if you want to exercise the persistence
-APIs that save projects back to the hosted database.
-
-## Testing
-
-Run the Vitest suite from the `app/` directory to validate the UI components and geospatial
-utilities:
+For a production-style local run with values loaded from `app/.env`:
 
 ```bash
 cd app
-npm test -- --run
+npm run build
+node --env-file=.env server.mjs
 ```
 
-The tests include coverage for the Resource Check helpers that normalize GeoJSON payloads and format
-Copilot-readable geospatial summaries.
+The Express server listens on `PORT` (default `8080`) and serves the built single-page application
+plus the complete same-origin API proxy stack. `npm start` is equivalent when the environment has
+already been exported by your shell or hosting platform.
 
-### Supabase configuration
+## Configuration
 
-The application can persist project snapshots, geospatial results, and permitting checklist details
-to Supabase when the following environment variables are present in `.env`:
+Copy [`app/.env.example`](app/.env.example) to `app/.env`. The common local configuration is:
 
-- `VITE_SUPABASE_URL` – the base URL of your Supabase project
-- `VITE_SUPABASE_ANON_KEY` – the project's anonymous public key
+```dotenv
+VITE_COPILOTKIT_RUNTIME_URL=/api/copilotkit-runtime
+COPILOTKIT_RUNTIME_PROXY_BASE_URL=https://your-copilot-runtime.example/copilotkit
 
-For teams already using Next.js conventions, `NEXT_PUBLIC_SUPABASE_URL` and
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` are also accepted. The Express server in `app/server.mjs` resolves
-these variables (as well as `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_PUBLIC_ANON_KEY`) and
-exposes a `/api/supabase` proxy so the browser never stores the raw credentials. When the variables
-are absent, Supabase-dependent UI features will surface descriptive errors explaining that
-credentials need to be configured.
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_TENANT_ID=your-tenant-uuid
+```
 
-#### Provisioning the Supabase database
+PermitFast, ReviewWorks, Section 106, IPaC identification headers, custom runtime targets, and
+runtime aliases are documented in [the application guide](app/README.md#environment-variables).
+Never commit `.env`, service-role keys, passwords, or Section 106 API keys.
 
-The optional persistence APIs expect the Permit Intelligence Center schema and seed data outlined
-in [`database-schema/README.md`](database-schema/README.md). At a high level you will:
+To provision a fresh application database, follow
+[`database-schema/README.md`](database-schema/README.md). The current setup uses the ordered,
+tenant-aware scripts in `resources/`.
 
-1. Apply `prod.sql` to bootstrap the schema and base data set.
-2. Run the `schema-v1.0.0-to-1.2.0.sql` migration to match the structure used by this project.
-3. Import the CSV exports so lookup tables resolve to human-readable values.
-4. Create a `permit-documents` storage bucket (or adjust the name in the code) and review the
-   associated access policies.
+## Development and verification
 
-The database README also documents upstream sources and provides guidance on enabling Supabase's RLS
-features before exposing the anon/public key to untrusted clients.
-
-If `npm run dev` fails after upgrading dependencies, clear any cached artifacts and reinstall:
+Run commands from `app/`:
 
 ```bash
-rm -rf node_modules package-lock.json
-npm install
+npm run lint
+npm run check:style-tokens
+npm run test:run
+npm run build
 ```
 
-## What’s included
+Additional commands:
 
-- A CEQ Project entity schema expressed with RJSF, including helper text for each field
-- A responsive layout with a live project summary panel
-- CopilotKit actions that let the AI assistant populate or reset form fields on your behalf
-- A settings view with a runtime selector that can flip between the hosted Copilot Cloud and the
-  local Permitting ADK proxy exposed at `/api/custom-adk`
+- `npm test` — run Vitest in watch mode
+- `npm run test:bench` — run the schema benchmark
+- `npm run preview` — preview the Vite production bundle
+- `npm run test:e2e` — run the Playwright portal flow against the configured real backend
+- `npm run sync:env:gcloud` — sync the script's supported environment variables from Google Cloud
 
-Refer to [`app/README.md`](app/README.md) for a detailed feature breakdown and configuration
-options.
+The end-to-end test writes to the configured Supabase project and identifies its project as safe to
+delete. Review [`app/playwright.config.ts`](app/playwright.config.ts) and use a non-production
+environment.
 
-## Deploying to Google Cloud Run with Docker
+## Repository map
 
-The static assets served by `server.mjs` must be built before the Express server starts. When the
-app is pushed to a bare Node runtime without that build step, requests return `404` because the
-`dist/` directory does not exist. Packaging the project as a container guarantees the build happens
-exactly once during the image build and results in a repeatable deployment artifact that works the
-same locally and on Google Cloud.
+| Path | Purpose |
+| --- | --- |
+| [`app/`](app/) | React/Vite frontend, Express production server, tests, and application docs |
+| [`app/src/`](app/src/) | Pages, components, schemas, integration clients, and UI tests |
+| [`app/server/`](app/server/) | Server-side geospatial and Section 106 proxy modules |
+| [`resources/`](resources/) | Current ordered Supabase schema, seed, and tenant migration |
+| [`database-schema/`](database-schema/) | Upstream PIC exports, legacy migration material, and API history |
+| [`Dockerfile`](Dockerfile) | Multi-stage Node production image |
+| [`manifest.yml`](manifest.yml) | Cloud Foundry deployment manifest |
+| [`PERMITFAST_HANDOFF.md`](PERMITFAST_HANDOFF.md) | PermitFast SF-299 integration contract |
+| [`PERMITFAST_HANDOFF_GEOSPATIAL.md`](PERMITFAST_HANDOFF_GEOSPATIAL.md) | PermitFast geospatial payload contract |
+| [`SECTION106_HANDOFF.md`](SECTION106_HANDOFF.md) | Section 106 exchange integration notes |
 
-### 1. Build and test the container locally
+## Deployment
+
+The production image builds the Vite bundle and serves it with `app/server.mjs`:
 
 ```bash
-# From the repository root
-docker build -t copilotkit-forms .
-docker run --rm -p 8080:8080 --env-file app/.env copilotkit-forms
+docker build -t helppermitme .
+docker run --rm -p 8080:8080 --env-file app/.env helppermitme
 ```
 
-Then open http://localhost:8080 to verify the production bundle loads correctly. If you do not have
-Copilot credentials, omit the `--env-file` flag and the UI will render with a warning banner.
+Open `http://localhost:8080`. Runtime configuration is emitted by `/env.js`, so server environment
+changes do not require rebuilding the frontend image. The repository also includes `manifest.yml`
+for Cloud Foundry-style deployment.
 
-### 2. Submit the image to Google Cloud Build
+Set production configuration in the hosting platform rather than baking secrets into an image.
+Supabase anon keys are public client credentials and must be protected by appropriate Row Level
+Security; service-role keys must never be exposed to this application.
 
-```bash
-gcloud config set project <YOUR_PROJECT_ID>
-gcloud builds submit --tag gcr.io/<YOUR_PROJECT_ID>/copilotkit-forms
-```
+## Documentation
 
-This command runs the same Dockerfile in Google Cloud Build and pushes the resulting image to your
-project's Artifact Registry (or Container Registry, depending on your account settings).
+- [Application setup and operations](app/README.md)
+- [User guide](app/docs/user-guide.md)
+- [Architecture and integrations](app/docs/architecture.md)
+- [Database setup](database-schema/README.md)
+- [Legacy external API guide](database-schema/API_INTEGRATION.md)
 
-### 3. Deploy the container to Cloud Run
+Historical handoff documents describe specific cross-system contracts. If a handoff document and
+the general overview differ, treat the handoff document and the current implementation as the
+source of truth for that integration.
 
-```bash
-gcloud run deploy copilotkit-forms \
-  --image gcr.io/<YOUR_PROJECT_ID>/copilotkit-forms \
-  --platform managed \
-  --region <REGION> \
-  --allow-unauthenticated \
-  --set-env-vars VITE_COPILOTKIT_PUBLIC_API_KEY=<YOUR_PUBLIC_KEY>,\\
-VITE_SUPABASE_URL=<YOUR_SUPABASE_URL>,\\
-VITE_SUPABASE_ANON_KEY=<YOUR_SUPABASE_ANON_KEY>
-```
+## License
 
-Cloud Run automatically provisions HTTPS for the service URL. Additional environment variables can
-be configured with repeated `--set-env-vars` flags (for example, `VITE_COPILOTKIT_RUNTIME_URL`).
-
-The production server injects these environment variables into a lightweight `/env.js` endpoint at
-startup. This means the CopilotKit public API key can be sourced from Google Secret Manager (or any
-other runtime configuration provider) without rebuilding the static assets. The frontend checks that
-endpoint at load time and falls back to `.env` values during local development.
-
-By relying on the container image, every deployment will bundle the compiled assets, avoiding the
-missing-build `404` and making rollbacks or staging deployments straightforward.
+See [`LICENSE`](LICENSE).
