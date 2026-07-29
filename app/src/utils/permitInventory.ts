@@ -17,6 +17,9 @@ export interface PermitInfo {
 }
 
 export const FWS_ESA_CONSULTATION_PERMIT_ID = "endangered-species-act-consultation-doi-fws"
+// Integrated with the Section 106 Case Manager (Demo) — a demonstration system, so the
+// integration label carries an explicit demo marker.
+export const SECTION106_REVIEW_PERMIT_ID = "section-106-review"
 
 export const INTEGRATION_STATUS_LABELS: Record<IntegrationStatus, string> = {
   "integrated": "Integration with HelpPermitMe",
@@ -779,7 +782,9 @@ export const permitInventory: PermitInfo[] = [
     integrationStatus:
       permit.id === FWS_ESA_CONSULTATION_PERMIT_ID
         ? "manual"
-        : ((APP_EXISTS_PERMIT_IDS.has(permit.id) ? "app-exists" : "manual") as IntegrationStatus),
+        : permit.id === SECTION106_REVIEW_PERMIT_ID
+          ? ("integrated" as IntegrationStatus)
+          : ((APP_EXISTS_PERMIT_IDS.has(permit.id) ? "app-exists" : "manual") as IntegrationStatus),
     source: "primary" as const,
   })),
   ...supplementalPermits.map((permit) => ({
@@ -791,6 +796,9 @@ export const permitInventory: PermitInfo[] = [
 export function getIntegrationStatusLabel(permit: Pick<PermitInfo, "id" | "integrationStatus">): string {
   if (permit.id === FWS_ESA_CONSULTATION_PERMIT_ID) {
     return "Manual Integration (not data standards compliant)"
+  }
+  if (permit.id === SECTION106_REVIEW_PERMIT_ID) {
+    return "Integration with HelpPermitMe (Demo)"
   }
   return INTEGRATION_STATUS_LABELS[permit.integrationStatus]
 }

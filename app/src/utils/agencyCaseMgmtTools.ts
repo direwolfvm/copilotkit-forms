@@ -374,12 +374,22 @@ export const agencyCaseMgmtTools: AgencyCaseMgmtTool[] = [
     hasPortal: true,
     hasCaseManagement: false,
   },
+  {
+    agencySystemOwner: "CEQ Permitting Innovation Center (demonstration)",
+    systemName: "Section 106 Case Manager (Demo)",
+    functionalityDescription:
+      "Demonstration case management system for NHPA Section 106 reviews (36 CFR Part 800). Accepts headless initiation from HelpPermitMe over a CEQ/PIC data-standard exchange API; federal reviewer personas run consultation, effect assessment, and findings in the app. Demo environment only — not a system of record.",
+    applicablePermitOrReview: "NHPA Section 106",
+    publicUrl: "https://one-oh-six-bot.app.cloud.gov/",
+    hasPortal: true,
+    hasCaseManagement: true,
+  },
 ]
 
 // Explicit mapping from permit inventory IDs to tool indices for reliable cross-referencing.
 // Each key is a permit ID from permitInventory.ts; values are indices into agencyCaseMgmtTools.
 const permitToToolIndices: Record<string, number[]> = {
-  "section-106-review": [0],
+  "section-106-review": [0, 40],
   "uscg-bridge-permit": [1],
   "endangered-species-act-consultation-noaa-nmfs": [2],
   "magnuson-stevens-fishery-conservation-and-management-act-section-305": [2],

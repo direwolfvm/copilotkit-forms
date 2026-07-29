@@ -239,10 +239,7 @@ function ProjectTreeItem({ entry }: { entry: ProjectHierarchy }) {
       if (normalized === "complex review") {
         return complexReviewProcess
       }
-      if (
-        normalized === "nhpa section 106 review (demo)" ||
-        normalized === "nhpa section 106 review"
-      ) {
+      if (normalized.includes("section 106")) {
         return section106Process
       }
       if (isIpacChecklistItem({ label })) {

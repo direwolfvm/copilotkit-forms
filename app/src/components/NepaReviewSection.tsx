@@ -38,9 +38,11 @@ interface NepaReviewSectionProps {
   onShowProcessInformation: () => void
   isProcessInformationLoading: boolean
   status?: CollapsibleCardStatus
+  defaultExpanded?: boolean
 }
 
 export function NepaReviewSection({
+  defaultExpanded,
   title = "Environmental Review",
   description = "Capture information related to environmental review and pre-screening.",
   actions,
@@ -109,6 +111,7 @@ export function NepaReviewSection({
       title={title}
       description={description}
       actions={actions}
+      defaultExpanded={defaultExpanded}
       ariaLabel="NEPA review details"
       status={status}
       dataAttributes={{
