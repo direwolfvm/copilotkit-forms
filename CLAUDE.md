@@ -93,6 +93,7 @@ cd app
 npm test -- --run           # Single run
 npm test                    # Watch mode
 npm run test:bench          # Benchmarks
+npm run test:e2e            # Playwright e2e (requires app/.env + npm run build; drives the Express server)
 ```
 
 Tests cover UI components and geospatial utilities (Resource Check helpers, GeoJSON normalization).

@@ -33,9 +33,11 @@ type PermittingChecklistSectionProps = {
   onBulkAddFromSeed: (labels: string[]) => void
   hasRowAuthorization: boolean
   onAddRowAuthorization: () => void
+  defaultExpanded?: boolean
 }
 
 export function PermittingChecklistSection({
+  defaultExpanded,
   title = "Permitting Checklist",
   description = "Track anticipated permits and authorizations alongside the project form. Use the Copilot to suggest items based on project scope, or add your own below.",
   actions,
@@ -119,6 +121,7 @@ export function PermittingChecklistSection({
       description={description}
       actions={actions}
       status={status}
+      defaultExpanded={defaultExpanded}
       dataAttributes={{
         "data-tour-id": "portal-checklist",
         "data-tour-title": "Track permits",

@@ -496,8 +496,10 @@
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  flex: 1;
-  min-width: 0;
+  /* Reserve readable room for the title while letting status/actions wrap below on
+     narrow widths instead of overlapping the heading. */
+  flex: 1 1 18rem;
+  min-width: min(18rem, 100%);
 }
 
 .collapsible-card__title-group {
@@ -523,6 +525,9 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   margin-left: auto;
+  justify-content: flex-end;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .collapsible-card__actions {
@@ -543,7 +548,12 @@
 }
 
 .collapsible-card__status-text {
-  white-space: nowrap;
+  /* Long statuses wrap inside the pill rather than overflowing into neighboring text. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 24ch;
+  text-align: left;
+  line-height: 1.25;
 }
 
 .collapsible-card__status-indicator {
@@ -3681,6 +3691,80 @@
 .section106-demo-banner {
   margin-top: 0.75rem;
   border-left: 4px solid #b45309;
+}
+
+/* Project action bar — always-visible save/submit controls above the portal cards. */
+.portal-actionbar {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+  padding: 0.7rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 60%, var(--border) 40%);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 92%, white 8%);
+  box-shadow: var(--shadow-subtle);
+}
+
+.portal-actionbar__status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.portal-actionbar__saved {
+  color: #0f7d43;
+  font-weight: 600;
+}
+
+.portal-actionbar__saving {
+  color: var(--color-text-muted, #5c5c5c);
+  font-weight: 600;
+}
+
+.portal-actionbar__unsaved {
+  color: var(--color-text-muted, #5c5c5c);
+}
+
+.portal-actionbar__error {
+  color: #b50909;
+  font-weight: 600;
+}
+
+.portal-actionbar__prescreening {
+  color: var(--color-text-muted, #5c5c5c);
+}
+
+.portal-actionbar__buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* Permit info start-from-portal CTA */
+.permit-info__start {
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-left: 4px solid #b45309;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-muted) 55%, var(--surface) 45%);
+  padding: 1rem 1.1rem;
+}
+
+.permit-info__demo-note {
+  margin: 0.35rem 0 0.85rem;
+  color: var(--color-text-muted, #5c5c5c);
+}
+
+.permit-info__start-button {
+  display: inline-block;
 }
 
 .section106-case-summary p {

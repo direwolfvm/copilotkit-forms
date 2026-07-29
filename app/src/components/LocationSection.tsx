@@ -19,6 +19,7 @@ import { summarizeNepassist } from "../utils/geospatial"
 import { CollapsibleCard, type CollapsibleCardStatus } from "./CollapsibleCard"
 
 interface LocationSectionProps {
+  defaultExpanded?: boolean
   title: string
   description?: string
   actions?: ReactNode
@@ -691,6 +692,7 @@ export function GeospatialResultsPanel({
 }
 
 export function LocationSection({
+  defaultExpanded,
   title,
   description,
   actions,
@@ -760,6 +762,7 @@ export function LocationSection({
       className="location-section"
       title={title}
       actions={actions}
+      defaultExpanded={defaultExpanded}
       aria-label="Project location details"
       dataAttributes={{
         "data-tour-id": "portal-location",

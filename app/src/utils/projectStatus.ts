@@ -329,7 +329,9 @@ const AUTO_POPULATED_CHECKLIST_LABELS = new Set([
 ])
 
 export function isAutoPopulatedChecklistItem(item: { label: string }): boolean {
-  return AUTO_POPULATED_CHECKLIST_LABELS.has(item.label.toLowerCase())
+  const normalized = item.label.toLowerCase()
+  // Any Section 106 phrasing is workflow-backed via the Case Manager (Demo) integration.
+  return AUTO_POPULATED_CHECKLIST_LABELS.has(normalized) || normalized.includes("section 106")
 }
 
 export function isIpacChecklistItem(item: { label: string }): boolean {

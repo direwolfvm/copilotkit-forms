@@ -42,6 +42,7 @@ import { getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
 import {
   FWS_ESA_CONSULTATION_PERMIT_ID,
+  SECTION106_REVIEW_PERMIT_ID,
   findPermitByLabel,
   getPermitInfoUrl,
   getPermitById,
@@ -120,17 +121,17 @@ const COMPLEX_REVIEW_PROJECT_PARAM = "projectId"
 const COMPLEX_REVIEW_CHECKLIST_KEY = toChecklistKey(COMPLEX_REVIEW_LABEL)
 
 // NHPA Section 106 review via the Section 106 Case Manager — a demonstration system, so
-// the label carries the (Demo) marker everywhere it appears.
-const SECTION106_LABEL = "NHPA Section 106 Review (Demo)"
-const SECTION106_LINK = { href: "/reviews/section-106", label: "Start this review." }
+// the link carries an explicit DEMO marker everywhere it appears.
+const SECTION106_LINK = { href: "/reviews/section-106", label: "Start this permit — DEMO" }
 const SECTION106_PROJECT_PARAM = "projectId"
-const SECTION106_CHECKLIST_KEYS = new Set([
-  toChecklistKey(SECTION106_LABEL),
-  toChecklistKey("NHPA Section 106 Review")
-])
 
-function isSection106ChecklistKey(key: string): boolean {
-  return SECTION106_CHECKLIST_KEYS.has(key)
+// Matches our workflow label plus permit-inventory phrasings ("Section 106 Review",
+// "National Historic Preservation Act Section 106 Consultation", …).
+function isSection106ChecklistKey(key: string, permitId?: string): boolean {
+  if (permitId === SECTION106_REVIEW_PERMIT_ID) {
+    return true
+  }
+  return key.includes("section 106")
 }
 
 function isIpacConsultationChecklistKey(key: string, permitId?: string) {
@@ -161,7 +162,7 @@ function getChecklistIntegrationLink(
   if (key === COMPLEX_REVIEW_CHECKLIST_KEY) {
     return COMPLEX_REVIEW_LINK
   }
-  if (isSection106ChecklistKey(key)) {
+  if (isSection106ChecklistKey(key, permitId)) {
     return SECTION106_LINK
   }
   if (isIpacConsultationChecklistKey(key, permitId)) {
@@ -1121,6 +1122,11 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
   )
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>(undefined)
+  // Auto-save baseline: the serialized form data (per project) that is already persisted.
+  const autoSaveBaselineRef = useRef<{ projectId?: string; serialized: string } | null>(null)
+  // The last content auto-save attempted — prevents retry loops when a save fails.
+  const autoSaveLastAttemptRef = useRef<string | undefined>(undefined)
+  const [lastEditedPane, setLastEditedPane] = useState<EditablePane | null>(null)
   const [decisionSubmitState, setDecisionSubmitState] = useState<DecisionSubmitState>({ status: "idle" })
   const [hasSavedSnapshot, setHasSavedSnapshot] = useState<boolean>(() =>
     projectId && persistedProjectFormState ? persistedProjectFormState.hasSavedSnapshot : false
@@ -1521,6 +1527,8 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
 
   const stopEditingPane = useCallback((pane: EditablePane) => {
     setActiveEditPane((previous) => (previous === pane ? null : previous))
+    // Keep the pane's summary expanded after editing so the result stays visible.
+    setLastEditedPane(pane)
   }, [])
 
   const isPaneEditing = useCallback(
@@ -2509,50 +2517,108 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     )
   }
 
+  const persistProjectSnapshot = useCallback(
+    async (next: ProjectFormData) => {
+      setIsSaving(true)
+      setSaveError(undefined)
+      setDecisionSubmitState((previous) => (previous.status === "idle" ? previous : { status: "idle" }))
+
+      try {
+        const processId = await saveProjectSnapshot({
+          formData: next,
+          geospatialResults,
+          gisUpload: {
+            arcgisJson: projectGisUpload.arcgisJson,
+            geoJson: next.location_object ?? undefined,
+            source: projectGisUpload.source,
+            uploadedFile: projectGisUpload.uploadedFile ?? null
+          }
+        })
+        autoSaveBaselineRef.current = { projectId: next.id, serialized: JSON.stringify(next) }
+        setPreScreeningProcessId(processId)
+        const now = new Date()
+        setLastSaved(now.toLocaleString())
+        setHasSavedSnapshot(true)
+        setPortalProgress((previous) => {
+          const initiatedAt = previous.projectSnapshot.initiatedAt ?? now.toISOString()
+          return {
+            projectSnapshot: { initiatedAt },
+            preScreening: { ...previous.preScreening }
+          }
+        })
+      } catch (error) {
+        console.error("Failed to save project snapshot", error)
+        setLastSaved(undefined)
+        setHasSavedSnapshot(false)
+        if (error instanceof ProjectPersistenceError) {
+          setSaveError(error.message)
+        } else if (error instanceof Error) {
+          setSaveError(error.message)
+        } else {
+          setSaveError("Unable to save project snapshot.")
+        }
+      } finally {
+        setIsSaving(false)
+      }
+    },
+    [geospatialResults, projectGisUpload, setPortalProgress]
+  )
+
   const handleSubmit = async (event: IChangeEvent<ProjectFormData>) => {
     const next = applyGeneratedProjectId(event.formData ?? createEmptyProjectData(), formData?.id)
     setFormData(next)
-    setIsSaving(true)
-    setSaveError(undefined)
-    setDecisionSubmitState((previous) => (previous.status === "idle" ? previous : { status: "idle" }))
-
-    try {
-      const processId = await saveProjectSnapshot({
-        formData: next,
-        geospatialResults,
-        gisUpload: {
-          arcgisJson: projectGisUpload.arcgisJson,
-          geoJson: next.location_object ?? undefined,
-          source: projectGisUpload.source,
-          uploadedFile: projectGisUpload.uploadedFile ?? null
-        }
-      })
-      setPreScreeningProcessId(processId)
-      const now = new Date()
-      setLastSaved(now.toLocaleString())
-      setHasSavedSnapshot(true)
-      setPortalProgress((previous) => {
-        const initiatedAt = previous.projectSnapshot.initiatedAt ?? now.toISOString()
-        return {
-          projectSnapshot: { initiatedAt },
-          preScreening: { ...previous.preScreening }
-        }
-      })
-    } catch (error) {
-      console.error("Failed to save project snapshot", error)
-      setLastSaved(undefined)
-      setHasSavedSnapshot(false)
-      if (error instanceof ProjectPersistenceError) {
-        setSaveError(error.message)
-      } else if (error instanceof Error) {
-        setSaveError(error.message)
-      } else {
-        setSaveError("Unable to save project snapshot.")
-      }
-    } finally {
-      setIsSaving(false)
-    }
+    await persistProjectSnapshot(next)
   }
+
+  const handleSaveNow = useCallback(() => {
+    const prepared = ensureProjectIdentifier()
+    void persistProjectSnapshot(prepared)
+  }, [ensureProjectIdentifier, persistProjectSnapshot])
+
+  // Auto-save: once the project has a title, persist the snapshot a few seconds after the
+  // last change. The baseline resets when a different project loads so loading never
+  // triggers a save, and manual saves fold into the same baseline.
+  useEffect(() => {
+    if (projectLoadState.status === "loading" || isSaving) {
+      return
+    }
+    const serialized = JSON.stringify(formData)
+    const baseline = autoSaveBaselineRef.current
+    // Re-baseline only when a different project loads. An id appearing on a previously
+    // id-less draft is the same project getting its generated identifier, not a switch.
+    const isProjectSwitch =
+      Boolean(baseline?.projectId) && Boolean(formData.id) && baseline?.projectId !== formData.id
+    if (!baseline || isProjectSwitch) {
+      autoSaveBaselineRef.current = { projectId: formData.id, serialized }
+      return
+    }
+    if (baseline.projectId !== formData.id) {
+      baseline.projectId = formData.id
+    }
+    if (baseline.serialized === serialized) {
+      return
+    }
+    if (!formData.title?.trim()) {
+      return
+    }
+    if (autoSaveLastAttemptRef.current === serialized) {
+      return
+    }
+    const timer = window.setTimeout(() => {
+      autoSaveLastAttemptRef.current = serialized
+      const prepared = ensureProjectIdentifier()
+      void persistProjectSnapshot(prepared)
+    }, 2500)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [
+    formData,
+    projectLoadState,
+    isSaving,
+    ensureProjectIdentifier,
+    persistProjectSnapshot
+  ])
 
   const handleOpenDocumentModal = useCallback(() => {
     if (!canUploadDocument) {
@@ -3102,6 +3168,59 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             </div>
           ) : null}
 
+          <div className="portal-actionbar" role="region" aria-label="Project save and submit actions">
+            <div className="portal-actionbar__status" aria-live="polite">
+              {isSaving ? (
+                <span className="portal-actionbar__saving">Saving…</span>
+              ) : saveError ? (
+                <span className="portal-actionbar__error" role="alert">
+                  {saveError}
+                </span>
+              ) : lastSaved ? (
+                <span className="portal-actionbar__saved">All changes saved · {lastSaved}</span>
+              ) : (
+                <span className="portal-actionbar__unsaved">
+                  Changes save automatically once the project has a title.
+                </span>
+              )}
+              {decisionSubmitState.status !== "idle" && decisionSubmitState.message ? (
+                <span
+                  className={`portal-actionbar__prescreening${
+                    decisionSubmitState.status === "error" ? " portal-actionbar__error" : ""
+                  }`}
+                  role={decisionSubmitState.status === "error" ? "alert" : undefined}
+                >
+                  {decisionSubmitState.message}
+                </span>
+              ) : null}
+            </div>
+            <div className="portal-actionbar__buttons">
+              <button
+                type="button"
+                className="usa-button usa-button--outline secondary"
+                onClick={handleSaveNow}
+                disabled={isSaving}
+              >
+                {isSaving ? "Saving…" : "Save project data"}
+              </button>
+              <button
+                type="button"
+                className="usa-button primary"
+                onClick={() => void handleSubmitPreScreeningData()}
+                disabled={!hasSavedSnapshot || decisionSubmitState.status === "saving" || isSaving}
+                title={
+                  !hasSavedSnapshot
+                    ? "Save the project data before submitting pre-screening."
+                    : undefined
+                }
+              >
+                {decisionSubmitState.status === "saving" && decisionSubmitState.action === "submit"
+                  ? "Submitting…"
+                  : "Submit pre-screening"}
+              </button>
+            </div>
+          </div>
+
           <section className="content">
             {isPaneEditing("core") ? (
               <CollapsibleCard
@@ -3110,6 +3229,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                 description="Complete the core CEQ project fields."
                 ariaLabel="Core project data"
                 status={projectFormStatus}
+                defaultExpanded
                 actions={renderPaneAction("core")}
                 dataAttributes={{
                   "data-tour-id": "portal-summary",
@@ -3227,6 +3347,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
               <ProjectSummary
                 data={formData}
                 title="Core Project Data"
+                defaultExpanded
                 description="Review the saved project data here. Open edit mode when you want to update these fields."
                 actions={
                   <>
@@ -3296,6 +3417,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
               isPaneEditing("location") ? (
                 <LocationSection
                   key={locationSectionKey}
+                  defaultExpanded
                   title="Location and Geospatial Data"
                   description={locationFieldDetail.description}
                   actions={renderPaneAction("location")}
@@ -3318,6 +3440,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                   className="location-section"
                   title="Location and Geospatial Data"
                   description="Review the saved location narrative, geometry, and geospatial screening outputs."
+                  defaultExpanded={lastEditedPane === "location"}
                   actions={renderPaneAction("location")}
                   status={
                     locationEstablished
@@ -3357,6 +3480,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             {isPaneEditing("checklist") ? (
               <PermittingChecklistSection
                 title="Permitting Checklist"
+                defaultExpanded
                 description="Track anticipated permits and authorizations for this project."
                 actions={renderPaneAction("checklist")}
                 items={permitChecklistItems}
@@ -3372,6 +3496,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                 className="checklist-panel"
                 title="Permitting Checklist"
                 description="Review the permits and authorizations currently associated with this project."
+                defaultExpanded={lastEditedPane === "checklist"}
                 actions={renderPaneAction("checklist")}
                 status={
                   permittingChecklistCreated
@@ -3419,6 +3544,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
             {isPaneEditing("environment") ? (
               <NepaReviewSection
                 title="Environmental Review"
+                defaultExpanded
                 description="Capture environmental review information and pre-screening process details."
                 actions={renderPaneAction("environment")}
                 values={{
@@ -3442,6 +3568,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                 className="form-panel"
                 title="Environmental Review"
                 description="Review the environmental review information currently saved for this project."
+                defaultExpanded={lastEditedPane === "environment"}
                 actions={renderPaneAction("environment")}
                 status={nepaStatus}
                 ariaLabel="Environmental review"
