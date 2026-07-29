@@ -122,8 +122,10 @@ const COMPLEX_REVIEW_CHECKLIST_KEY = toChecklistKey(COMPLEX_REVIEW_LABEL)
 
 // NHPA Section 106 review via the Section 106 Case Manager — a demonstration system, so
 // the link carries an explicit DEMO marker everywhere it appears.
+const SECTION106_LABEL = "NHPA Section 106 Review (Demo)"
 const SECTION106_LINK = { href: "/reviews/section-106", label: "Start this permit — DEMO" }
 const SECTION106_PROJECT_PARAM = "projectId"
+const SECTION106_CHECKLIST_KEY = toChecklistKey(SECTION106_LABEL)
 
 // Matches our workflow label plus permit-inventory phrasings ("Section 106 Review",
 // "National Historic Preservation Act Section 106 Consultation", …).
@@ -333,6 +335,16 @@ function createComplexReviewChecklistItem(): PermittingChecklistItem {
   }
 }
 
+function createSection106ChecklistItem(): PermittingChecklistItem {
+  return {
+    id: generateChecklistItemId(),
+    label: SECTION106_LABEL,
+    completed: false,
+    source: "seed",
+    link: SECTION106_LINK
+  }
+}
+
 function appendProjectIdToPermitLink(link: PermittingChecklistItem["link"], projectId?: string) {
   if (!link || !projectId) {
     return link
@@ -361,7 +373,11 @@ function appendProjectIdToPermitLink(link: PermittingChecklistItem["link"], proj
 }
 
 function createDefaultPermittingChecklist(): PermittingChecklistItem[] {
-  return [createRowAuthorizationChecklistItem(), createComplexReviewChecklistItem()]
+  return [
+    createRowAuthorizationChecklistItem(),
+    createComplexReviewChecklistItem(),
+    createSection106ChecklistItem()
+  ]
 }
 
 function toChecklistKey(label: string) {
@@ -371,6 +387,7 @@ function toChecklistKey(label: string) {
 function ensureDefaultChecklistItems(items: PermittingChecklistItem[]): PermittingChecklistItem[] {
   let hasRowAuthorization = false
   let hasComplexReview = false
+  let hasSection106 = false
   let updated = false
 
   const next = items.map((item) => {
@@ -394,9 +411,17 @@ function ensureDefaultChecklistItems(items: PermittingChecklistItem[]): Permitti
         return { ...item, link: COMPLEX_REVIEW_LINK }
       }
     }
-    if (isSection106ChecklistKey(key) && !item.link) {
-      updated = true
-      return { ...item, link: SECTION106_LINK }
+    if (isSection106ChecklistKey(key)) {
+      hasSection106 = true
+      const needsRelabel = key !== SECTION106_CHECKLIST_KEY
+      if (needsRelabel || !item.link) {
+        updated = true
+        return {
+          ...item,
+          label: needsRelabel ? SECTION106_LABEL : item.label,
+          link: item.link ?? SECTION106_LINK
+        }
+      }
     }
     if (isIpacConsultationChecklistKey(key) && !item.link) {
       updated = true
@@ -411,6 +436,9 @@ function ensureDefaultChecklistItems(items: PermittingChecklistItem[]): Permitti
   }
   if (!hasComplexReview) {
     toAdd.push(createComplexReviewChecklistItem())
+  }
+  if (!hasSection106) {
+    toAdd.push(createSection106ChecklistItem())
   }
 
   if (toAdd.length > 0) {
@@ -3515,7 +3543,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
                 }}
               >
                 <div className="portal-static-panel">
-                  {!permittingChecklistCreated ? (
+                  {!permitChecklistItems.length ? (
                     <p>No checklist items yet.</p>
                   ) : (
                     <ul className="portal-static-list">

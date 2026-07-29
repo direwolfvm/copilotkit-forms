@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 
 // End-to-end flow for the project portal page (new + existing project):
 // auto-save, the action bar, expand-on-edit behavior, checklist integration links
-// (including the Section 106 demo link), status-chip layout, and the permit-info CTA.
+// (including the seeded Section 106 demo link), status-chip layout, and permit details.
 
 const TEST_TITLE = `E2E portal flow ${Date.now()} — safe to delete`
 
@@ -90,11 +90,9 @@ test.describe("project portal", () => {
       cardByTitle(page, "Location and Geospatial Data").locator(".collapsible-card__toggle")
     ).toHaveAttribute("aria-expanded", "true")
 
-    // Add a Section 106 checklist item; it links to the demo system with the project id.
+    // Section 106 is seeded with the other integrated workflows and carries the project id.
     const checklistCard = cardByTitle(page, "Permitting Checklist")
-    await checklistCard.getByRole("button", { name: "Edit" }).click()
-    await page.locator("#permitting-checklist-input").fill("Section 106 Review")
-    await page.getByRole("button", { name: "Add item", exact: true }).click()
+    await checklistCard.locator(".collapsible-card__toggle").click()
     const section106Link = page.getByRole("link", { name: "Start this permit — DEMO" })
     await expect(section106Link).toBeVisible()
     await expect(section106Link).toHaveAttribute(
@@ -146,18 +144,14 @@ test.describe("project portal", () => {
     ).toHaveCount(0, { timeout: 20_000 })
   })
 
-  test("permit info page advertises the Section 106 demo integration", async ({ page }) => {
+  test("permit info page describes Section 106 without starting a projectless workflow", async ({ page }) => {
     await page.goto("/permit-info/section-106-review")
 
     await expect(page.locator(".integration-badge__label")).toHaveText(
       "Integration with HelpPermitMe (Demo)"
     )
-    const start = page.locator(".permit-info__start")
-    await expect(start.getByRole("link", { name: "Start this permit — DEMO" })).toHaveAttribute(
-      "href",
-      "/reviews/section-106"
-    )
-    await expect(start).toContainText("not a system of record")
+    await expect(page.locator(".permit-info__start")).toHaveCount(0)
+    await expect(page.getByRole("link", { name: "Start this permit — DEMO" })).toHaveCount(0)
     await expect(
       page.locator(".permit-info__tool-name", { hasText: "Section 106 Case Manager (Demo)" })
     ).toBeVisible()

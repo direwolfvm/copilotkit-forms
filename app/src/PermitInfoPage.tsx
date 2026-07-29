@@ -1,6 +1,5 @@
 import { Link, useParams } from "react-router-dom"
 import {
-  SECTION106_REVIEW_PERMIT_ID,
   permitInventory,
   getIntegrationStatusLabel,
   getIntegrationStatusTone
@@ -8,20 +7,6 @@ import {
 import type { PermitInfo } from "./utils/permitInventory"
 import { findToolsForPermit } from "./utils/agencyCaseMgmtTools"
 import type { AgencyCaseMgmtTool } from "./utils/agencyCaseMgmtTools"
-
-// Permits that can be started directly from HelpPermitMe. Demo-system integrations carry
-// an explicit DEMO marker in the link label.
-const PERMIT_START_LINKS: Record<
-  string,
-  { href: string; label: string; demoNote?: string }
-> = {
-  [SECTION106_REVIEW_PERMIT_ID]: {
-    href: "/reviews/section-106",
-    label: "Start this permit — DEMO",
-    demoNote:
-      "This review runs in the Section 106 Case Manager (Demo), a demonstration system for the CEQ/PIC data-standard exchange. It is not a system of record — nothing submitted initiates an actual federal review."
-  }
-}
 
 function IntegrationStatusBadge({ permit }: { permit: PermitInfo }) {
   return (
@@ -56,7 +41,6 @@ function ToolCard({ tool }: { tool: AgencyCaseMgmtTool }) {
 
 function PermitInfoContent({ permit }: { permit: PermitInfo }) {
   const relatedTools = findToolsForPermit(permit.id)
-  const startLink = PERMIT_START_LINKS[permit.id]
 
   return (
     <div className="permit-info">
@@ -73,16 +57,6 @@ function PermitInfoContent({ permit }: { permit: PermitInfo }) {
           <IntegrationStatusBadge permit={permit} />
         </div>
       </header>
-
-      {startLink ? (
-        <section className="permit-info__section permit-info__start">
-          <h2>Start from HelpPermitMe</h2>
-          {startLink.demoNote ? <p className="permit-info__demo-note">{startLink.demoNote}</p> : null}
-          <Link className="usa-button permit-info__start-button" to={startLink.href}>
-            {startLink.label}
-          </Link>
-        </section>
-      ) : null}
 
       <section className="permit-info__section">
         <h2>Description</h2>
