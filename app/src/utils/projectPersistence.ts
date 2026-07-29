@@ -6392,3 +6392,97 @@ export async function ensureSection106ShadowProcess({
 
   return processInstanceId
 }
+
+// --- Project deletion --------------------------------------------------------------------
+//
+// The portal has no authentication; deletion is exposed because every project in this demo
+// portal is demo data. Rows are removed child-first because the schema's foreign keys are
+// ON DELETE SET NULL rather than CASCADE.
+
+async function deletePortalRows(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  path: string,
+  resourceDescription: string,
+  configure: (endpoint: URL) => void
+): Promise<void> {
+  const endpoint = new URL(path, supabaseUrl)
+  configure(endpoint)
+  const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  })
+  const response = await fetch(url, init)
+  if (!response.ok) {
+    const responseText = await response.text()
+    const errorDetail = extractErrorDetail(responseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `Failed to delete ${resourceDescription} (${response.status}): ${errorDetail}`
+        : `Failed to delete ${resourceDescription} (${response.status}).`
+    )
+  }
+}
+
+/**
+ * Delete a portal project and everything under it: case events, decision payloads,
+ * documents, GIS data, process instances (including external-system shadow processes),
+ * and finally the project row. External systems are not touched here — see the
+ * system-specific delete/withdraw helpers.
+ */
+export async function deletePortalProject(projectId: number): Promise<void> {
+  const { supabaseUrl, supabaseAnonKey } = requirePortalSupabaseCredentials()
+  if (!Number.isFinite(projectId)) {
+    throw new ProjectPersistenceError("Project identifiers must be numeric.")
+  }
+
+  const processRows = await fetchSupabaseList<ProcessInstanceRow>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_instance",
+    "project process instances",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id")
+      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+      endpoint.searchParams.set("limit", "200")
+    }
+  )
+  const processIds = processRows
+    .map((row) => parseNumericId(row.id))
+    .filter((id): id is number => typeof id === "number")
+
+  if (processIds.length > 0) {
+    const inFilter = `in.(${processIds.join(",")})`
+    await deletePortalRows(supabaseUrl, supabaseAnonKey, "/rest/v1/case_event", "case events", (endpoint) => {
+      endpoint.searchParams.set("parent_process_id", inFilter)
+    })
+    await deletePortalRows(
+      supabaseUrl,
+      supabaseAnonKey,
+      "/rest/v1/process_decision_payload",
+      "decision payloads",
+      (endpoint) => {
+        endpoint.searchParams.set("process", inFilter)
+      }
+    )
+    await deletePortalRows(supabaseUrl, supabaseAnonKey, "/rest/v1/document", "documents", (endpoint) => {
+      endpoint.searchParams.set("parent_process_id", inFilter)
+    })
+  }
+
+  await deletePortalRows(supabaseUrl, supabaseAnonKey, "/rest/v1/gis_data", "GIS data", (endpoint) => {
+    endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+  })
+  await deletePortalRows(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_instance",
+    "process instances",
+    (endpoint) => {
+      endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
+    }
+  )
+  await deletePortalRows(supabaseUrl, supabaseAnonKey, "/rest/v1/project", "project", (endpoint) => {
+    endpoint.searchParams.set("id", `eq.${projectId}`)
+  })
+}

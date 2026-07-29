@@ -2432,3 +2432,141 @@ export async function loadRowAuthorizationAnalytics(): Promise<RowAuthorizationA
     return []
   }
 }
+
+// --- Application deletion ----------------------------------------------------------------
+
+async function deletePermitflowRows(
+  {
+    supabaseUrl,
+    supabaseAnonKey,
+    tenantId,
+    accessToken
+  }: { supabaseUrl: string; supabaseAnonKey: string; tenantId: string; accessToken: string },
+  path: string,
+  resourceDescription: string,
+  configure: (endpoint: URL) => void
+): Promise<void> {
+  const endpoint = new URL(path, supabaseUrl)
+  configure(endpoint)
+  endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
+  const response = await fetch(endpoint.toString(), {
+    method: "DELETE",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      Prefer: "return=minimal"
+    }
+  })
+  if (!response.ok) {
+    const errorDetail = extractErrorDetail(await response.text())
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `PermitFast ${resourceDescription} deletion failed (${response.status}): ${errorDetail}`
+        : `PermitFast ${resourceDescription} deletion failed (${response.status}).`
+    )
+  }
+}
+
+export type PermitflowDeletionResult = {
+  deleted: boolean
+  permitflowProjectId?: number
+}
+
+/**
+ * Delete the tenant-local PermitFast application for a portal project: uploaded documents
+ * (storage objects + permit_document rows), case events, decision payloads, process
+ * instances, and the tenant's project copy. Requires an authenticated PermitFast session.
+ */
+export async function deletePermitflowProject({
+  portalProjectId,
+  accessToken
+}: {
+  portalProjectId: number
+  accessToken: string
+}): Promise<PermitflowDeletionResult> {
+  const supabaseUrl = getPermitflowUrl()
+  const supabaseAnonKey = getPermitflowAnonKey()
+  const tenantId = getPermitflowTenantId()
+  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
+    throw new ProjectPersistenceError(
+      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+    )
+  }
+
+  const options = { supabaseUrl, supabaseAnonKey, tenantId, accessToken }
+  const projectRow = await resolvePermitflowProjectByPortalProjectId(options, portalProjectId)
+  const permitflowProjectId = parseNumericId(projectRow?.id)
+  if (typeof permitflowProjectId !== "number") {
+    return { deleted: false }
+  }
+
+  const processRows = await fetchPermitflowList<{ id?: number | null }>(
+    options,
+    "/rest/v1/process_instance",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id")
+      endpoint.searchParams.set("parent_project_id", `eq.${permitflowProjectId}`)
+      endpoint.searchParams.set("limit", "200")
+    }
+  )
+  const processIds = processRows
+    .map((row) => parseNumericId(row.id))
+    .filter((id): id is number => typeof id === "number")
+
+  if (processIds.length > 0) {
+    const inFilter = `in.(${processIds.join(",")})`
+
+    // Remove uploaded documents from storage before dropping their catalog rows.
+    const documentRows = await fetchPermitflowList<{ storage_path?: string | null }>(
+      options,
+      "/rest/v1/permit_document",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "storage_path")
+        endpoint.searchParams.set("process_id", inFilter)
+        endpoint.searchParams.set("limit", "500")
+      }
+    )
+    for (const row of documentRows) {
+      const storagePath = normalizeString(row.storage_path)
+      if (!storagePath) {
+        continue
+      }
+      const storageResponse = await fetch(
+        `${supabaseUrl}/storage/v1/object/${PERMIT_DOCUMENTS_BUCKET}/${storagePath}`,
+        {
+          method: "DELETE",
+          headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${accessToken}` }
+        }
+      )
+      if (!storageResponse.ok && storageResponse.status !== 404) {
+        console.warn(
+          `[permitflow] Failed to delete stored document ${storagePath} (${storageResponse.status}).`
+        )
+      }
+    }
+
+    await deletePermitflowRows(options, "/rest/v1/permit_document", "document records", (endpoint) => {
+      endpoint.searchParams.set("process_id", inFilter)
+    })
+    await deletePermitflowRows(options, "/rest/v1/case_event", "case events", (endpoint) => {
+      endpoint.searchParams.set("parent_process_id", inFilter)
+    })
+    await deletePermitflowRows(
+      options,
+      "/rest/v1/process_decision_payload",
+      "decision payloads",
+      (endpoint) => {
+        endpoint.searchParams.set("process", inFilter)
+      }
+    )
+  }
+
+  await deletePermitflowRows(options, "/rest/v1/process_instance", "process instances", (endpoint) => {
+    endpoint.searchParams.set("parent_project_id", `eq.${permitflowProjectId}`)
+  })
+  await deletePermitflowRows(options, "/rest/v1/project", "project", (endpoint) => {
+    endpoint.searchParams.set("id", `eq.${permitflowProjectId}`)
+  })
+
+  return { deleted: true, permitflowProjectId }
+}

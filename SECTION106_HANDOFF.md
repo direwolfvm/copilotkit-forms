@@ -235,3 +235,12 @@ live instance:
   `other.element_reference_id` as fallback), so reviewer-visible values round-trip;
   profile-based seeding is only used before initiation. Locally edited sections are
   never overwritten by a refresh.
+
+### Portal follow-up — 2026-07-29 (project deletion)
+
+The portal added project deletion (demo data, no auth). For linked Section 106 cases the
+portal posts a **`project_withdrawn` case event** on deletion — the best available signal
+since the exchange API has no delete/withdraw endpoint. Open question: a first-class
+withdrawal (e.g. `PATCH /process-instances/{id}` with `{"status": "withdrawn"}`, or a
+DELETE that closes the case) would let your workflow reflect withdrawal properly instead
+of relying on a notification event.
