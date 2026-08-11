@@ -146,6 +146,26 @@ test.describe("project portal", () => {
     ).toHaveCount(0, { timeout: 20_000 })
   })
 
+  test("settings project maintenance uses the shared delete flow (no password)", async ({
+    page
+  }) => {
+    await page.goto("/settings")
+    await page.getByRole("button", { name: "Delete a project" }).click()
+
+    const picker = page.locator(".settings__modal")
+    await expect(picker).toBeVisible()
+    await expect(picker.getByText("password")).toHaveCount(0)
+    await picker.getByRole("button", { name: "Continue" }).click()
+
+    // The shared confirmation modal opens with the external-system options; cancel out.
+    const modal = page.locator(".delete-project-modal")
+    await expect(modal).toBeVisible()
+    await expect(modal).toContainText("Section 106 Case Manager (Demo)")
+    await expect(modal.locator("input[type=password]")).toHaveCount(0)
+    await modal.getByRole("button", { name: "Cancel" }).click()
+    await expect(modal).toHaveCount(0)
+  })
+
   test("permit info page advertises the Section 106 demo integration", async ({ page }) => {
     await page.goto("/permit-info/section-106-review")
 
