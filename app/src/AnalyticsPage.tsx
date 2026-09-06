@@ -25,7 +25,7 @@ import { getRuntimeUrl } from "./runtimeConfig"
 import { useCopilotRuntimeSelection } from "./copilotRuntimeContext"
 import {
   loadProcessAnalytics,
-  PRE_SCREENING_PROCESS_MODEL_ID,
+  resolvePreScreeningProcessModelId,
   type PreScreeningAnalyticsPoint
 } from "./utils/projectPersistence"
 import { loadRowAuthorizationAnalytics } from "./utils/permitflow"
@@ -199,7 +199,7 @@ function AnalyticsContent() {
       setStatus("loading")
       setError(null)
       try {
-        const analytics = await loadProcessAnalytics(PRE_SCREENING_PROCESS_MODEL_ID)
+        const analytics = await loadProcessAnalytics(await resolvePreScreeningProcessModelId())
         if (!isMounted) {
           return
         }
