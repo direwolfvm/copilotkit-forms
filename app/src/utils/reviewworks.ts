@@ -1,3 +1,8 @@
+import {
+  extractTableFromRestPath,
+  fetchViaCrossTenantReadBroker,
+  isCrossTenantReadBrokerEnabled
+} from "./crossTenantRead"
 import type { ProjectFormData } from "../schema/projectSchema"
 import { getReviewworksAnonKey, getReviewworksTenantId, getReviewworksUrl } from "../runtimeConfig"
 import {
@@ -242,14 +247,26 @@ async function fetchReviewworksList<T>(
   }
   applyTenantFilter(endpoint, tenantId)
 
-  const response = await fetch(endpoint.toString(), {
-    method: "GET",
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken ?? supabaseAnonKey}`,
-      Accept: "application/json"
-    }
-  })
+  // Anonymous cross-tenant reads are being removed from the shared project. Route them through the
+  // read broker when one is configured; authenticated reads are unaffected and go direct.
+  const brokerTable = extractTableFromRestPath(endpoint.pathname)
+  const useBroker = !accessToken && brokerTable && isCrossTenantReadBrokerEnabled()
+
+  const response = useBroker
+    ? await fetchViaCrossTenantReadBroker({
+        table: brokerTable,
+        query: endpoint.searchParams.toString(),
+        tenantId,
+        anonKey: supabaseAnonKey
+      })
+    : await fetch(endpoint.toString(), {
+        method: "GET",
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${accessToken ?? supabaseAnonKey}`,
+          Accept: "application/json"
+        }
+      })
 
   const responseText = await response.text()
 
