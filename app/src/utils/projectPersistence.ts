@@ -205,6 +205,7 @@ const CASE_EVENT_TYPES = {
 
 const SUPABASE_PROXY_PREFIX = "/api/supabase"
 const DOCUMENT_DOWNLOAD_PREFIX = "/api/documents/download"
+const DOCUMENT_UPLOAD_SIGN_PATH = "/functions/v1/helppermit-document-upload-sign"
 const TENANT_ID_COLUMN = "tenant_id"
 
 type CaseEventType = (typeof CASE_EVENT_TYPES)[keyof typeof CASE_EVENT_TYPES]
@@ -896,37 +897,14 @@ export async function uploadSupportingDocument({
   ]
   const objectPath = objectSegments.join("/")
 
-  const storageEndpoint = new URL(
-    `/storage/v1/object/${encodeURIComponent(DOCUMENT_STORAGE_BUCKET)}/${encodeURIComponent(
-      objectPath
-    )}`,
-    supabaseUrl
-  )
-
-  const { url: storageUrl, init: storageInit } = buildSupabaseFetchRequest(
-    storageEndpoint,
+  const uploadResponseText = await uploadDocumentObject({
+    supabaseUrl,
     supabaseAnonKey,
-    {
-      method: "POST",
-      headers: {
-        "content-type": file.type || "application/octet-stream",
-        "x-upsert": "true"
-      },
-      body: file
-    }
-  )
-
-  const uploadResponse = await fetch(storageUrl, storageInit)
-  const uploadResponseText = await uploadResponse.text()
-
-  if (!uploadResponse.ok) {
-    const errorDetail = extractErrorDetail(uploadResponseText)
-    throw new ProjectPersistenceError(
-      errorDetail
-        ? `Failed to upload document file (${uploadResponse.status}): ${errorDetail}`
-        : `Failed to upload document file (${uploadResponse.status}).`
-    )
-  }
+    objectPath,
+    contentType: file.type || "application/octet-stream",
+    body: file,
+    failureLabel: "Document file"
+  })
 
   let storageObjectPath = objectPath
   const uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
@@ -986,6 +964,97 @@ export async function uploadSupportingDocument({
   }
 }
 
+/**
+ * Uploads a document object through the tenant-scoped signed-upload endpoint.
+ *
+ * Anonymous writes to the permit-documents bucket were removed with the shared project's Storage
+ * policies (helppermitme2 migration 202609060010), so a direct POST now fails with
+ * "new row violates row-level security policy". helppermit-document-upload-sign mints a
+ * short-lived signed target after checking that the path is project-<id>/process-<id>/<file> and
+ * that both records belong to this tenant; the service credential stays inside Supabase.
+ *
+ * Both requests go through the same /api/supabase proxy the rest of the portal uses, so the anon
+ * key is attached server-side and no object path or credential is handled in page code.
+ */
+async function uploadDocumentObject({
+  supabaseUrl,
+  supabaseAnonKey,
+  objectPath,
+  contentType,
+  body,
+  failureLabel
+}: {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  objectPath: string
+  contentType: string
+  body: BodyInit
+  failureLabel: string
+}): Promise<string> {
+  const signEndpoint = new URL(DOCUMENT_UPLOAD_SIGN_PATH, supabaseUrl)
+  const { url: signUrl, init: signInit } = buildSupabaseFetchRequest(signEndpoint, supabaseAnonKey, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      bucket: DOCUMENT_STORAGE_BUCKET,
+      path: objectPath,
+      upsert: true
+    })
+  })
+
+  const signResponse = await fetch(signUrl, signInit)
+  const signResponseText = await signResponse.text()
+
+  if (!signResponse.ok) {
+    const errorDetail = extractErrorDetail(signResponseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `${failureLabel} could not be authorized for upload (${signResponse.status}): ${errorDetail}`
+        : `${failureLabel} could not be authorized for upload (${signResponse.status}).`
+    )
+  }
+
+  const signPayload = signResponseText ? safeJsonParse(signResponseText) : undefined
+  const signedUrl =
+    signPayload && typeof signPayload === "object"
+      ? (signPayload as Record<string, unknown>).signedUrl
+      : undefined
+
+  if (typeof signedUrl !== "string" || signedUrl.length === 0) {
+    throw new ProjectPersistenceError(`${failureLabel} upload authorization returned no target.`)
+  }
+
+  // The signed target is absolute; route it back through the proxy so the upload stays same-origin.
+  const signedTarget = new URL(signedUrl, supabaseUrl)
+  const uploadEndpoint = new URL(`${signedTarget.pathname}${signedTarget.search}`, supabaseUrl)
+  const { url: uploadUrl, init: uploadInit } = buildSupabaseFetchRequest(
+    uploadEndpoint,
+    supabaseAnonKey,
+    {
+      method: "PUT",
+      headers: {
+        "content-type": contentType,
+        "x-upsert": "true"
+      },
+      body
+    }
+  )
+
+  const uploadResponse = await fetch(uploadUrl, uploadInit)
+  const uploadResponseText = await uploadResponse.text()
+
+  if (!uploadResponse.ok) {
+    const errorDetail = extractErrorDetail(uploadResponseText)
+    throw new ProjectPersistenceError(
+      errorDetail
+        ? `${failureLabel} upload failed (${uploadResponse.status}): ${errorDetail}`
+        : `${failureLabel} upload failed (${uploadResponse.status}).`
+    )
+  }
+
+  return uploadResponseText
+}
+
 export async function saveProjectReportDocument({
   blob,
   projectId,
@@ -1029,33 +1098,14 @@ export async function saveProjectReportDocument({
     `${timestamp.replace(/[^\d]/g, "")}-report.pdf`
   ].join("/")
 
-  const storageEndpoint = new URL(
-    `/storage/v1/object/${encodeURIComponent(DOCUMENT_STORAGE_BUCKET)}/${encodeURIComponent(
-      objectPath
-    )}`,
-    supabaseUrl
-  )
-
-  const { url: storageUrl, init: storageInit } = buildSupabaseFetchRequest(storageEndpoint, supabaseAnonKey, {
-    method: "POST",
-    headers: {
-      "content-type": "application/pdf",
-      "x-upsert": "true"
-    },
-    body: blob
+  const uploadResponseText = await uploadDocumentObject({
+    supabaseUrl,
+    supabaseAnonKey,
+    objectPath,
+    contentType: "application/pdf",
+    body: blob,
+    failureLabel: "Project report"
   })
-
-  const uploadResponse = await fetch(storageUrl, storageInit)
-  const uploadResponseText = await uploadResponse.text()
-
-  if (!uploadResponse.ok) {
-    const errorDetail = extractErrorDetail(uploadResponseText)
-    throw new ProjectPersistenceError(
-      errorDetail
-        ? `Failed to upload report (${uploadResponse.status}): ${errorDetail}`
-        : `Failed to upload report (${uploadResponse.status}).`
-    )
-  }
 
   let storageObjectPath = objectPath
   const uploadPayload = uploadResponseText ? safeJsonParse(uploadResponseText) : undefined
