@@ -191,6 +191,74 @@ async function proxyCustomAdkRequest(req, res) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Portal writes
+//
+// The portal's writes reach PostgREST with the anon key, so the database sees them as `anon` and
+// they succeed only because of the shared project's `<table>_legacy_*` write policies, which are
+// being removed (direwolfvm/copilotkit-forms#280).
+//
+// When SUPABASE_PORTAL_WRITE_FUNCTION_URL is set, write methods on the six portal tables are
+// forwarded to that Edge Function instead. The function holds the service credential inside
+// Supabase — the same shape as helppermit-document-sign — so this server keeps using only the anon
+// key it already has, and the browser contract does not change at all.
+//
+// Until that function exists the writes fall through to PostgREST unchanged, so this is safe to
+// ship ahead of the database side. The contract is published in #280.
+// ---------------------------------------------------------------------------
+
+const PORTAL_WRITE_TABLES = new Set([
+  "project",
+  "process_instance",
+  "process_decision_payload",
+  "case_event",
+  "document",
+  "gis_data"
+]);
+const PORTAL_WRITE_METHODS = new Set(["POST", "PATCH", "DELETE"]);
+let loggedPortalWriteFallback = false;
+
+function resolvePortalWriteFunctionUrl() {
+  return normalizeEnvValue(process.env.SUPABASE_PORTAL_WRITE_FUNCTION_URL);
+}
+
+function parsePortalWriteTarget(requestUrl) {
+  const path = String(requestUrl ?? "").split("?")[0];
+  const match = /^\/rest\/v1\/([a-z_]+)$/.exec(path);
+  return match && PORTAL_WRITE_TABLES.has(match[1]) ? match[1] : undefined;
+}
+
+async function forwardPortalWrite({ functionUrl, anonKey, tenantId, table, method, req, res }) {
+  const payload = {
+    table,
+    method,
+    query: String(req.url ?? "").split("?")[1] ?? "",
+    tenantId,
+    prefer: req.headers.prefer ?? undefined,
+    body: method === "DELETE" ? undefined : (req.body ?? null)
+  };
+
+  const response = await fetch(functionUrl, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await response.text();
+  res.status(response.status);
+  for (const header of ["content-type", "content-range"]) {
+    const value = response.headers.get(header);
+    if (value) {
+      res.setHeader(header, value);
+    }
+  }
+  res.send(text);
+}
+
 async function proxySupabaseRequest(req, res) {
   const supabaseUrl = resolveSupabaseUrl();
   const supabaseAnonKey = resolveSupabaseAnonKey();
@@ -225,6 +293,41 @@ async function proxySupabaseRequest(req, res) {
 
   const method = req.method?.toUpperCase() ?? "GET";
   const hasBody = !["GET", "HEAD"].includes(method);
+
+  const portalWriteTable = PORTAL_WRITE_METHODS.has(method)
+    ? parsePortalWriteTarget(req.url)
+    : undefined;
+
+  if (portalWriteTable) {
+    const portalWriteFunctionUrl = resolvePortalWriteFunctionUrl();
+    const portalTenantId = resolveSupabaseTenantId();
+
+    if (portalWriteFunctionUrl && portalTenantId) {
+      try {
+        await forwardPortalWrite({
+          functionUrl: portalWriteFunctionUrl,
+          anonKey: supabaseAnonKey,
+          tenantId: portalTenantId,
+          table: portalWriteTable,
+          method,
+          req,
+          res
+        });
+      } catch (error) {
+        console.error("Portal write function error", error);
+        res.status(502).json({ error: "Failed to reach the portal write function" });
+      }
+      return;
+    }
+
+    if (!loggedPortalWriteFallback) {
+      loggedPortalWriteFallback = true;
+      console.warn(
+        "[portal-write] SUPABASE_PORTAL_WRITE_FUNCTION_URL is not set; writes still reach PostgREST " +
+          "as the anon role and depend on the shared project's legacy write policies."
+      );
+    }
+  }
 
   let body;
   if (hasBody) {
