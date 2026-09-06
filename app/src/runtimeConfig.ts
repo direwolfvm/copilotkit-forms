@@ -9,7 +9,6 @@ interface CopilotRuntimeConfig {
   reviewworksUrl?: string | null
   reviewworksAnonKey?: string | null
   reviewworksTenantId?: string | null
-  crossTenantReadFunctionUrl?: string | null
 }
 
 declare global {
@@ -117,18 +116,3 @@ export function getReviewworksTenantId(): string | undefined {
   )
 }
 
-/**
- * Read broker for PermitFlow and ReviewWorks data.
- *
- * The portal reads those tenants' catalog, completion analytics and the status of its own
- * submissions with the anon key. The shared project is removing anonymous cross-tenant reads
- * (direwolfvm/copilotkit-forms#280, migration 014). When this is configured those reads go through
- * an Edge Function that holds the service credential instead; unset, they fall through unchanged.
- */
-export function getCrossTenantReadFunctionUrl(): string | undefined {
-  return (
-    normalize(envVars.SUPABASE_CROSS_TENANT_READ_FUNCTION_URL) ??
-    normalize(envVars.VITE_SUPABASE_CROSS_TENANT_READ_FUNCTION_URL) ??
-    normalize(readRuntimeConfigFromWindow()?.crossTenantReadFunctionUrl ?? undefined)
-  )
-}

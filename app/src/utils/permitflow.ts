@@ -1,14 +1,13 @@
 import {
-  extractTableFromRestPath,
-  fetchViaCrossTenantReadBroker,
-  isCrossTenantReadBrokerEnabled
-} from "./crossTenantRead"
+  fetchPublishedAnalytics,
+  fetchPublishedCatalog,
+  fetchPublishedProjectProgress
+} from "./publishedIntegration"
 import type { ProjectContact, ProjectFormData } from "../schema/projectSchema"
 import type { GeospatialResultsState } from "../types/geospatial"
 import { getPermitflowAnonKey, getPermitflowTenantId, getPermitflowUrl } from "../runtimeConfig"
 import {
   ProjectPersistenceError,
-  type CaseEventSummary,
   type DecisionElementRecord,
   type ProcessInformation,
   type ProjectProcessSummary,
@@ -47,20 +46,6 @@ type PermitflowProcessInstanceRow = {
   status?: string | null
 }
 
-type PermitflowCaseEventRow = {
-  id?: number | null
-  parent_process_id?: number | null
-  name?: string | null
-  description?: string | null
-  type?: string | null
-  source?: string | null
-  outcome?: string | null
-  datetime?: string | null
-  occurred_at?: string | null
-  status?: string | null
-  last_updated?: string | null
-  other?: unknown
-}
 
 type PermitflowDecisionPayloadRow = {
   id?: number | null
@@ -213,16 +198,7 @@ function compareByTimestampDesc(a?: string | null, b?: string | null): number {
   return 0
 }
 
-function quotePostgrestValue(value: string): string {
-  return `"${value.replace(/"/g, "\"\"")}"`
-}
 
-function isRowAuthorizationProcessRow(
-  row: PermitflowProcessInstanceRow,
-  processModelId: number
-): boolean {
-  return row.process_model === processModelId
-}
 
 async function resolveSf299ProcessModelId(options: PermitflowFetchOptions): Promise<number> {
   const cacheKey = `${options.supabaseUrl}::${options.tenantId}`
@@ -279,31 +255,6 @@ function normalizeObjectRecord(value: unknown): Record<string, unknown> | undefi
     : undefined
 }
 
-function extractPortalSourceProjectId(other: unknown): number | undefined {
-  const otherRecord = normalizeObjectRecord(other)
-  if (!otherRecord) {
-    return undefined
-  }
-
-  const directSourceId = parseNumericId(otherRecord[PORTAL_SOURCE_ID_KEY])
-  if (typeof directSourceId === "number") {
-    return directSourceId
-  }
-
-  const nestedPortalSource = normalizeObjectRecord(otherRecord[PORTAL_SOURCE_KEY])
-  const nestedSourceId = parseNumericId(nestedPortalSource?.[PORTAL_SOURCE_ID_KEY])
-  if (typeof nestedSourceId === "number") {
-    return nestedSourceId
-  }
-
-  const migration = normalizeObjectRecord(otherRecord._permitflow_migration)
-  const migrationSourceId = parseNumericId(migration?.source_id)
-  if (typeof migrationSourceId === "number") {
-    return migrationSourceId
-  }
-
-  return undefined
-}
 
 function sf299SectionOrder(element: DecisionElementRecord): number {
   const referenceId = normalizeString(element.processModelInternalReferenceId)
@@ -603,26 +554,14 @@ async function fetchPermitflowList<T>(
   }
   applyTenantFilter(endpoint, tenantId)
 
-  // Anonymous cross-tenant reads are being removed from the shared project. Route them through the
-  // read broker when one is configured; authenticated reads are unaffected and go direct.
-  const brokerTable = extractTableFromRestPath(endpoint.pathname)
-  const useBroker = !accessToken && brokerTable && isCrossTenantReadBrokerEnabled()
-
-  const response = useBroker
-    ? await fetchViaCrossTenantReadBroker({
-        table: brokerTable,
-        query: endpoint.searchParams.toString(),
-        tenantId,
-        anonKey: supabaseAnonKey
-      })
-    : await fetch(endpoint.toString(), {
-        method: "GET",
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${accessToken ?? supabaseAnonKey}`,
-          Accept: "application/json"
-        }
-      })
+  const response = await fetch(endpoint.toString(), {
+    method: "GET",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken ?? supabaseAnonKey}`,
+      Accept: "application/json"
+    }
+  })
 
   const responseText = await response.text()
 
@@ -723,113 +662,7 @@ function withTenantIdBatch(
   return payloads.map((payload) => withTenantId(payload, tenantId))
 }
 
-async function fetchProcessModelRecord(
-  options: PermitflowFetchOptions,
-  processModelId: number
-): Promise<ProcessInformation["processModel"] | undefined> {
-  const rows = await fetchPermitflowList<Record<string, unknown>>(
-    options,
-    "/rest/v1/process_model",
-    (endpoint) => {
-      endpoint.searchParams.set(
-        "select",
-        [
-          "id",
-          "title",
-          "description",
-          "notes",
-          "screening_description",
-          "agency",
-          "legal_structure_id",
-          "legal_structure_text",
-          "last_updated"
-        ].join(",")
-      )
-      endpoint.searchParams.set("id", `eq.${processModelId}`)
-      endpoint.searchParams.set("limit", "1")
-    }
-  )
 
-  const raw = rows[0]
-  if (!raw || typeof raw !== "object") {
-    return undefined
-  }
-
-  const parseOptionalString = (value: unknown): string | null =>
-    typeof value === "string" ? value : null
-
-  const id = parseNumericId((raw as Record<string, unknown>).id)
-  if (typeof id !== "number") {
-    return undefined
-  }
-
-  return {
-    id,
-    title: parseOptionalString((raw as Record<string, unknown>).title),
-    description: parseOptionalString((raw as Record<string, unknown>).description),
-    notes: parseOptionalString((raw as Record<string, unknown>).notes),
-    screeningDescription: parseOptionalString(
-      (raw as Record<string, unknown>).screening_description
-    ),
-    agency: parseOptionalString((raw as Record<string, unknown>).agency),
-    legalStructureId: parseNumericId((raw as Record<string, unknown>).legal_structure_id) ?? null,
-    legalStructureText: parseOptionalString(
-      (raw as Record<string, unknown>).legal_structure_text
-    ),
-    lastUpdated: parseOptionalString((raw as Record<string, unknown>).last_updated)
-  }
-}
-
-async function fetchLegalStructureRecord(
-  options: PermitflowFetchOptions,
-  legalStructureId: number
-): Promise<ProcessInformation["legalStructure"] | undefined> {
-  const rows = await fetchPermitflowList<Record<string, unknown>>(
-    options,
-    "/rest/v1/legal_structure",
-    (endpoint) => {
-      endpoint.searchParams.set(
-        "select",
-        [
-          "id",
-          "title",
-          "citation",
-          "description",
-          "issuing_authority",
-          "url",
-          "effective_date"
-        ].join(",")
-      )
-      endpoint.searchParams.set("id", `eq.${legalStructureId}`)
-      endpoint.searchParams.set("limit", "1")
-    }
-  )
-
-  const raw = rows[0]
-  if (!raw || typeof raw !== "object") {
-    return undefined
-  }
-
-  const parseOptionalString = (value: unknown): string | null =>
-    typeof value === "string" ? value : null
-
-  const id = parseNumericId((raw as Record<string, unknown>).id)
-  if (typeof id !== "number") {
-    return undefined
-  }
-
-  return {
-    id,
-    title: parseOptionalString((raw as Record<string, unknown>).title),
-    citation: parseOptionalString((raw as Record<string, unknown>).citation),
-    description: parseOptionalString((raw as Record<string, unknown>).description),
-    issuingAuthority: parseOptionalString(
-      (raw as Record<string, unknown>).issuing_authority
-    ),
-    url: parseOptionalString((raw as Record<string, unknown>).url),
-    effectiveDate: parseOptionalString((raw as Record<string, unknown>).effective_date)
-  }
-}
 
 async function fetchDecisionElements(
   options: PermitflowFetchOptions,
@@ -950,43 +783,14 @@ async function fetchDecisionElements(
   return elements
 }
 
-export async function loadPermitflowProcessInformation(
-  processModelId?: number
-): Promise<ProcessInformation> {
-  const supabaseUrl = getPermitflowUrl()
-  const supabaseAnonKey = getPermitflowAnonKey()
-  const tenantId = getPermitflowTenantId()
-  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
+export async function loadPermitflowProcessInformation(): Promise<ProcessInformation> {
+  const info = await fetchPublishedCatalog("permitflow")
+  if (!info) {
     throw new ProjectPersistenceError(
-      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
+      "The PermitFast published catalog is unavailable. Check portal_published_integration_catalog."
     )
   }
-
-  const options = { supabaseUrl, supabaseAnonKey, tenantId }
-  const resolvedProcessModelId =
-    typeof processModelId === "number" && Number.isFinite(processModelId)
-      ? processModelId
-      : await resolveSf299ProcessModelId(options)
-  const processModel = await fetchProcessModelRecord(options, resolvedProcessModelId)
-
-  if (!processModel) {
-    throw new ProjectPersistenceError(`Process model ${resolvedProcessModelId} was not found.`)
-  }
-
-  let legalStructure: ProcessInformation["legalStructure"] | undefined
-  if (typeof processModel.legalStructureId === "number") {
-    legalStructure = await fetchLegalStructureRecord(options, processModel.legalStructureId)
-  }
-
-  const decisionElements = sortSf299SectionElements(
-    await fetchDecisionElements(options, resolvedProcessModelId)
-  )
-
-  return {
-    processModel,
-    legalStructure,
-    decisionElements
-  }
+  return info
 }
 
 export async function authenticatePermitflowUser({
@@ -1413,34 +1217,61 @@ async function resolveSf299FormContext(
   projectCurrentStatus?: string
   sections: Sf299SectionContext[]
 }> {
-  const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
-  const permitflowProject = await resolvePermitflowProjectByPortalProjectId(options, portalProjectId)
-  const permitflowProjectId = parseNumericId(permitflowProject?.id)
-  if (typeof permitflowProjectId !== "number") {
-    throw new ProjectPersistenceError(
-      `PermitFast project for portal project ${portalProjectId} was not found. Submit it first.`
+  let permitflowProjectId: number | undefined
+  let processInstanceId: number | undefined
+  let processStatus: string | undefined
+  let projectCurrentStatus: string | undefined
+  let elements: DecisionElementRecord[]
+
+  if (options.accessToken) {
+    // Authenticated flows keep reading directly; migration 014 only closes anonymous reads.
+    const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
+    const permitflowProject = await resolvePermitflowProjectByPortalProjectId(options, portalProjectId)
+    permitflowProjectId = parseNumericId(permitflowProject?.id)
+    if (typeof permitflowProjectId !== "number") {
+      throw new ProjectPersistenceError(
+        `PermitFast project for portal project ${portalProjectId} was not found. Submit it first.`
+      )
+    }
+
+    const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
+      options,
+      "/rest/v1/process_instance",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "id,status,last_updated,created_at")
+        endpoint.searchParams.set("parent_project_id", `eq.${permitflowProjectId}`)
+        endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
+      }
     )
+    processRows.sort((a, b) => compareByTimestampDesc(a.last_updated, b.last_updated))
+    processInstanceId = parseNumericId(processRows[0]?.id)
+    processStatus = normalizeString(processRows[0]?.status)
+    projectCurrentStatus = normalizeString(permitflowProject?.current_status)
+    elements = await resolveSf299SectionElements(options, sf299ProcessModelId)
+  } else {
+    // Anonymous: the published contract replaces direct project/process/catalog reads.
+    const progress = await fetchPublishedProjectProgress("permitflow", [portalProjectId])
+    const entry = progress.get(portalProjectId)
+    permitflowProjectId = entry?.targetProjectId
+    if (typeof permitflowProjectId !== "number") {
+      throw new ProjectPersistenceError(
+        `PermitFast project for portal project ${portalProjectId} was not found. Submit it first.`
+      )
+    }
+    const process = entry?.processes[0]
+    processInstanceId = process?.id
+    processStatus = normalizeString(process?.status)
+    projectCurrentStatus = normalizeString(entry?.currentStatus)
+
+    const catalog = await fetchPublishedCatalog("permitflow")
+    elements = sortSf299SectionElements(catalog?.decisionElements ?? [])
   }
 
-  const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
-    options,
-    "/rest/v1/process_instance",
-    (endpoint) => {
-      endpoint.searchParams.set("select", "id,status,last_updated,created_at")
-      endpoint.searchParams.set("parent_project_id", `eq.${permitflowProjectId}`)
-      endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
-    }
-  )
-  processRows.sort((a, b) => compareByTimestampDesc(a.last_updated, b.last_updated))
-  const processInstanceId = parseNumericId(processRows[0]?.id)
   if (typeof processInstanceId !== "number") {
     throw new ProjectPersistenceError(
       `No ${ROW_AUTHORIZATION_LABEL} process instance was found for portal project ${portalProjectId}.`
     )
   }
-  const processStatus = normalizeString(processRows[0]?.status)
-
-  const elements = await resolveSf299SectionElements(options, sf299ProcessModelId)
 
   const payloadRows = await fetchPermitflowList<PermitflowDecisionPayloadRow>(
     options,
@@ -1465,7 +1296,7 @@ async function resolveSf299FormContext(
     permitflowProjectId,
     processInstanceId,
     processStatus,
-    projectCurrentStatus: normalizeString(permitflowProject?.current_status),
+    projectCurrentStatus,
     sections: elements.map((element) => ({
       element,
       payload: payloadsByElementId.get(element.id)
@@ -1917,73 +1748,22 @@ export async function uploadPermitflowDocument({
 export async function loadPermitflowProjectStatus(
   projectId: number
 ): Promise<PermitflowProjectStatus> {
-  const supabaseUrl = getPermitflowUrl()
-  const supabaseAnonKey = getPermitflowAnonKey()
-  const tenantId = getPermitflowTenantId()
-  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
-    throw new ProjectPersistenceError(
-      "PermitFast credentials are not configured. Set PERMITFLOW_SUPABASE_URL, PERMITFLOW_SUPABASE_ANON_KEY, and PERMITFLOW_TENANT_ID."
-    )
-  }
-
   if (!Number.isFinite(projectId)) {
-    throw new ProjectPersistenceError("PermitFast project identifiers must be numeric.")
+    throw new ProjectPersistenceError("Project identifier must be numeric.")
   }
 
-  const options = { supabaseUrl, supabaseAnonKey, tenantId }
-  const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
-  const resolvedProjectRow = await resolvePermitflowProjectByPortalProjectId(options, projectId)
-  const resolvedPermitflowProjectId = parseNumericId(resolvedProjectRow?.id)
-
-  if (!resolvedProjectRow || typeof resolvedPermitflowProjectId !== "number") {
+  const progress = await fetchPublishedProjectProgress("permitflow", [projectId])
+  const entry = progress.get(projectId)
+  if (!entry) {
     return { exists: false, projectId }
-  }
-
-  const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
-    options,
-    "/rest/v1/process_instance",
-    (endpoint) => {
-      endpoint.searchParams.set(
-        "select",
-        "id,parent_project_id,description,last_updated,created_at,process_model,status"
-      )
-      endpoint.searchParams.set("parent_project_id", `eq.${resolvedPermitflowProjectId}`)
-      endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
-    }
-  )
-
-  const rowAuthorizationProcesses = processRows.filter((row) =>
-    isRowAuthorizationProcessRow(row, sf299ProcessModelId)
-  )
-  let rowAuthorizationProcess: ProjectProcessSummary | undefined
-
-  if (rowAuthorizationProcesses.length > 0) {
-    rowAuthorizationProcesses.sort((a, b) => compareByTimestampDesc(a.last_updated, b.last_updated))
-    const row = rowAuthorizationProcesses[0]
-    const id = parseNumericId(row.id)
-    if (typeof id === "number") {
-      const description = typeof row.description === "string" ? row.description : null
-      rowAuthorizationProcess = {
-        id,
-        title: ROW_AUTHORIZATION_LABEL,
-        description,
-        lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
-        createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
-        caseEvents: []
-      }
-    }
   }
 
   return {
     exists: true,
-    projectId: resolvedPermitflowProjectId,
-    title: normalizeTitle(resolvedProjectRow.title),
-    lastUpdated:
-      typeof resolvedProjectRow.last_updated === "string"
-        ? resolvedProjectRow.last_updated
-        : undefined,
-    currentStatus: normalizeString(resolvedProjectRow.current_status),
-    rowAuthorizationProcess
+    projectId: entry.targetProjectId ?? projectId,
+    lastUpdated: entry.lastUpdated,
+    currentStatus: entry.currentStatus,
+    rowAuthorizationProcess: entry.processes[0]
   }
 }
 
@@ -2040,210 +1820,17 @@ export async function updatePermitflowProject({
 export async function loadRowAuthorizationProcessesForProjects(
   projects: ProjectSummary[]
 ): Promise<Map<number, ProjectProcessSummary[]>> {
-  const supabaseUrl = getPermitflowUrl()
-  const supabaseAnonKey = getPermitflowAnonKey()
-  const tenantId = getPermitflowTenantId()
-  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
-    return new Map()
+  const results = new Map<number, ProjectProcessSummary[]>()
+  const progress = await fetchPublishedProjectProgress(
+    "permitflow",
+    projects.map((project) => project.id)
+  )
+  for (const [sourceProjectId, entry] of progress) {
+    if (entry.processes.length > 0) {
+      results.set(sourceProjectId, entry.processes)
+    }
   }
-
-  const projectTitleEntries = projects
-    .map((project) => ({
-      id: project.id,
-      title: normalizeTitle(project.title),
-      rawTitle: project.title ?? undefined
-    }))
-    .filter((project) => project.title)
-
-  if (projectTitleEntries.length === 0) {
-    return new Map()
-  }
-
-  const uniqueTitles = Array.from(
-    new Set(projectTitleEntries.map((project) => project.title))
-  ).filter((title): title is string => typeof title === "string")
-
-  if (uniqueTitles.length === 0) {
-    return new Map()
-  }
-
-  try {
-    const options = { supabaseUrl, supabaseAnonKey, tenantId }
-    const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
-    const titleFilters = uniqueTitles.map((title) => `title.ilike.${quotePostgrestValue(title)}`)
-
-    const permitflowProjects = await fetchPermitflowList<PermitflowProjectRow>(
-      options,
-      "/rest/v1/project",
-      (endpoint) => {
-        endpoint.searchParams.set("select", "id,title,other")
-        endpoint.searchParams.set("or", `(${titleFilters.join(",")})`)
-      }
-    )
-
-    const permitflowProjectsBySourceId = new Map<number, PermitflowProjectRow>()
-    for (const row of permitflowProjects) {
-      const sourceProjectId = extractPortalSourceProjectId(row.other)
-      if (typeof sourceProjectId === "number") {
-        permitflowProjectsBySourceId.set(sourceProjectId, row)
-      }
-    }
-
-    const permitflowProjectsByTitle = new Map<string, PermitflowProjectRow[]>()
-    for (const row of permitflowProjects) {
-      const normalized = normalizeTitle(row.title)?.toLowerCase()
-      if (!normalized) {
-        continue
-      }
-      const matches = permitflowProjectsByTitle.get(normalized) ?? []
-      matches.push(row)
-      permitflowProjectsByTitle.set(normalized, matches)
-    }
-
-    const portalToPermitflowProjectId = new Map<number, number>()
-    for (const entry of projectTitleEntries) {
-      const normalizedTitle = entry.title?.toLowerCase()
-      const directlyLinkedProject = permitflowProjectsBySourceId.get(entry.id)
-      const matchedProjects =
-        directlyLinkedProject || !normalizedTitle
-          ? directlyLinkedProject
-            ? [directlyLinkedProject]
-            : undefined
-          : permitflowProjectsByTitle.get(normalizedTitle)
-      if (!matchedProjects || matchedProjects.length === 0) {
-        continue
-      }
-      if (matchedProjects.length > 1) {
-        console.warn("[projects] Multiple PermitFast projects share a title.", {
-          title: entry.rawTitle ?? entry.title,
-          permitflowProjectIds: matchedProjects
-            .map((project) => parseNumericId(project.id))
-            .filter((id): id is number => typeof id === "number")
-        })
-      }
-      const matchedProject = matchedProjects[0]
-      const permitflowProjectId = parseNumericId(matchedProject.id)
-      if (typeof permitflowProjectId !== "number") {
-        continue
-      }
-      if (permitflowProjectId !== entry.id) {
-        console.warn("[projects] PermitFast project id mismatch for title match.", {
-          title: entry.rawTitle ?? entry.title,
-          portalProjectId: entry.id,
-          permitflowProjectId
-        })
-      }
-      portalToPermitflowProjectId.set(entry.id, permitflowProjectId)
-    }
-
-    const permitflowProjectIds = Array.from(
-      new Set(Array.from(portalToPermitflowProjectId.values()))
-    )
-
-    if (permitflowProjectIds.length === 0) {
-      return new Map()
-    }
-
-    const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
-      options,
-      "/rest/v1/process_instance",
-      (endpoint) => {
-        endpoint.searchParams.set(
-          "select",
-          "id,parent_project_id,description,last_updated,created_at,process_model,status"
-        )
-        endpoint.searchParams.set("parent_project_id", `in.(${permitflowProjectIds.join(",")})`)
-        endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
-      }
-    )
-
-    const rowAuthorizationProcesses = processRows.filter((row) =>
-      isRowAuthorizationProcessRow(row, sf299ProcessModelId)
-    )
-    const processIds = rowAuthorizationProcesses
-      .map((row) => parseNumericId(row.id))
-      .filter((id): id is number => typeof id === "number")
-
-    const caseEvents = processIds.length
-      ? await fetchPermitflowList<PermitflowCaseEventRow>(
-          options,
-          "/rest/v1/case_event",
-          (endpoint) => {
-            endpoint.searchParams.set(
-              "select",
-              "id,parent_process_id,name,description,type,status,last_updated,other"
-            )
-            endpoint.searchParams.set("parent_process_id", `in.(${processIds.join(",")})`)
-          }
-        )
-      : []
-
-    const caseEventsByProcess = new Map<number, CaseEventSummary[]>()
-    for (const row of caseEvents) {
-      const processId = parseNumericId(row.parent_process_id)
-      const id = parseNumericId(row.id)
-      if (typeof processId !== "number" || typeof id !== "number") {
-        continue
-      }
-      const events = caseEventsByProcess.get(processId) ?? []
-      events.push({
-        id,
-        name: typeof row.name === "string" ? row.name : null,
-        description: typeof row.description === "string" ? row.description : null,
-        eventType: typeof row.type === "string" ? row.type : null,
-        status: typeof row.status === "string" ? row.status : null,
-        lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
-        data: row.other ?? undefined
-      })
-      caseEventsByProcess.set(processId, events)
-    }
-
-    const processesByPermitflowProject = new Map<number, ProjectProcessSummary[]>()
-    for (const row of rowAuthorizationProcesses) {
-      const projectId = parseNumericId(row.parent_project_id)
-      const id = parseNumericId(row.id)
-      if (typeof projectId !== "number" || typeof id !== "number") {
-        continue
-      }
-      const description = typeof row.description === "string" ? row.description : null
-      const summary: ProjectProcessSummary = {
-        id,
-        title: ROW_AUTHORIZATION_LABEL,
-        description,
-        lastUpdated: typeof row.last_updated === "string" ? row.last_updated : null,
-        createdTimestamp: typeof row.created_at === "string" ? row.created_at : null,
-        caseEvents: []
-      }
-      const events = caseEventsByProcess.get(id)
-      if (events && events.length > 0) {
-        events.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
-        summary.caseEvents = events
-      }
-      const existing = processesByPermitflowProject.get(projectId)
-      if (existing) {
-        existing.push(summary)
-      } else {
-        processesByPermitflowProject.set(projectId, [summary])
-      }
-    }
-
-    for (const processes of processesByPermitflowProject.values()) {
-      processes.sort((a, b) => compareByTimestampDesc(a.lastUpdated, b.lastUpdated))
-    }
-
-    const results = new Map<number, ProjectProcessSummary[]>()
-    for (const [portalProjectId, permitflowProjectId] of portalToPermitflowProjectId.entries()) {
-      const processes = processesByPermitflowProject.get(permitflowProjectId)
-      if (processes && processes.length > 0) {
-        results.set(portalProjectId, processes)
-      }
-    }
-
-    return results
-  } catch (error) {
-    console.warn("[projects] Failed to load PermitFast Right of Way Authorization processes.", error)
-    return new Map()
-  }
+  return results
 }
 
 export type RowAuthorizationAnalyticsPoint = {
@@ -2254,200 +1841,11 @@ export type RowAuthorizationAnalyticsPoint = {
   durationTotalDays: number | null
 }
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000
 
-function parseTimestampMillisLocal(value?: string | null): number | undefined {
-  if (!value) {
-    return undefined
-  }
-  const timestamp = Date.parse(value)
-  if (Number.isFinite(timestamp)) {
-    return timestamp
-  }
-  return undefined
-}
 
-function dayKeyFromMillisLocal(millis: number): string {
-  const date = new Date(millis)
-  return date.toISOString().slice(0, 10)
-}
 
 export async function loadRowAuthorizationAnalytics(): Promise<RowAuthorizationAnalyticsPoint[]> {
-  const supabaseUrl = getPermitflowUrl()
-  const supabaseAnonKey = getPermitflowAnonKey()
-  const tenantId = getPermitflowTenantId()
-
-  if (!supabaseUrl || !supabaseAnonKey || !tenantId) {
-    console.warn(
-      "[analytics] PermitFast credentials not configured (requires URL, anon key, and tenant id)"
-    )
-    return []
-  }
-
-  const options = { supabaseUrl, supabaseAnonKey, tenantId }
-
-  try {
-    const sf299ProcessModelId = await resolveSf299ProcessModelId(options)
-    // Load all Right of Way Authorization (SF-299) process instances
-    const processRows = await fetchPermitflowList<PermitflowProcessInstanceRow>(
-      options,
-      "/rest/v1/process_instance",
-      (endpoint) => {
-        endpoint.searchParams.set(
-          "select",
-          "id,created_at,last_updated,process_model,status"
-        )
-        endpoint.searchParams.set("process_model", `eq.${sf299ProcessModelId}`)
-      }
-    )
-
-    const processIds = processRows
-      .map((row) => parseNumericId(row.id))
-      .filter((id): id is number => typeof id === "number")
-
-    if (processIds.length === 0) {
-      return []
-    }
-
-    // Load all case events for those processes
-    const caseEvents = await fetchPermitflowList<PermitflowCaseEventRow>(
-      options,
-      "/rest/v1/case_event",
-      (endpoint) => {
-        endpoint.searchParams.set("select", "id,parent_process_id,name,type,status,last_updated")
-        endpoint.searchParams.set("parent_process_id", `in.(${processIds.join(",")})`)
-      }
-    )
-
-    // Group events by process
-    const eventsByProcess = new Map<number, PermitflowCaseEventRow[]>()
-    for (const event of caseEvents) {
-      const processId = parseNumericId(event.parent_process_id)
-      if (typeof processId !== "number") {
-        continue
-      }
-      const events = eventsByProcess.get(processId) ?? []
-      events.push(event)
-      eventsByProcess.set(processId, events)
-    }
-
-    // Build a map from process ID to created_at timestamp
-    const processCreatedAt = new Map<number, number | undefined>()
-    for (const row of processRows) {
-      const id = parseNumericId(row.id)
-      if (typeof id === "number") {
-        processCreatedAt.set(id, parseTimestampMillisLocal(row.created_at))
-      }
-    }
-
-    // Aggregate completions by date
-    const aggregatesByDate = new Map<
-      string,
-      { count: number; durationSum: number; durationCount: number }
-    >()
-
-    for (const [processId, events] of eventsByProcess.entries()) {
-      // Sort events by timestamp
-      const sorted = [...events].sort((a, b) => {
-        const aTime = parseTimestampMillisLocal(a.last_updated)
-        const bTime = parseTimestampMillisLocal(b.last_updated)
-        if (typeof aTime !== "number" && typeof bTime !== "number") {
-          return 0
-        }
-        if (typeof aTime !== "number") {
-          return 1
-        }
-        if (typeof bTime !== "number") {
-          return -1
-        }
-        return aTime - bTime
-      })
-
-      // Find the completion event (status = 'complete', 'completed', or 'done')
-      const completionEvent = sorted.find((event) => {
-        const status = typeof event.status === "string" ? event.status.toLowerCase() : ""
-        return status === "complete" || status === "completed" || status === "done"
-      })
-
-      if (!completionEvent) {
-        continue
-      }
-
-      const completionMillis = parseTimestampMillisLocal(completionEvent.last_updated)
-      if (typeof completionMillis !== "number") {
-        continue
-      }
-
-      const completionDateKey = dayKeyFromMillisLocal(completionMillis)
-      const aggregate = aggregatesByDate.get(completionDateKey) ?? {
-        count: 0,
-        durationSum: 0,
-        durationCount: 0
-      }
-
-      aggregate.count += 1
-
-      // Calculate duration from process creation to completion
-      const startMillis = processCreatedAt.get(processId)
-      if (typeof startMillis === "number" && startMillis <= completionMillis) {
-        const durationDays = (completionMillis - startMillis) / MS_PER_DAY
-        if (Number.isFinite(durationDays) && durationDays >= 0) {
-          aggregate.durationSum += durationDays
-          aggregate.durationCount += 1
-        }
-      }
-
-      aggregatesByDate.set(completionDateKey, aggregate)
-    }
-
-    if (aggregatesByDate.size === 0) {
-      return []
-    }
-
-    // Generate continuous date range
-    const sortedDateKeys = [...aggregatesByDate.keys()].sort()
-    const points: RowAuthorizationAnalyticsPoint[] = []
-
-    const firstDate = sortedDateKeys[0]
-    const lastDate = sortedDateKeys[sortedDateKeys.length - 1]
-    const cursor = new Date(`${firstDate}T00:00:00Z`)
-    const end = new Date(`${lastDate}T00:00:00Z`)
-
-    while (cursor.getTime() <= end.getTime()) {
-      const dateKey = cursor.toISOString().slice(0, 10)
-      const aggregate = aggregatesByDate.get(dateKey)
-
-      if (aggregate) {
-        const average =
-          aggregate.durationCount > 0
-            ? Math.round((aggregate.durationSum / aggregate.durationCount) * 100) / 100
-            : null
-
-        points.push({
-          date: dateKey,
-          completionCount: aggregate.count > 0 ? aggregate.count : null,
-          averageCompletionDays: average,
-          durationSampleSize: aggregate.durationCount,
-          durationTotalDays: aggregate.durationCount > 0 ? aggregate.durationSum : null
-        })
-      } else {
-        points.push({
-          date: dateKey,
-          completionCount: null,
-          averageCompletionDays: null,
-          durationSampleSize: 0,
-          durationTotalDays: null
-        })
-      }
-
-      cursor.setUTCDate(cursor.getUTCDate() + 1)
-    }
-
-    return points
-  } catch (error) {
-    console.warn("[analytics] Failed to load Right of Way Authorization analytics.", error)
-    return []
-  }
+  return fetchPublishedAnalytics("permitflow")
 }
 
 // --- Application deletion ----------------------------------------------------------------

@@ -1639,13 +1639,6 @@ app.get("/env.js", (req, res) => {
     config.supabaseTenantId = supabaseTenantId;
   }
 
-  const crossTenantReadFunctionUrl = normalizeEnvValue(
-    process.env.SUPABASE_CROSS_TENANT_READ_FUNCTION_URL
-  );
-  if (crossTenantReadFunctionUrl) {
-    config.crossTenantReadFunctionUrl = crossTenantReadFunctionUrl;
-  }
-
   const permitflowUrl = resolvePermitflowUrl();
   if (permitflowUrl) {
     config.permitflowUrl = permitflowUrl;
