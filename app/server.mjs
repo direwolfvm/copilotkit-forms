@@ -279,22 +279,11 @@ async function proxySupabaseRequest(req, res) {
 // route instead, so object paths are never handed out and every download is checked against a
 // `document` row belonging to this tenant first.
 //
-// The bytes are fetched with a signing key when one is configured (SUPABASE_STORAGE_SIGNING_KEY,
-// server-side only, never sent to the browser). Until that key exists the route falls back to the
-// public object URL so downloads keep working, and says so in the logs. Once the bucket is made
-// private the fallback stops working and the signing key becomes required — the client contract
-// does not change either way.
+// The bytes are fetched through a tenant-limited Edge Function. Its service credential stays in
+// Supabase, so this application needs only the same anon credential it already uses for PostgREST.
 // ---------------------------------------------------------------------------
 
 const DOWNLOADABLE_BUCKETS = new Set(["permit-documents"]);
-let loggedMissingSigningKey = false;
-
-function resolveSupabaseStorageSigningKey() {
-  return (
-    normalizeEnvValue(process.env.SUPABASE_STORAGE_SIGNING_KEY) ??
-    normalizeEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY)
-  );
-}
 
 function normalizeStorageObjectPath(bucket, rawPath) {
   const trimmed = String(rawPath ?? "").trim().replace(/^\/+/, "");
@@ -328,37 +317,28 @@ async function findTenantDocument(supabaseUrl, anonKey, tenantId, bucket, object
   return Array.isArray(rows) && rows.length > 0 ? rows[0] : undefined;
 }
 
-async function resolveStorageObjectResponse(supabaseUrl, bucket, objectPath) {
-  const signingKey = resolveSupabaseStorageSigningKey();
-
-  if (signingKey) {
-    const signEndpoint = new URL(`/storage/v1/object/sign/${bucket}/${objectPath}`, supabaseUrl);
-    const signed = await fetch(signEndpoint, {
-      method: "POST",
-      headers: {
-        apikey: signingKey,
-        Authorization: `Bearer ${signingKey}`,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({ expiresIn: 120 })
-    });
-    if (signed.ok) {
-      const payload = await signed.json().catch(() => undefined);
-      const signedPath = payload && typeof payload.signedURL === "string" ? payload.signedURL : undefined;
-      if (signedPath) {
-        return fetch(new URL(`/storage/v1${signedPath}`, supabaseUrl));
-      }
-    }
-    console.warn(`[documents] Signing failed for ${bucket}/${objectPath} (${signed.status}); falling back.`);
-  } else if (!loggedMissingSigningKey) {
-    loggedMissingSigningKey = true;
-    console.warn(
-      "[documents] SUPABASE_STORAGE_SIGNING_KEY is not set; serving downloads via the public object URL. " +
-        "Set it before the permit-documents bucket is made private."
-    );
+async function resolveStorageObjectResponse(supabaseUrl, anonKey, bucket, objectPath) {
+  const signEndpoint = new URL("/functions/v1/helppermit-document-sign", supabaseUrl);
+  const signed = await fetch(signEndpoint, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ bucket, path: objectPath })
+  });
+  if (!signed.ok) {
+    console.warn(`[documents] Signing failed for ${bucket}/${objectPath} (${signed.status}).`);
+    return signed;
   }
-
-  return fetch(new URL(`/storage/v1/object/public/${bucket}/${objectPath}`, supabaseUrl));
+  const payload = await signed.json().catch(() => undefined);
+  const signedUrl = payload && typeof payload.signedUrl === "string" ? payload.signedUrl : undefined;
+  if (!signedUrl) {
+    console.warn(`[documents] Signing returned no URL for ${bucket}/${objectPath}.`);
+    return new Response(null, { status: 502 });
+  }
+  return fetch(new URL(signedUrl, supabaseUrl));
 }
 
 async function handleDocumentDownload(req, res) {
@@ -390,22 +370,8 @@ async function handleDocumentDownload(req, res) {
       return;
     }
 
-    const upstream = await resolveStorageObjectResponse(supabaseUrl, bucket, objectPath);
+    const upstream = await resolveStorageObjectResponse(supabaseUrl, anonKey, bucket, objectPath);
     if (!upstream.ok) {
-      // The bucket is private and we have no signing key: the public fallback answers
-      // "Bucket not found". Say that plainly instead of a bare 502 — it is an operator
-      // configuration gap, not a bad request, and it is the expected state until the key lands.
-      if (!resolveSupabaseStorageSigningKey()) {
-        console.error(
-          `[documents] ${bucket}/${objectPath} is unreadable (${upstream.status}) and no signing key ` +
-            "is configured. Set SUPABASE_STORAGE_SIGNING_KEY; the bucket is no longer public."
-        );
-        res.status(503).json({
-          error:
-            "Document downloads are unavailable: the storage bucket is private and no signing key is configured."
-        });
-        return;
-      }
       console.error(`[documents] Upstream read failed for ${bucket}/${objectPath} (${upstream.status}).`);
       res.status(upstream.status === 404 ? 404 : 502).json({ error: "Failed to read the stored document" });
       return;
