@@ -1,5 +1,15 @@
 # Database setup
 
+> **The CSV exports in this directory are stale — do not use them to resolve ids.**
+> `process_model full export.csv`, `decision_element full export.csv` and
+> `legal_structure full export.csv` were taken on 2025-10-06, before the shared Supabase project
+> was partitioned by `tenant_id`. They claim `process_model` id 1 is our "Project Pre-screening".
+> Verified 2026-09-06, id 1 is reviewworks' "Complex Environmental Review" and id 2 is permitflow's
+> "Basic Permit". Numeric `process_model` / `decision_element` / `legal_structure` ids come from
+> sequences shared with every tenant in the project and are **not** stable identifiers for us.
+> Resolve by `title` or `process_model_internal_reference_id` **within a `tenant_id` filter**.
+> See [`2026-09-06-seed-portal-catalog.sql`](2026-09-06-seed-portal-catalog.sql).
+
 HelpPermitMe uses a PIC/CEQ-style Supabase schema for projects, process models and instances,
 decision elements and payloads, case events, GIS data, documents, and related reference entities.
 

@@ -56,7 +56,7 @@ import {
   loadProjectPortalState,
   loadSupportingDocumentsForProcess,
   loadProcessInformation,
-  PRE_SCREENING_PROCESS_MODEL_ID,
+  resolvePreScreeningProcessModelId,
   type ProcessInformation,
   type LoadedPermittingChecklistItem,
   type PortalProgressState,
@@ -1938,7 +1938,7 @@ function ProjectFormWithCopilot({ showRuntimeWarning }: ProjectFormWithCopilotPr
     setProcessInformationState({ status: "loading" })
 
     try {
-      const info = await loadProcessInformation(PRE_SCREENING_PROCESS_MODEL_ID)
+      const info = await loadProcessInformation(await resolvePreScreeningProcessModelId())
       if (!isMountedRef.current) {
         return
       }

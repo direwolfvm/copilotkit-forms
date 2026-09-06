@@ -13,15 +13,186 @@ import type { GeometrySource, ProjectGisUpload, UploadedGisFile } from "../types
 import { summarizeNepassist, summarizeIpac } from "./geospatial"
 import {
   IPAC_SHADOW_DECISION_ELEMENT_IDS,
-  IPAC_SHADOW_PROCESS_MODEL_ID,
   IPAC_SHADOW_WORKFLOW_TITLE_SUFFIX
 } from "./ipacShadowWorkflow"
 
 const DATA_SOURCE_SYSTEM = "project-portal"
 const PROJECT_REPORT_DOCUMENT_TYPE = "project-report"
 const SUPPORTING_DOCUMENT_TYPE = "supporting-document"
-export const PRE_SCREENING_PROCESS_MODEL_ID = 1
+// Title of the portal's own pre-screening process model. Numeric process_model ids are assigned
+// by a sequence shared with every other tenant in this Supabase project, so they are NOT stable
+// identifiers for us: id 1 currently belongs to reviewworks and id 2 to permitflow. Resolve by
+// title within our tenant, per the PermitFast handoff, and keep the id only as a last resort.
+export const PRE_SCREENING_PROCESS_MODEL_TITLE = "Project Pre-screening"
+export const PRE_SCREENING_PROCESS_MODEL_FALLBACK_ID = 1
 const PRE_SCREENING_TITLE_SUFFIX = "Pre-Screening"
+
+let preScreeningProcessModelIdCache: number | undefined
+
+export function resetPreScreeningProcessModelCache(): void {
+  preScreeningProcessModelIdCache = undefined
+}
+
+/**
+ * Resolves the pre-screening process model id for this tenant. Both lookups are tenant-scoped, so
+ * a title collision with another tenant (permitfast2 seeded identically titled models) cannot
+ * resolve across the boundary.
+ */
+export async function resolvePreScreeningProcessModelId(): Promise<number> {
+  if (typeof preScreeningProcessModelIdCache === "number") {
+    return preScreeningProcessModelIdCache
+  }
+
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new ProjectPersistenceError(
+      "Supabase credentials are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    )
+  }
+
+  const byTitle = await fetchSupabaseList<{ id?: number | string | null }>(
+    supabaseUrl,
+    supabaseAnonKey,
+    "/rest/v1/process_model",
+    "pre-screening process model",
+    (endpoint) => {
+      endpoint.searchParams.set("select", "id,title")
+      endpoint.searchParams.set("title", `eq.${PRE_SCREENING_PROCESS_MODEL_TITLE}`)
+      endpoint.searchParams.set("limit", "1")
+    }
+  )
+
+  let resolved = parseNumericId(byTitle[0]?.id)
+
+  if (typeof resolved !== "number") {
+    const byId = await fetchSupabaseList<{ id?: number | string | null }>(
+      supabaseUrl,
+      supabaseAnonKey,
+      "/rest/v1/process_model",
+      "pre-screening process model (fallback)",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "id,title")
+        endpoint.searchParams.set("id", `eq.${PRE_SCREENING_PROCESS_MODEL_FALLBACK_ID}`)
+        endpoint.searchParams.set("limit", "1")
+      }
+    )
+    resolved = parseNumericId(byId[0]?.id)
+  }
+
+  if (typeof resolved !== "number") {
+    throw new ProjectPersistenceError(
+      `Process model "${PRE_SCREENING_PROCESS_MODEL_TITLE}" was not found for this tenant. ` +
+        "Seed the portal's process catalog (see database-schema/2026-09-06-seed-portal-catalog.sql)."
+    )
+  }
+
+  preScreeningProcessModelIdCache = resolved
+  return resolved
+}
+
+// The IPaC shadow workflow is defined locally (IPaC publishes no decision elements), but its
+// process_instance and process_decision_payload rows still need catalog ids that belong to THIS
+// tenant. The legacy constants 2 / 8 / 9 / 10 are permitflow's rows, so they must never be written.
+export const IPAC_SHADOW_PROCESS_MODEL_TITLE = "IPaC ESA Consultation Shadow Workflow"
+
+const IPAC_SHADOW_REFERENCE_IDS = {
+  geospatialData: "ipac-shadow-geospatial-data",
+  projectCreated: "ipac-shadow-project-created",
+  consultationComplete: "ipac-shadow-consultation-complete"
+} as const
+
+export type IpacShadowCatalogIds = {
+  processModelId: number | null
+  geospatialData: number | null
+  projectCreated: number | null
+  consultationComplete: number | null
+}
+
+let ipacShadowCatalogCache: IpacShadowCatalogIds | undefined
+
+export function resetIpacShadowCatalogCache(): void {
+  ipacShadowCatalogCache = undefined
+}
+
+/**
+ * Resolves this tenant's IPaC shadow catalog ids by title and
+ * process_model_internal_reference_id. Returns nulls when the catalog has not been seeded yet, so
+ * callers write a null foreign key rather than another tenant's row.
+ */
+export async function resolveIpacShadowCatalogIds(): Promise<IpacShadowCatalogIds> {
+  if (ipacShadowCatalogCache) {
+    return ipacShadowCatalogCache
+  }
+
+  const empty: IpacShadowCatalogIds = {
+    processModelId: null,
+    geospatialData: null,
+    projectCreated: null,
+    consultationComplete: null
+  }
+
+  const supabaseUrl = getSupabaseUrl()
+  const supabaseAnonKey = getSupabaseAnonKey()
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return empty
+  }
+
+  try {
+    const models = await fetchSupabaseList<{ id?: number | string | null }>(
+      supabaseUrl,
+      supabaseAnonKey,
+      "/rest/v1/process_model",
+      "IPaC shadow process model",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "id,title")
+        endpoint.searchParams.set("title", `eq.${IPAC_SHADOW_PROCESS_MODEL_TITLE}`)
+        endpoint.searchParams.set("limit", "1")
+      }
+    )
+
+    const processModelId = parseNumericId(models[0]?.id)
+    if (typeof processModelId !== "number") {
+      ipacShadowCatalogCache = empty
+      return empty
+    }
+
+    const elements = await fetchSupabaseList<{
+      id?: number | string | null
+      process_model_internal_reference_id?: string | null
+    }>(
+      supabaseUrl,
+      supabaseAnonKey,
+      "/rest/v1/decision_element",
+      "IPaC shadow decision elements",
+      (endpoint) => {
+        endpoint.searchParams.set("select", "id,process_model_internal_reference_id")
+        endpoint.searchParams.set("process_model", `eq.${processModelId}`)
+      }
+    )
+
+    const byReference = new Map<string, number>()
+    for (const element of elements) {
+      const reference = normalizeString(element.process_model_internal_reference_id)
+      const id = parseNumericId(element.id)
+      if (reference && typeof id === "number") {
+        byReference.set(reference, id)
+      }
+    }
+
+    ipacShadowCatalogCache = {
+      processModelId,
+      geospatialData: byReference.get(IPAC_SHADOW_REFERENCE_IDS.geospatialData) ?? null,
+      projectCreated: byReference.get(IPAC_SHADOW_REFERENCE_IDS.projectCreated) ?? null,
+      consultationComplete: byReference.get(IPAC_SHADOW_REFERENCE_IDS.consultationComplete) ?? null
+    }
+    return ipacShadowCatalogCache
+  } catch {
+    // A missing catalog must not break the IPaC page; it renders from the local definition.
+    ipacShadowCatalogCache = empty
+    return empty
+  }
+}
 const CASE_EVENT_TYPES = {
   PROJECT_INITIATED: "Project initiated",
   PRE_SCREENING_INITIATED: "Pre-screening initiated",
@@ -46,22 +217,30 @@ function getPortalTenantId(): string | undefined {
   return getSupabaseTenantId()
 }
 
-function applyPortalTenantFilter(endpoint: URL): void {
+// The portal shares its Supabase project with other tenants (permitflow, reviewworks and the
+// helppermitme2/permitfast2 portals). Without a tenant id every read silently widens to other
+// tenants' rows and every write lands with a null tenant_id, which row security then makes
+// invisible and unrecoverable from a client role. Both are worse than a hard configuration error.
+function requirePortalTenantId(): string {
   const tenantId = getPortalTenantId()
   if (!tenantId) {
-    return
+    throw new ProjectPersistenceError(
+      "Supabase tenant is not configured. Set SUPABASE_TENANT_ID to the portal tenant UUID; " +
+        "without it the portal cannot safely read or write the shared Supabase project."
+    )
   }
+  return tenantId
+}
+
+function applyPortalTenantFilter(endpoint: URL): void {
+  const tenantId = requirePortalTenantId()
   if (!endpoint.searchParams.has(TENANT_ID_COLUMN)) {
     endpoint.searchParams.set(TENANT_ID_COLUMN, `eq.${tenantId}`)
   }
 }
 
 function withPortalTenantId<T extends Record<string, unknown>>(payload: T): T {
-  const tenantId = getPortalTenantId()
-  if (!tenantId) {
-    return payload
-  }
-  return { ...payload, [TENANT_ID_COLUMN]: tenantId }
+  return { ...payload, [TENANT_ID_COLUMN]: requirePortalTenantId() }
 }
 
 function buildLoggableHeaders(init: RequestInit): Record<string, string> {
@@ -503,7 +682,7 @@ export async function loadProcessAnalytics(
 }
 
 export async function loadPreScreeningAnalytics(): Promise<PreScreeningAnalyticsPoint[]> {
-  return loadProcessAnalytics(PRE_SCREENING_PROCESS_MODEL_ID)
+  return loadProcessAnalytics(await resolvePreScreeningProcessModelId())
 }
 
 export type ProjectHierarchy = {
@@ -1011,7 +1190,7 @@ export async function submitDecisionPayload({
   const decisionElements = await fetchDecisionElements({ supabaseUrl, supabaseAnonKey })
 
   const missingElements = DECISION_ELEMENT_BUILDERS.filter(
-    (builder) => !decisionElements.has(builder.decisionElementId)
+    (builder) => !findDecisionElementForBuilder(decisionElements, builder)
   ).map((builder) => builder.title)
   if (missingElements.length > 0) {
     console.warn(
@@ -2560,7 +2739,7 @@ async function createPreScreeningProcessInstance({
   const processInstancePayload = withPortalTenantId(
     stripUndefined({
       description: buildProcessInstanceDescription(projectTitle),
-      process_model: PRE_SCREENING_PROCESS_MODEL_ID,
+      process_model: await resolvePreScreeningProcessModelId(),
       parent_project_id: projectId,
       data_source_system: DATA_SOURCE_SYSTEM,
       last_updated: timestamp,
@@ -2725,7 +2904,7 @@ async function createShadowProcessInstance({
   const processInstancePayload = withPortalTenantId(
     stripUndefined({
       description: buildShadowProcessInstanceDescription(projectTitle, descriptionSuffix),
-      process_model: IPAC_SHADOW_PROCESS_MODEL_ID,
+      process_model: (await resolveIpacShadowCatalogIds()).processModelId,
       parent_project_id: projectId,
       data_source_system: DATA_SOURCE_SYSTEM,
       last_updated: timestamp,
@@ -2792,13 +2971,16 @@ async function createShadowProcessInstance({
 
 function extractLatestDecisionPayload(
   rows: ProcessDecisionPayloadRow[],
-  decisionElementId: number
+  decisionElementId: number | Array<number | null | undefined>
 ): ProcessDecisionPayloadRow | undefined {
+  const candidateIds = (Array.isArray(decisionElementId) ? decisionElementId : [decisionElementId])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
   let latest: ProcessDecisionPayloadRow | undefined
   let latestTimestamp = Number.NEGATIVE_INFINITY
 
   for (const row of rows) {
-    if (parseNumericId(row.process_decision_element) !== decisionElementId) {
+    const rowElementId = parseNumericId(row.process_decision_element)
+    if (typeof rowElementId !== "number" || !candidateIds.includes(rowElementId)) {
       continue
     }
 
@@ -2841,7 +3023,7 @@ async function upsertIpacShadowDecisionPayload({
   supabaseAnonKey: string
   processInstanceId: number
   projectId: number
-  decisionElementId: number
+  decisionElementId: number | null
   evaluationData: Record<string, unknown>
 }): Promise<void> {
   const timestamp = new Date().toISOString()
@@ -2850,7 +3032,7 @@ async function upsertIpacShadowDecisionPayload({
     supabaseAnonKey,
     processInstanceId
   })
-  const existing = extractLatestDecisionPayload(existingRows, decisionElementId)
+  const existing = extractLatestDecisionPayload(existingRows, [decisionElementId])
   const payload = withPortalTenantId(
     stripUndefined({
       process: processInstanceId,
@@ -2934,11 +3116,13 @@ function extractLatestCaseEvent(
 function buildIpacShadowWorkflowStatus({
   process,
   caseEvents,
-  decisionPayloads
+  decisionPayloads,
+  catalogIds
 }: {
   process?: ProcessInstanceRow
   caseEvents: CaseEventRow[]
   decisionPayloads: ProcessDecisionPayloadRow[]
+  catalogIds?: IpacShadowCatalogIds
 }): IpacShadowWorkflowStatus {
   const initiatedEvent = extractLatestCaseEvent(caseEvents, CASE_EVENT_TYPES.IPAC_CONSULTATION_INITIATED)
   const geospatialEvent = extractLatestCaseEvent(
@@ -2957,15 +3141,18 @@ function buildIpacShadowWorkflowStatus({
   const initiatedOther = parseCaseEventOtherRecord(initiatedEvent?.other)
   const geospatialPayload = extractLatestDecisionPayload(
     decisionPayloads,
-    IPAC_SHADOW_DECISION_ELEMENT_IDS.geospatialData
+    // legacy id kept as a candidate: rows written before the catalog was seeded reference it
+    [catalogIds?.geospatialData, IPAC_SHADOW_DECISION_ELEMENT_IDS.geospatialData]
   )
   const projectCreatedPayload = extractLatestDecisionPayload(
     decisionPayloads,
-    IPAC_SHADOW_DECISION_ELEMENT_IDS.projectCreated
+    // legacy id kept as a candidate: rows written before the catalog was seeded reference it
+    [catalogIds?.projectCreated, IPAC_SHADOW_DECISION_ELEMENT_IDS.projectCreated]
   )
   const consultationCompletePayload = extractLatestDecisionPayload(
     decisionPayloads,
-    IPAC_SHADOW_DECISION_ELEMENT_IDS.consultationComplete
+    // legacy id kept as a candidate: rows written before the catalog was seeded reference it
+    [catalogIds?.consultationComplete, IPAC_SHADOW_DECISION_ELEMENT_IDS.consultationComplete]
   )
   const geospatialPayloadEvaluation = parseDecisionPayloadEvaluationRecord(
     geospatialPayload?.evaluation_data
@@ -3056,7 +3243,12 @@ export async function loadIpacShadowWorkflowStatus(
       ? await fetchProcessDecisionPayloadRows({ supabaseUrl, supabaseAnonKey, processInstanceId })
       : []
 
-  return buildIpacShadowWorkflowStatus({ process, caseEvents, decisionPayloads })
+  return buildIpacShadowWorkflowStatus({
+    process,
+    caseEvents,
+    decisionPayloads,
+    catalogIds: await resolveIpacShadowCatalogIds()
+  })
 }
 
 export async function recordIpacShadowWorkflowSubmission({
@@ -3115,7 +3307,7 @@ export async function recordIpacShadowWorkflowSubmission({
     supabaseAnonKey,
     processInstanceId,
     projectId,
-    decisionElementId: IPAC_SHADOW_DECISION_ELEMENT_IDS.geospatialData,
+    decisionElementId: (await resolveIpacShadowCatalogIds()).geospatialData,
     evaluationData: {
       title: "Geospatial data",
       status: "complete",
@@ -3141,7 +3333,12 @@ export async function recordIpacShadowWorkflowSubmission({
     supabaseAnonKey,
     processInstanceId
   })
-  return buildIpacShadowWorkflowStatus({ process, caseEvents, decisionPayloads })
+  return buildIpacShadowWorkflowStatus({
+    process,
+    caseEvents,
+    decisionPayloads,
+    catalogIds: await resolveIpacShadowCatalogIds()
+  })
 }
 
 export async function completeIpacShadowWorkflowProjectCreated({
@@ -3183,7 +3380,7 @@ export async function completeIpacShadowWorkflowProjectCreated({
     supabaseAnonKey,
     processInstanceId,
     projectId,
-    decisionElementId: IPAC_SHADOW_DECISION_ELEMENT_IDS.projectCreated,
+    decisionElementId: (await resolveIpacShadowCatalogIds()).projectCreated,
     evaluationData: {
       title: "Project Created",
       status: "complete",
@@ -3208,7 +3405,12 @@ export async function completeIpacShadowWorkflowProjectCreated({
     supabaseAnonKey,
     processInstanceId
   })
-  return buildIpacShadowWorkflowStatus({ process, caseEvents, decisionPayloads })
+  return buildIpacShadowWorkflowStatus({
+    process,
+    caseEvents,
+    decisionPayloads,
+    catalogIds: await resolveIpacShadowCatalogIds()
+  })
 }
 
 export async function completeIpacShadowWorkflowConsultation({
@@ -3250,7 +3452,7 @@ export async function completeIpacShadowWorkflowConsultation({
     supabaseAnonKey,
     processInstanceId,
     projectId,
-    decisionElementId: IPAC_SHADOW_DECISION_ELEMENT_IDS.consultationComplete,
+    decisionElementId: (await resolveIpacShadowCatalogIds()).consultationComplete,
     evaluationData: {
       title: "Consultation Complete",
       status: "complete",
@@ -3275,7 +3477,12 @@ export async function completeIpacShadowWorkflowConsultation({
     supabaseAnonKey,
     processInstanceId
   })
-  return buildIpacShadowWorkflowStatus({ process, caseEvents, decisionPayloads })
+  return buildIpacShadowWorkflowStatus({
+    process,
+    caseEvents,
+    decisionPayloads,
+    catalogIds: await resolveIpacShadowCatalogIds()
+  })
 }
 
 type FetchDecisionElementsArgs = {
@@ -3389,7 +3596,7 @@ async function fetchDecisionElements({
   const resolvedProcessModelId =
     typeof processModelId === "number" && Number.isFinite(processModelId)
       ? processModelId
-      : PRE_SCREENING_PROCESS_MODEL_ID
+      : await resolvePreScreeningProcessModelId()
   endpoint.searchParams.set("process_model", `eq.${resolvedProcessModelId}`)
 
   const { url, init } = buildSupabaseFetchRequest(endpoint, supabaseAnonKey, {
@@ -3446,43 +3653,76 @@ type DecisionPayloadBuilderContext = {
 }
 
 type DecisionElementBuilder = {
+  // Stable, tenant-independent key. decisionElementId is only a legacy fallback: numeric
+  // decision_element ids come from a sequence shared with every other tenant in this project.
+  referenceId: string
   decisionElementId: number
   title: string
   build: (context: DecisionPayloadBuilderContext) => Record<string, unknown>
 }
 
+export const PRE_SCREENING_ELEMENT_REFERENCE_IDS = [
+  "prescreening-project-details",
+  "prescreening-nepa-assist",
+  "prescreening-ipac",
+  "prescreening-permitting-checklist",
+  "prescreening-categorical-exclusion",
+  "prescreening-conditions",
+  "prescreening-resource-analysis"
+] as const
+
+function findDecisionElementForBuilder(
+  elements: Map<number, DecisionElementRecord>,
+  builder: DecisionElementBuilder
+): DecisionElementRecord | undefined {
+  for (const element of elements.values()) {
+    if (element && element.processModelInternalReferenceId === builder.referenceId) {
+      return element
+    }
+  }
+  // Fallback for catalogs seeded before reference ids existed. The map is already tenant-scoped.
+  return elements.get(builder.decisionElementId)
+}
+
 const DECISION_ELEMENT_BUILDERS: ReadonlyArray<DecisionElementBuilder> = [
   {
+    referenceId: "prescreening-project-details",
     decisionElementId: 1,
     title: "Provide complete project details",
     build: buildProjectDetailsPayload
   },
   {
+    referenceId: "prescreening-nepa-assist",
     decisionElementId: 2,
     title: "Confirm or upload NEPA Assist results if auto fetch fails",
     build: buildNepaAssistPayload
   },
   {
+    referenceId: "prescreening-ipac",
     decisionElementId: 3,
     title: "Confirm or upload IPaC results if auto fetch fails",
     build: buildIpacPayload
   },
   {
+    referenceId: "prescreening-permitting-checklist",
     decisionElementId: 4,
     title: "Provide permit applicability notes",
     build: buildPermitNotesPayload
   },
   {
+    referenceId: "prescreening-categorical-exclusion",
     decisionElementId: 5,
     title: "Enter CE references and rationale",
     build: buildCategoricalExclusionPayload
   },
   {
+    referenceId: "prescreening-conditions",
     decisionElementId: 6,
     title: "List applicable conditions and notes",
     build: buildConditionsPayload
   },
   {
+    referenceId: "prescreening-resource-analysis",
     decisionElementId: 7,
     title: "Provide resource-by-resource notes",
     build: buildResourceNotesPayload
@@ -3578,7 +3818,7 @@ function buildDecisionPayloadRecords({
   const projectId = normalizeNumber(projectRecord.id as number | undefined)
 
   for (const builder of DECISION_ELEMENT_BUILDERS) {
-    const element = decisionElements.get(builder.decisionElementId)
+    const element = findDecisionElementForBuilder(decisionElements, builder)
 
     if (!element) {
       console.warn(
@@ -5321,8 +5561,7 @@ async function fetchProcessModelRecord({
       )
       endpoint.searchParams.set("id", `eq.${processModelId}`)
       endpoint.searchParams.set("limit", "1")
-    },
-    { skipTenantFilter: true }
+    }
   )
 
   const raw = rows[0]
@@ -5388,6 +5627,8 @@ async function fetchLegalStructureRecord({
       endpoint.searchParams.set("id", `eq.${legalStructureId}`)
       endpoint.searchParams.set("limit", "1")
     },
+    // Intentional cross-tenant read: legal_structure holds shared statutory reference data
+    // (NEPA, ESA, ...) that is not partitioned per tenant. Reported to the shared-schema owners.
     { skipTenantFilter: true }
   )
 
@@ -5515,6 +5756,7 @@ async function fetchLatestPreScreeningProcessInstanceRecord({
   supabaseAnonKey: string
   projectId: number
 }): Promise<ProcessInstanceRow | undefined> {
+  const preScreeningProcessModelId = await resolvePreScreeningProcessModelId()
   const rows = await fetchSupabaseList<ProcessInstanceRow>(
     supabaseUrl,
     supabaseAnonKey,
@@ -5526,7 +5768,7 @@ async function fetchLatestPreScreeningProcessInstanceRecord({
         "id,parent_project_id,process_model,last_updated,created_at,title:description,description"
       )
       endpoint.searchParams.set("parent_project_id", `eq.${projectId}`)
-      endpoint.searchParams.set("process_model", `eq.${PRE_SCREENING_PROCESS_MODEL_ID}`)
+      endpoint.searchParams.set("process_model", `eq.${preScreeningProcessModelId}`)
       endpoint.searchParams.set("data_source_system", `eq.${DATA_SOURCE_SYSTEM}`)
       endpoint.searchParams.append("order", "last_updated.desc.nullslast")
       endpoint.searchParams.append("order", "id.desc")
