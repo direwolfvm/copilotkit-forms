@@ -204,6 +204,7 @@ const CASE_EVENT_TYPES = {
 } as const
 
 const SUPABASE_PROXY_PREFIX = "/api/supabase"
+const DOCUMENT_DOWNLOAD_PREFIX = "/api/documents/download"
 const TENANT_ID_COLUMN = "tenant_id"
 
 type CaseEventType = (typeof CASE_EVENT_TYPES)[keyof typeof CASE_EVENT_TYPES]
@@ -1110,7 +1111,7 @@ export async function saveProjectReportDocument({
     )
   }
 
-  const publicUrl = buildPublicStorageUrl(supabaseUrl, DOCUMENT_STORAGE_BUCKET, storageObjectPath)
+  const publicUrl = buildDocumentDownloadUrl(DOCUMENT_STORAGE_BUCKET, storageObjectPath)
   return {
     title: documentTitle,
     url: publicUrl,
@@ -4539,22 +4540,25 @@ function createSafeFileName(fileName: string): string {
   return sanitizedExtension ? `${finalBase}.${sanitizedExtension}` : finalBase
 }
 
-function buildPublicStorageUrl(supabaseUrl: string, bucket: string, objectPath: string): string {
+/**
+ * Builds a same-origin download link for a stored document.
+ *
+ * This used to return `/storage/v1/object/public/<bucket>/<path>`, which serves applicant files to
+ * anyone holding the path with no credential at all. The server route checks the object against a
+ * `document` row in this tenant and fetches the bytes itself, so object paths are never handed to
+ * the browser and the link keeps working once the bucket is made private.
+ */
+export function buildDocumentDownloadUrl(bucket: string, objectPath: string): string {
   const trimmedObjectPath = objectPath.trim().replace(/^\/+/, "")
   const normalizedPath = trimmedObjectPath.startsWith(`${bucket}/`)
     ? trimmedObjectPath.slice(bucket.length + 1)
     : trimmedObjectPath
-  const encodedPath = normalizedPath
-    .split("/")
-    .filter((segment) => segment.length > 0)
-    .map((segment) => encodeURIComponent(segment))
-    .join("/")
-  return new URL(
-    encodedPath
-      ? `/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`
-      : `/storage/v1/object/public/${encodeURIComponent(bucket)}`,
-    supabaseUrl
-  ).toString()
+  const segments = normalizedPath.split("/").filter((segment) => segment.length > 0)
+  if (segments.length === 0) {
+    return ""
+  }
+  const params = new URLSearchParams({ bucket, path: segments.join("/") })
+  return `${DOCUMENT_DOWNLOAD_PREFIX}?${params.toString()}`
 }
 
 function parseDocumentOther(value: unknown): Record<string, unknown> {
@@ -4572,8 +4576,7 @@ function parseDocumentOther(value: unknown): Record<string, unknown> {
 }
 
 function buildSupportingDocumentSummary(
-  row: DocumentRow,
-  supabaseUrl: string
+  row: DocumentRow
 ): SupportingDocumentSummary | undefined {
   const id = parseNumericId(row.id)
   if (typeof id !== "number") {
@@ -4646,7 +4649,7 @@ function buildSupportingDocumentSummary(
     return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined
   })()
 
-  const url = buildPublicStorageUrl(supabaseUrl, storageBucket, storageObjectPath)
+  const url = buildDocumentDownloadUrl(storageBucket, storageObjectPath)
 
   return {
     id,
@@ -5472,7 +5475,7 @@ async function fetchLatestProjectReportDocument({
   })()
 
   const title = typeof row.title === "string" && row.title.length > 0 ? row.title : "Project report"
-  const publicUrl = buildPublicStorageUrl(supabaseUrl, storageBucket, storageObjectPath)
+  const publicUrl = buildDocumentDownloadUrl(storageBucket, storageObjectPath)
 
   return { title, url: publicUrl, generatedAt }
 }
@@ -5524,7 +5527,7 @@ async function fetchSupportingDocumentSummaries({
   }
 
   const summaries = (payload as DocumentRow[])
-    .map((row) => buildSupportingDocumentSummary(row, supabaseUrl))
+    .map((row) => buildSupportingDocumentSummary(row))
     .filter((summary): summary is SupportingDocumentSummary => Boolean(summary))
 
   return summaries

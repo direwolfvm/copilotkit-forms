@@ -271,6 +271,161 @@ async function proxySupabaseRequest(req, res) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Document downloads
+//
+// Documents used to be linked with `/storage/v1/object/public/<bucket>/<path>`, which serves
+// applicant files to anyone holding the path with no credential at all. Browsers now link to this
+// route instead, so object paths are never handed out and every download is checked against a
+// `document` row belonging to this tenant first.
+//
+// The bytes are fetched with a signing key when one is configured (SUPABASE_STORAGE_SIGNING_KEY,
+// server-side only, never sent to the browser). Until that key exists the route falls back to the
+// public object URL so downloads keep working, and says so in the logs. Once the bucket is made
+// private the fallback stops working and the signing key becomes required — the client contract
+// does not change either way.
+// ---------------------------------------------------------------------------
+
+const DOWNLOADABLE_BUCKETS = new Set(["permit-documents"]);
+let loggedMissingSigningKey = false;
+
+function resolveSupabaseStorageSigningKey() {
+  return (
+    normalizeEnvValue(process.env.SUPABASE_STORAGE_SIGNING_KEY) ??
+    normalizeEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY)
+  );
+}
+
+function normalizeStorageObjectPath(bucket, rawPath) {
+  const trimmed = String(rawPath ?? "").trim().replace(/^\/+/, "");
+  if (!trimmed) {
+    return undefined;
+  }
+  const withoutBucket = trimmed.startsWith(`${bucket}/`) ? trimmed.slice(bucket.length + 1) : trimmed;
+  const segments = withoutBucket.split("/").filter((segment) => segment.length > 0);
+  if (segments.length === 0 || segments.some((segment) => segment === "." || segment === "..")) {
+    return undefined;
+  }
+  return segments.join("/");
+}
+
+// Only serve objects that a `document` row in this tenant actually points at. Without this the
+// route would be an unauthenticated proxy to the whole shared bucket, which is what we are fixing.
+async function findTenantDocument(supabaseUrl, anonKey, tenantId, bucket, objectPath) {
+  const endpoint = new URL("/rest/v1/document", supabaseUrl);
+  endpoint.searchParams.set("select", "id,title,url,other");
+  endpoint.searchParams.set("tenant_id", `eq.${tenantId}`);
+  endpoint.searchParams.set("or", `(url.eq.${objectPath},url.eq.${bucket}/${objectPath})`);
+  endpoint.searchParams.set("limit", "1");
+
+  const response = await fetch(endpoint, {
+    headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, Accept: "application/json" }
+  });
+  if (!response.ok) {
+    return undefined;
+  }
+  const rows = await response.json().catch(() => undefined);
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : undefined;
+}
+
+async function resolveStorageObjectResponse(supabaseUrl, bucket, objectPath) {
+  const signingKey = resolveSupabaseStorageSigningKey();
+
+  if (signingKey) {
+    const signEndpoint = new URL(`/storage/v1/object/sign/${bucket}/${objectPath}`, supabaseUrl);
+    const signed = await fetch(signEndpoint, {
+      method: "POST",
+      headers: {
+        apikey: signingKey,
+        Authorization: `Bearer ${signingKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ expiresIn: 120 })
+    });
+    if (signed.ok) {
+      const payload = await signed.json().catch(() => undefined);
+      const signedPath = payload && typeof payload.signedURL === "string" ? payload.signedURL : undefined;
+      if (signedPath) {
+        return fetch(new URL(`/storage/v1${signedPath}`, supabaseUrl));
+      }
+    }
+    console.warn(`[documents] Signing failed for ${bucket}/${objectPath} (${signed.status}); falling back.`);
+  } else if (!loggedMissingSigningKey) {
+    loggedMissingSigningKey = true;
+    console.warn(
+      "[documents] SUPABASE_STORAGE_SIGNING_KEY is not set; serving downloads via the public object URL. " +
+        "Set it before the permit-documents bucket is made private."
+    );
+  }
+
+  return fetch(new URL(`/storage/v1/object/public/${bucket}/${objectPath}`, supabaseUrl));
+}
+
+async function handleDocumentDownload(req, res) {
+  const supabaseUrl = resolveSupabaseUrl();
+  const anonKey = resolveSupabaseAnonKey();
+  const tenantId = resolveSupabaseTenantId();
+
+  if (!supabaseUrl || !anonKey || !tenantId) {
+    res.status(500).json({ error: "Supabase credentials are not configured" });
+    return;
+  }
+
+  const bucket = String(req.query.bucket ?? "permit-documents");
+  if (!DOWNLOADABLE_BUCKETS.has(bucket)) {
+    res.status(400).json({ error: "Unknown document bucket" });
+    return;
+  }
+
+  const objectPath = normalizeStorageObjectPath(bucket, req.query.path);
+  if (!objectPath) {
+    res.status(400).json({ error: "A document path is required" });
+    return;
+  }
+
+  try {
+    const document = await findTenantDocument(supabaseUrl, anonKey, tenantId, bucket, objectPath);
+    if (!document) {
+      res.status(404).json({ error: "Document not found" });
+      return;
+    }
+
+    const upstream = await resolveStorageObjectResponse(supabaseUrl, bucket, objectPath);
+    if (!upstream.ok) {
+      res.status(upstream.status === 404 ? 404 : 502).json({ error: "Failed to read the stored document" });
+      return;
+    }
+
+    const other = document.other && typeof document.other === "object" ? document.other : {};
+    const fileName =
+      typeof other.file_name === "string" && other.file_name.length > 0
+        ? other.file_name
+        : objectPath.split("/").pop();
+
+    res.status(200);
+    res.setHeader(
+      "content-type",
+      upstream.headers.get("content-type") ?? other.mime_type ?? "application/octet-stream"
+    );
+    const contentLength = upstream.headers.get("content-length");
+    if (contentLength) {
+      res.setHeader("content-length", contentLength);
+    }
+    res.setHeader("content-disposition", `inline; filename="${fileName.replace(/["\\]/g, "")}"`);
+    // Signed URLs are short-lived and the row check is per-request; never let a shared cache hold this.
+    res.setHeader("cache-control", "private, no-store");
+
+    if (upstream.body) {
+      Readable.fromWeb(upstream.body).pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (error) {
+    console.error("Document download error", error);
+    res.status(502).json({ error: "Failed to read the stored document" });
+  }
+}
+
 async function proxyCopilotkitRuntimeRequest(req, res) {
   const requestedPath = req.url ?? "/";
   const baseUrl = copilotkitRuntimeProxyBaseUrl.replace(/\/+$/, "");
@@ -1365,6 +1520,8 @@ async function callNepaMcpChat({ message, sessionId, areaContext }) {
 }
 
 app.use("/api/supabase", proxySupabaseRequest);
+
+app.get("/api/documents/download", handleDocumentDownload);
 
 app.use("/api/section106", createSection106ProxyMiddleware());
 
