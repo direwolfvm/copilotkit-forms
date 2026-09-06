@@ -21,7 +21,6 @@ import {
 import { loadProjectPortalState } from "./utils/projectPersistence"
 import { ProjectPersistenceError, type ProcessInformation } from "./utils/projectPersistence"
 
-const COMPLEX_REVIEW_PROCESS_MODEL_ID = 1
 
 type ProcessInformationState =
   | { status: "idle" | "loading" }
@@ -76,7 +75,7 @@ export default function ComplexReviewStartPage() {
     let isCancelled = false
     setProcessState({ status: "loading" })
 
-    loadReviewworksProcessInformation(COMPLEX_REVIEW_PROCESS_MODEL_ID)
+    loadReviewworksProcessInformation()
       .then((info) => {
         if (isCancelled) {
           return

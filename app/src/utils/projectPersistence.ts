@@ -402,7 +402,7 @@ export type DecisionElementRecord = {
 
 type DecisionElementMap = Map<number, DecisionElementRecord>
 
-type ProcessModelRecord = {
+export type ProcessModelRecord = {
   id: number
   title: string | null
   description: string | null
@@ -414,7 +414,7 @@ type ProcessModelRecord = {
   lastUpdated: string | null
 }
 
-type LegalStructureRecord = {
+export type LegalStructureRecord = {
   id: number
   title: string | null
   citation: string | null
