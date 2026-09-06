@@ -392,6 +392,21 @@ async function handleDocumentDownload(req, res) {
 
     const upstream = await resolveStorageObjectResponse(supabaseUrl, bucket, objectPath);
     if (!upstream.ok) {
+      // The bucket is private and we have no signing key: the public fallback answers
+      // "Bucket not found". Say that plainly instead of a bare 502 — it is an operator
+      // configuration gap, not a bad request, and it is the expected state until the key lands.
+      if (!resolveSupabaseStorageSigningKey()) {
+        console.error(
+          `[documents] ${bucket}/${objectPath} is unreadable (${upstream.status}) and no signing key ` +
+            "is configured. Set SUPABASE_STORAGE_SIGNING_KEY; the bucket is no longer public."
+        );
+        res.status(503).json({
+          error:
+            "Document downloads are unavailable: the storage bucket is private and no signing key is configured."
+        });
+        return;
+      }
+      console.error(`[documents] Upstream read failed for ${bucket}/${objectPath} (${upstream.status}).`);
       res.status(upstream.status === 404 ? 404 : 502).json({ error: "Failed to read the stored document" });
       return;
     }
