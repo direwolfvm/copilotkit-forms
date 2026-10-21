@@ -5,18 +5,24 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Wait until a release is 5 days old. Security updates are not delayed.
+    cooldown:
+      default-days: 5
     groups:
+      # The @rjsf packages must move together (one PR), or npm ci fails.
+      rjsf:
+        patterns: ['@rjsf/*']
       minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # Type definitions track the runtime major (Node 22 in the Dockerfile,
-      # engines and workflows). Bump them together with the runtime.
-      - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
       # Clients must match the shared CopilotKit runtime on cloud.gov (the
       # version in package.json "copilotkit.runtime"). Upgrade the runtime and
       # every client together, never this app on its own.
       - dependency-name: "@copilotkit/*"
+      # Majors are planned cross-app upgrade waves, not weekly PRs
+      # (playbooks/dependabot.md in direwolfvm/operator). CI npm audit still catches anything hidden.
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     open-pull-requests-limit: 5
   - package-ecosystem: github-actions
     directory: /
@@ -31,7 +37,12 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Wait until a release is 5 days old. Security updates are not delayed.
+    cooldown:
+      default-days: 5
     ignore:
       # Stay on the Node major named in engines and CI; move all three together.
-      - dependency-name: node
-        update-types: ["version-update:semver-major"]
+      # Majors are planned cross-app upgrade waves, not weekly PRs
+      # (playbooks/dependabot.md in direwolfvm/operator). CI npm audit still catches anything hidden.
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
