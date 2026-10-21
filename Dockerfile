@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build stage: install dependencies and compile the Vite app
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /usr/src/app
 
 # Install production and development dependencies to build the app
@@ -13,7 +13,7 @@ COPY app/ ./
 RUN npm run build
 
 # Production image: copy the build output and only production dependencies
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /usr/src/app
 ENV NODE_ENV=production
 
