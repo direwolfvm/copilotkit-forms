@@ -1,6 +1,6 @@
 ---
 applications:
-  - name: copilotkit-forms
+  - name: helppermitme
     path: app
     memory: 4G
     staging_memory: 4G
