@@ -1,0 +1,11 @@
+# Files cloud.gov does not need. The deploy script builds dist/ locally before
+# `cf push` (NPM_CONFIG_PRODUCTION skips dev dependencies on the buildpack), so
+# dist/ must be uploaded. Env files, tests and local tooling stay behind.
+node_modules/
+.env
+.env.*
+e2e/
+test-results/
+playwright-report/
+.playwright-cli/
+sbom.cdx.json

@@ -12,5 +12,5 @@ applications:
       NODE_ENV: production
       NPM_CONFIG_PRODUCTION: true
     health-check-type: http
-    health-check-http-endpoint: /
+    health-check-http-endpoint: /api/health
     timeout: 180

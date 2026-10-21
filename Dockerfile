@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build stage: install dependencies and compile the Vite app
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /usr/src/app
 
 # Install production and development dependencies to build the app
@@ -13,7 +13,7 @@ COPY app/ ./
 RUN npm run build
 
 # Production image: copy the build output and only production dependencies
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /usr/src/app
 ENV NODE_ENV=production
 
@@ -25,6 +25,9 @@ RUN npm ci --omit=dev
 COPY --from=build /usr/src/app/dist ./dist
 COPY app/server ./server
 COPY app/server.mjs ./server.mjs
+
+# Run as the unprivileged user that ships with the official Node image
+USER node
 
 EXPOSE 8080
 CMD ["node", "server.mjs"]

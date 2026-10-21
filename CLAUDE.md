@@ -12,13 +12,14 @@ All commands run from the `app/` directory:
 
 ```bash
 cd app
-npm install                    # Install dependencies (Node 18+ required)
+npm install                    # Install dependencies (Node 22 required)
 npm run dev                    # Start Vite dev server (localhost:5173)
 npm run build                  # Type-check and build for production
 npm run lint                   # Run ESLint
 npm test -- --run              # Run Vitest suite once
 npm test                       # Run Vitest in watch mode
 npm run start                  # Start production Express server
+npm run deploy:cloud           # Dry-run the cloud.gov deploy (add -- --apply to deploy)
 ```
 
 For remote/Codespace development:
@@ -71,7 +72,8 @@ The integration in `PortalPage.tsx` follows this pattern:
 - `/api/supabase/*` - Proxy for Supabase (credentials never exposed to browser)
 - `/api/custom-adk/agent` - Local Copilot runtime proxy
 - `/api/geospatial/*` - NEPA Assist and IPaC geospatial APIs
-- `/env.js` - Runtime environment injection for Cloud Run deployments
+- `/env.js` - Runtime environment injection (cloud.gov and container deployments)
+- `/api/health` - Liveness check used by the cloud.gov manifest
 
 ## Environment Variables
 

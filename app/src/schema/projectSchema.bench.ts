@@ -1,4 +1,4 @@
-import { bench } from 'vitest'
+import { test } from 'vitest'
 import { formatProjectSummary, type ProjectFormData } from './projectSchema'
 
 const baseData: ProjectFormData = {
@@ -15,10 +15,13 @@ const baseData: ProjectFormData = {
   location_lon: -122.9876,
 }
 
-bench('formatProjectSummary with representative dataset', () => {
-  formatProjectSummary(baseData)
-})
-
-bench('formatProjectSummary with minimal data', () => {
-  formatProjectSummary({ title: 'Minimal Project' })
+test('formatProjectSummary', async ({ bench }) => {
+  await bench.compare(
+    bench('formatProjectSummary with representative dataset', () => {
+      formatProjectSummary(baseData)
+    }),
+    bench('formatProjectSummary with minimal data', () => {
+      formatProjectSummary({ title: 'Minimal Project' })
+    }),
+  )
 })
