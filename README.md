@@ -157,7 +157,13 @@ appropriate Row Level Security; service-role keys must never be exposed to this 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and pushes to `main`
 without secrets: lint, unit tests, build, production license check, CycloneDX SBOM (kept as a build
 artifact), `npm audit --audit-level=high`, dependency review and a gitleaks scan. Dependabot opens
-weekly grouped updates for npm, GitHub Actions and the Docker base image. The Playwright suite stays
+weekly grouped updates for npm, GitHub Actions and the Docker base image.
+
+`@copilotkit/react-core` and `@copilotkit/react-ui` are pinned to **1.51.3** because the shared
+CopilotKit runtime on cloud.gov (`copilotkit-runtime.app.cloud.gov`) only accepts 1.51.3 clients;
+newer clients lose the sidebar. Upgrade the runtime image and every app that uses it together.
+The `overrides` in `app/package.json` lift `undici` and `langsmith`, which reach the lockfile only
+through the unused `@copilotkit/runtime` dependency, past their high-severity advisories. The Playwright suite stays
 manual because it writes to a real Supabase project.
 
 ## Documentation
