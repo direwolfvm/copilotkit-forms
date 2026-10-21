@@ -13,9 +13,9 @@ updates:
       # engines and workflows). Bump them together with the runtime.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
-      # The shared CopilotKit runtime on cloud.gov (copilotkit-runtime-v1105)
-      # only accepts 1.51.3 clients. Upgrade the runtime and every client
-      # together, never this app on its own.
+      # Clients must match the shared CopilotKit runtime on cloud.gov (the
+      # version in package.json "copilotkit.runtime"). Upgrade the runtime and
+      # every client together, never this app on its own.
       - dependency-name: "@copilotkit/*"
     open-pull-requests-limit: 5
   - package-ecosystem: github-actions
