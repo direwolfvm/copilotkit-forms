@@ -1603,6 +1603,11 @@ async function callNepaMcpChat({ message, sessionId, areaContext }) {
   return { text, events, files };
 }
 
+// Liveness check for cloud.gov and container health probes; it does not call upstream services.
+app.get("/api/health", (req, res) => {
+  res.set("Cache-Control", "no-store").json({ status: "ok" });
+});
+
 app.use("/api/supabase", proxySupabaseRequest);
 
 app.get("/api/documents/download", handleDocumentDownload);

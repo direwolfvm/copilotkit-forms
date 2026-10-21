@@ -36,9 +36,10 @@ jobs:
     steps:
       - name: Validate release tag format
         shell: bash
+        env:
+          TAG: ${{ github.event.inputs.release_tag }}
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.release_tag }}"
 
           if [[ ! "$TAG" =~ ^v[0-9]+(\.[0-9]+)*([-.][A-Za-z0-9._]+)?$ ]]; then
             echo "Invalid release tag format: $TAG"
@@ -47,10 +48,11 @@ jobs:
           fi
 
       - name: Checkout source repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.source_ref }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Prepare export directory
         shell: bash
@@ -63,7 +65,11 @@ jobs:
           rsync -a \
             --delete \
             --exclude '.git' \
-            --exclude '.github' \
+            --include '.github/' \
+            --include '.github/dependabot.yml' \
+            --include '.github/workflows/' \
+            --include '.github/workflows/ci.yml' \
+            --exclude '.github/**' \
             ./ /tmp/export/
 
       - name: Clone target repo
@@ -124,6 +130,7 @@ jobs:
         shell: bash
         env:
           RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          INPUT_SOURCE_REF: ${{ github.event.inputs.source_ref }}
         run: |
           set -euo pipefail
           cd /tmp/target
@@ -140,7 +147,7 @@ jobs:
           fi
 
           SOURCE_SHA="${GITHUB_SHA}"
-          SOURCE_REF="${{ github.event.inputs.source_ref }}"
+          SOURCE_REF="${INPUT_SOURCE_REF}"
           SOURCE_REPO="${GITHUB_REPOSITORY}"
 
           git commit -m "Release ${RELEASE_TAG}" \
@@ -178,11 +185,13 @@ jobs:
           git push origin "${RELEASE_TAG}"
 
       - name: Create GitHub Release in target repo
-        if: ${{ github.event.inputs.create_github_release }}
+        # github.event.inputs values are strings, so "false" was truthy; inputs.* keeps the boolean.
+        if: ${{ inputs.create_github_release }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
           RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          INPUT_SOURCE_REF: ${{ github.event.inputs.source_ref }}
         run: |
           set -euo pipefail
 
@@ -193,7 +202,7 @@ jobs:
           Clean published release ${RELEASE_TAG}
 
           Source repository: ${GITHUB_REPOSITORY}
-          Source ref: ${{ github.event.inputs.source_ref }}
+          Source ref: ${INPUT_SOURCE_REF}
           Source SHA: ${GITHUB_SHA}
           EOF
           )"

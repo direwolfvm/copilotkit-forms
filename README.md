@@ -122,20 +122,43 @@ environment.
 
 ## Deployment
 
-The production image builds the Vite bundle and serves it with `app/server.mjs`:
+**Live target: cloud.gov** (Node.js buildpack), app `copilotkit-forms`, health check
+`https://copilotkit-forms.app.cloud.gov/api/health`. Releases are also published to
+`jeccles-eop/help-permit-me` with the manual **Publish Clean Release** workflow.
+
+Deploys run from a laptop with the guarded script, which is a dry run unless given `--apply`:
+
+```bash
+cf login -a api.fr.cloud.gov --sso
+cf target -o <org> -s <space>
+cd app
+npm run deploy:cloud                                 # dry run: lists variable names only
+npm run deploy:cloud -- --apply --env-file .env.cloudgov
+```
+
+The script builds `dist/`, runs `cf push --no-start` with [`manifest.yml`](manifest.yml), sets
+runtime variables through the cloud.gov API so no value is printed or placed on the command line,
+starts the app and checks `/api/health`. It refuses env files that contain service-role or secret
+keys. `manifest.yml` holds only non-secret settings.
+
+The [`Dockerfile`](Dockerfile) (Node 22, non-root) is kept for local container runs:
 
 ```bash
 docker build -t helppermitme .
 docker run --rm -p 8080:8080 --env-file app/.env helppermitme
 ```
 
-Open `http://localhost:8080`. Runtime configuration is emitted by `/env.js`, so server environment
-changes do not require rebuilding the frontend image. The repository also includes `manifest.yml`
-for Cloud Foundry-style deployment.
+Runtime configuration is emitted by `/env.js`, so server environment changes do not require
+rebuilding the frontend. Supabase anon keys are public client credentials and must be protected by
+appropriate Row Level Security; service-role keys must never be exposed to this application.
 
-Set production configuration in the hosting platform rather than baking secrets into an image.
-Supabase anon keys are public client credentials and must be protected by appropriate Row Level
-Security; service-role keys must never be exposed to this application.
+## Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and pushes to `main`
+without secrets: lint, unit tests, build, production license check, CycloneDX SBOM (kept as a build
+artifact), `npm audit --audit-level=high`, dependency review and a gitleaks scan. Dependabot opens
+weekly grouped updates for npm, GitHub Actions and the Docker base image. The Playwright suite stays
+manual because it writes to a real Supabase project.
 
 ## Documentation
 

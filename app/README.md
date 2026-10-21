@@ -6,7 +6,7 @@ server for HelpPermitMe. For the product overview and repository map, start with
 
 ## Requirements
 
-- Node.js `^20.19.0` or `>=22.12.0`
+- Node.js 22 (`engines` pins `22.x` for the cloud.gov buildpack)
 - npm
 - A modern browser
 - Optional Supabase and external-system credentials for connected workflows
@@ -120,6 +120,7 @@ See [the user guide](docs/user-guide.md) for the complete workflow and
 | `npm run dev` | Start Vite with hot module replacement |
 | `npm run build` | Run TypeScript project builds and produce `dist/` |
 | `npm start` | Serve `dist/` with the Express server |
+| `npm run deploy:cloud` | Dry-run (or `-- --apply`) the guarded cloud.gov deploy; see the root README |
 | `npm run preview` | Preview `dist/` through Vite |
 | `npm run lint` | Run ESLint |
 | `npm run check:style-tokens` | Check for disallowed style literals |
@@ -128,6 +129,8 @@ See [the user guide](docs/user-guide.md) for the complete workflow and
 | `npm run test:bench` | Run Vitest benchmarks |
 | `npm run test:e2e` | Run Playwright against the production server |
 | `npm run sync:env:gcloud` | Populate supported `.env` values from Google Cloud |
+| `npm run license-check` | Check production dependency licenses against the allowlist |
+| `npm run sbom` | Write a CycloneDX SBOM of production dependencies to `sbom.cdx.json` |
 
 Recommended local verification:
 
@@ -157,6 +160,7 @@ platform.
 `server.mjs`:
 
 - serves the Vite bundle and supports client-side deep links;
+- answers `GET /api/health` for platform health checks;
 - emits runtime configuration at `/env.js`;
 - proxies canonical Supabase requests;
 - proxies the default Copilot runtime and custom Permitting ADK runtime;
