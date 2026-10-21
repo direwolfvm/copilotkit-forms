@@ -111,6 +111,10 @@ jobs:
       !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # No checkout here, so the workflow's default working directory does not exist.
+    defaults:
+      run:
+        working-directory: .
     permissions:
       contents: write
       pull-requests: write
