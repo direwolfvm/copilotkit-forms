@@ -159,11 +159,10 @@ without secrets: lint, unit tests, build, production license check, CycloneDX SB
 artifact), `npm audit --audit-level=high`, dependency review and a gitleaks scan. Dependabot opens
 weekly grouped updates for npm, GitHub Actions and the Docker base image.
 
-`@copilotkit/react-core` and `@copilotkit/react-ui` are pinned to **1.51.3** because the shared
-CopilotKit runtime on cloud.gov (`copilotkit-runtime.app.cloud.gov`) only accepts 1.51.3 clients;
-newer clients lose the sidebar. Upgrade the runtime image and every app that uses it together.
-The `overrides` in `app/package.json` lift `undici` and `langsmith`, which reach the lockfile only
-through the unused `@copilotkit/runtime` dependency, past their high-severity advisories. The Playwright suite stays
+`@copilotkit/react-core` and `@copilotkit/react-ui` are pinned to exactly **1.79.1**, the version of
+the shared CopilotKit runtime on cloud.gov (`copilotkit-runtime.app.cloud.gov`), recorded as
+`copilotkit.runtime` in `app/package.json`. Clients that don't match the runtime lose the sidebar,
+so upgrade the runtime image and every app that uses it together. The Playwright suite stays
 manual because it writes to a real Supabase project.
 
 ## Documentation
