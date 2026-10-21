@@ -12,7 +12,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const app = "copilotkit-forms";
+const app = "helppermitme";
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");

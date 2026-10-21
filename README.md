@@ -122,7 +122,7 @@ environment.
 
 ## Deployment
 
-**Live target: cloud.gov** (Node.js buildpack), app `copilotkit-forms`, health check
+**Live target: cloud.gov** (Node.js buildpack), cf app `helppermitme`, health check
 `https://helppermitme.app.cloud.gov/api/health`. Releases are also published to
 `jeccles-eop/help-permit-me` with the manual **Publish Clean Release** workflow.
 
