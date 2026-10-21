@@ -27,3 +27,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      # Stay on the Node major named in engines and CI; move all three together.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
