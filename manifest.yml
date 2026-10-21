@@ -5,6 +5,8 @@ applications:
     memory: 4G
     staging_memory: 4G
     instances: 1
+    routes:
+      - route: helppermitme.app.cloud.gov
     buildpacks:
       - nodejs_buildpack
     command: npm run start

@@ -18,7 +18,7 @@ const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const envFileIndex = args.indexOf("--env-file");
 const envFile = join(appDir, envFileIndex >= 0 ? args[envFileIndex + 1] ?? "" : ".env.cloudgov");
-const origin = process.env.DEPLOY_APP_ORIGIN ?? `https://${app}.app.cloud.gov`;
+const origin = process.env.DEPLOY_APP_ORIGIN ?? "https://helppermitme.app.cloud.gov";
 
 // Only the settings server.mjs and server/*.js read are sent to cloud.gov.
 const allowed = /^(VITE_|NEXT_PUBLIC_)?(SUPABASE_|PERMITFLOW_|REVIEWWORKS_|COPILOTKIT_|SECTION106_|IPAC_|NEPA_MCP_)/;
